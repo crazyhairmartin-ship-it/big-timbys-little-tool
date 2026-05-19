@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Big Timby's Little Tool</title>
+
+<!-- PWA manifest + icons -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="theme-color" content="#f5c518">
+<meta name="description" content="OSRS combination item margin tracker with live GE prices">
+
+<!-- Standalone PWA support -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Big Timby">
+
+<link rel="stylesheet" href="index.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>Big Timby's Little Tool</h1>
+    <span class="tagline">Live profit on every tradeable combination item · GE tax included</span>
+  </div>
+  <div class="header-controls">
+    <label class="strategy">
+      Supplies
+      <select id="supply-strategy">
+        <option value="insta-buy">Insta-buy (pay high)</option>
+        <option value="slow-buy">Slow-buy (offer low, wait)</option>
+      </select>
+    </label>
+    <label class="strategy">
+      Products
+      <select id="product-strategy">
+        <option value="insta-buy">Insta-buy price (list high, wait)</option>
+        <option value="insta-sell">Insta-sell (sell at low)</option>
+      </select>
+    </label>
+    <label class="smithing">
+      Smithing
+      <input type="number" id="smithing-level" min="1" max="99" value="99">
+    </label>
+    <button id="refresh-btn" class="btn-primary" title="Manual refresh">
+      <span id="refresh-icon">⟳</span>
+      <span id="refresh-countdown">60s</span>
+    </button>
+  </div>
+</header>
+
+<div class="layout" id="layout">
+  <aside class="sidebar" id="sidebar">
+    <button id="sidebar-toggle" class="sidebar-toggle" title="Collapse filters" aria-label="Collapse filters">
+      <span class="sidebar-toggle-icon">‹</span>
+      <span class="sidebar-toggle-label">Filters</span>
+    </button>
+    <div class="filter-group">
+      <label for="search">Search</label>
+      <input type="search" id="search" placeholder="armadyl, blowpipe, ahrim…">
+    </div>
+    <div class="filter-group">
+      <label for="sort">Sort by</label>
+      <select id="sort">
+        <option value="margin-desc">Margin (high → low)</option>
+        <option value="roi-desc">ROI % (high → low)</option>
+        <option value="daily-desc">Projected daily margin</option>
+        <option value="flips-desc">Flips/day (high → low)</option>
+        <option value="cost-asc">Cost (low → high)</option>
+        <option value="cost-desc">Cost (high → low)</option>
+        <option value="name">Name (A→Z)</option>
+      </select>
+    </div>
+    <div class="filter-group cost-range">
+      <label>
+        Cost between
+        <span id="cost-range-readout"></span>
+        <span id="cost-range-count" class="cost-range-count"></span>
+      </label>
+      <div class="cost-histogram" id="cost-histogram"><!-- bars injected by JS --></div>
+      <div class="cost-slider">
+        <div class="track"><div class="track-fill" id="cost-track-fill"></div></div>
+        <input type="range" id="cost-min-slider" min="0" max="100" value="0" step="1">
+        <input type="range" id="cost-max-slider" min="0" max="100" value="100" step="1">
+      </div>
+    </div>
+    <div class="filter-group toggles">
+      <label class="toggle"><input type="checkbox" id="favorites-only"> ⭐ Favorites only</label>
+      <label class="toggle"><input type="checkbox" id="profitable-only"> Profitable only</label>
+      <label class="toggle"><input type="checkbox" id="hide-stale"> Hide stale</label>
+      <label class="toggle"><input type="checkbox" id="hide-low-volume"> Hide low volume (&lt;1 flip/hr)</label>
+    </div>
+    <div class="filter-group">
+      <label>Tags</label>
+      <div class="categories" id="categories"><!-- categories injected --></div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="view-toggle">
+      <button id="view-cards" class="vt-btn active" data-view="cards">Cards</button>
+      <button id="view-table" class="vt-btn" data-view="table">Table</button>
+    </div>
+    <div id="grid" class="grid">
+      <div class="loading">Fetching live GE prices…</div>
+    </div>
+    <div id="table-wrap" class="table-wrap" hidden></div>
+  </main>
+</div>
+
+<dialog id="chart-modal">
+  <header class="modal-header">
+    <h2 id="modal-title">—</h2>
+    <button id="modal-close" aria-label="Close">×</button>
+  </header>
+  <div class="modal-body">
+    <div class="chart-tabs" id="chart-tabs"><!-- tabs injected: Combined + per-component --></div>
+    <div class="modal-controls">
+      <div class="timeframe-buttons" id="timeframe-buttons">
+        <button data-tf="year">Year</button>
+        <button data-tf="quarter">Quarter</button>
+        <button data-tf="month">Month</button>
+        <button data-tf="week" class="active">Week</button>
+        <button data-tf="day">Day</button>
+      </div>
+      <button id="modal-refresh" class="modal-refresh" title="Refresh chart data" aria-label="Refresh chart">⟳</button>
+      <span id="modal-status" class="modal-status"></span>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="modal-chart" width="800" height="380"></canvas>
+      <div class="chart-tooltip" id="chart-tooltip" hidden></div>
+    </div>
+    <div class="modal-legend">
+      <span class="legend-item"><i class="swatch swatch-high"></i> Insta-buy price (list patient)</span>
+      <span class="legend-item"><i class="swatch swatch-low"></i> Insta-sell price</span>
+      <span class="legend-item"><i class="swatch swatch-vol"></i> Volume (24h trades)</span>
+    </div>
+    <table class="modal-detail" id="modal-detail"></table>
+  </div>
+</dialog>
+
+<footer>
+  <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

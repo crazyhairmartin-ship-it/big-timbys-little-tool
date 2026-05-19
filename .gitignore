@@ -1,0 +1,42 @@
+# Node
+node_modules/
+
+# Tauri local build artifacts (we redirect with CARGO_TARGET_DIR but just in case)
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# macOS AppleDouble sidecars that get created on non-APFS volumes
+._*
+.DS_Store
+
+# Output bundles (rebuilt by CI / locally)
+src-tauri/target/release/bundle/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# Screenshots used during development
+osrs-*.png
+.playwright-mcp/
+
+# Original raw HTML scrape from GE-Tracker (kept locally for reference but not needed in repo)
+Combination Items - GE Tracker.html
+Combination Items - GE Tracker_files/
+
+# Local scratch directories
+.claude/
+
+# Old backups from development moves
+Archive.zip
+Archive/
+*copy.js
+*copy.css
+*copy.html
+*copy.json
+*\ copy.js
+*\ copy.css
+*\ copy.html
+*\ copy.json

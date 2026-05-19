@@ -1,0 +1,17 @@
+{
+  "name": "big-timbys-little-tool",
+  "version": "0.1.0",
+  "description": "OSRS combination item margin tracker — Tauri desktop wrapper around the existing web app",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri",
+    "predev": "find . -name '._*' -not -path './node_modules/*' -delete 2>/dev/null; true",
+    "prebuild": "find . -name '._*' -not -path './node_modules/*' -delete 2>/dev/null; true",
+    "dev": "CARGO_TARGET_DIR=$HOME/.big-timby-target tauri dev",
+    "build": "CARGO_TARGET_DIR=$HOME/.big-timby-target tauri build",
+    "serve": "cd dist && python3 -m http.server 8765"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "Big Timby's Little Tool",
+  "short_name": "Big Timby",
+  "description": "OSRS combination item margin tracker with live GE prices",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f1320",
+  "theme_color": "#f5c518",
+  "categories": ["games", "utilities", "finance"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

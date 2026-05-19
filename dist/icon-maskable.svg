@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="coin" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#f5c518"/>
+      <stop offset="100%" stop-color="#a07a0a"/>
+    </radialGradient>
+  </defs>
+  <!-- Maskable icon: full-bleed background, content stays in safe zone (center 80%) -->
+  <rect width="512" height="512" fill="#1d2440"/>
+  <circle cx="256" cy="256" r="148" fill="url(#coin)"/>
+  <text x="256" y="316" text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-weight="900" font-size="160" fill="#2a200a">BT</text>
+</svg>

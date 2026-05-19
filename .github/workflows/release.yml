@@ -1,0 +1,82 @@
+name: Build & Release
+
+# Trigger: pushing a tag like v0.1.0 cuts a release with installers for
+# macOS (Apple Silicon + Intel), Windows, and Linux. Manual trigger also available.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write          # needed to attach binaries to a release
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+            label: 'macOS-arm64'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+            label: 'macOS-x86_64'
+          - platform: 'ubuntu-22.04'
+            args: ''
+            label: 'linux-x86_64'
+          - platform: 'windows-latest'
+            args: ''
+            label: 'windows-x86_64'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf file
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Big Timby's Little Tool ${{ github.ref_name }}"
+          releaseBody: |
+            ## Downloads
+
+            - **macOS Apple Silicon** — download the `aarch64.dmg`, mount, drag to Applications
+            - **macOS Intel** — `x64.dmg`, same steps
+            - **Windows** — download the `.msi`. If SmartScreen blocks it, click "More info" then "Run anyway" (unsigned builds get flagged on first launch)
+            - **Linux** — `.AppImage` (chmod +x, double-click) or `.deb`
+
+            All binaries are unsigned. For a personal flipping tool this is fine.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

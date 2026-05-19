@@ -1,0 +1,28 @@
+[package]
+name = "big-timbys-little-tool"
+version = "0.1.0"
+description = "OSRS combination item margin tracker"
+authors = ["Dylan"]
+edition = "2021"
+
+# Two crate-types: cdylib for mobile/wasm bridge, staticlib for desktop linking,
+# rlib for normal Rust use. Recommended by Tauri v2.
+[lib]
+name = "big_timbys_little_tool_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+# Smaller binary, faster runtime. Standard Tauri release flags.
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
