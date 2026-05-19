@@ -28,7 +28,8 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "// targets": "Skipping 'nsis' (the -setup.exe) due to a macro-signature mismatch in nsis_tauri_utils 0.5.3 + NSIS 3.11. MSI covers Windows distribution. Revisit when Tauri ships a patch.",
+    "targets": ["app", "dmg", "deb", "appimage", "rpm", "msi"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
