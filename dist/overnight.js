@@ -5,7 +5,7 @@
    by lexical name and the overnight-core functions from global scope.
 ------------------------------------------------------------------- */
 
-const OVERNIGHT_MIN_VOLUME = 100;   // skip items trading < 100/24h — not flippable
+const OVERNIGHT_MIN_VOLUME = 10;    // skip items trading < 10/24h (too thin to predict)
 const OVERNIGHT_FETCH_CONCURRENCY = 5;
 const OVERNIGHT_CACHE_KEY = "osrs-combo-overnight";
 const OVERNIGHT_CACHE_TTL_MS = 24 * 3600 * 1000;
