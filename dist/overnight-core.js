@@ -19,12 +19,26 @@ function ocMidPrice(point) {
   return null;
 }
 
+// 24-element curve: mean midPrice per UTC hour-of-day, null for empty hours.
+function hourlyProfile(series) {
+  const sums = new Array(24).fill(0);
+  const counts = new Array(24).fill(0);
+  for (const point of series) {
+    const price = ocMidPrice(point);
+    if (price == null) continue;
+    const hour = new Date(point.timestamp * 1000).getUTCHours();
+    sums[hour] += price;
+    counts[hour] += 1;
+  }
+  return sums.map((s, h) => (counts[h] > 0 ? s / counts[h] : null));
+}
+
 // ---- functions added in later tasks ----
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     OC_WINDOW_WIDTH, OC_MIN_DAYS, OC_BASELINE_DAYS, OC_CONFIDENCE_FLOOR,
-    ocMidPrice,
+    ocMidPrice, hourlyProfile,
   };
 }
