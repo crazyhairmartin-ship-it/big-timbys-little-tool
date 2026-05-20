@@ -121,6 +121,71 @@ function predictPrices(series, windows) {
   };
 }
 
+// UTC calendar day key "YYYY-MM-DD" for a unix-seconds timestamp.
+function ocDayKey(tsSeconds) {
+  return new Date(tsSeconds * 1000).toISOString().slice(0, 10);
+}
+
+// Fraction of days on which the buy-hours mean was below the sell-hours mean.
+function confidenceOf(series, windows) {
+  const buySet = new Set(windows.buyHours);
+  const sellSet = new Set(windows.sellHours);
+  const byDay = new Map(); // dayKey -> { buy:[], sell:[] }
+  for (const point of series) {
+    const price = ocMidPrice(point);
+    if (price == null) continue;
+    const hour = new Date(point.timestamp * 1000).getUTCHours();
+    const key = ocDayKey(point.timestamp);
+    let day = byDay.get(key);
+    if (!day) { day = { buy: [], sell: [] }; byDay.set(key, day); }
+    if (buySet.has(hour)) day.buy.push(price);
+    if (sellSet.has(hour)) day.sell.push(price);
+  }
+  let evaluable = 0, good = 0;
+  for (const day of byDay.values()) {
+    if (!day.buy.length || !day.sell.length) continue;
+    evaluable += 1;
+    const buyMean = day.buy.reduce((a, b) => a + b, 0) / day.buy.length;
+    const sellMean = day.sell.reduce((a, b) => a + b, 0) / day.sell.length;
+    if (buyMean < sellMean) good += 1;
+  }
+  return evaluable > 0 ? good / evaluable : 0;
+}
+
+// Profit per unit: sale price, less GE tax on the sale, less the buy price.
+function predictedProfit(buy, sell, taxFn) {
+  return sell - taxFn(sell) - buy;
+}
+
+// Ranking score: profit% weighted by confidence-squared.
+function rankScore(profitPct, confidence) {
+  return profitPct * confidence * confidence;
+}
+
+// Count distinct UTC days present in a series.
+function ocDistinctDays(series) {
+  const days = new Set();
+  for (const p of series) days.add(ocDayKey(p.timestamp));
+  return days.size;
+}
+
+// Full per-item analysis. Returns null when history is too thin to trust.
+// taxFn(sellPrice) -> gp of GE tax on that sale.
+function analyzeItem(id, series, windows, taxFn) {
+  if (ocDistinctDays(series) < OC_MIN_DAYS) return null;
+  const { predBuy, predSell } = predictPrices(series, windows);
+  if (predBuy == null || predSell == null || predBuy <= 0) return null;
+  const profit = predictedProfit(predBuy, predSell, taxFn);
+  const profitPct = profit / predBuy;
+  const confidence = confidenceOf(series, windows);
+  return {
+    id,
+    predBuy, predSell, profit, profitPct, confidence,
+    score: rankScore(profitPct, confidence),
+    curve: hourlyProfile(series),
+  };
+}
+
 // ---- functions added in later tasks ----
 
 // Node test harness can require() this; browsers skip the guard.
@@ -129,5 +194,6 @@ if (typeof module !== "undefined" && module.exports) {
     OC_WINDOW_WIDTH, OC_MIN_DAYS, OC_BASELINE_DAYS, OC_CONFIDENCE_FLOOR,
     ocMidPrice, hourlyProfile, normalizeCurve, calibrateWindows,
     medianOf, windowPrices, recentBaseline, predictPrices,
+    confidenceOf, predictedProfit, rankScore, analyzeItem,
   };
 }

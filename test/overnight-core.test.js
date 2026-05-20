@@ -103,3 +103,60 @@ test("predictPrices anchors ratios to the recent baseline", () => {
   assert.ok(Math.abs(p.predBuy - 80) < 5, `predBuy ~80, got ${p.predBuy}`);
   assert.ok(Math.abs(p.predSell - 120) < 5, `predSell ~120, got ${p.predSell}`);
 });
+
+test("confidenceOf is 1.0 when buy hours are always below sell hours", () => {
+  const series = buildSeries(14, h => (h < 6 ? 80 : 120));
+  const windows = { buyHours: [0, 1, 2, 3, 4, 5], sellHours: [12, 13, 14, 15, 16, 17] };
+  assert.strictEqual(core.confidenceOf(series, windows), 1);
+});
+
+test("confidenceOf is ~0.5 when the pattern holds on half the days", () => {
+  // Even days: dip overnight. Odd days: flat (no dip).
+  const start = Date.UTC(2026, 0, 1, 0);
+  const series = [];
+  for (let d = 0; d < 14; d++) {
+    for (let h = 0; h < 24; h++) {
+      const ts = Math.floor((start + (d * 24 + h) * 3600 * 1000) / 1000);
+      const p = (d % 2 === 0 && h < 6) ? 80 : 100;
+      series.push({ timestamp: ts, avgHighPrice: p, avgLowPrice: p });
+    }
+  }
+  const windows = { buyHours: [0, 1, 2, 3, 4, 5], sellHours: [12, 13, 14, 15, 16, 17] };
+  const c = core.confidenceOf(series, windows);
+  assert.ok(c >= 0.45 && c <= 0.55, `expected ~0.5, got ${c}`);
+});
+
+test("predictedProfit nets the tax off the sale", () => {
+  const noTax = () => 0;
+  assert.strictEqual(core.predictedProfit(100, 150, noTax), 50);
+  const tenPct = sell => sell * 0.1;
+  assert.strictEqual(core.predictedProfit(100, 150, tenPct), 35); // 150 - 15 - 100
+});
+
+test("rankScore squares confidence", () => {
+  assert.ok(Math.abs(core.rankScore(0.2, 0.5) - 0.05) < 1e-9);
+  assert.ok(Math.abs(core.rankScore(0.1, 1.0) - 0.1) < 1e-9);
+});
+
+test("analyzeItem returns null for too-thin history", () => {
+  const windows = { buyHours: [0, 1, 2, 3, 4, 5], sellHours: [12, 13, 14, 15, 16, 17] };
+  const series = buildSeries(3, h => 100); // 3 days < OC_MIN_DAYS
+  assert.strictEqual(core.analyzeItem(7, series, windows, () => 0), null);
+});
+
+test("analyzeItem produces a full analysis for a clean pattern", () => {
+  const windows = { buyHours: [0, 1, 2, 3, 4, 5], sellHours: [12, 13, 14, 15, 16, 17] };
+  const series = buildSeries(14, h => {
+    if (h < 6) return 80;
+    if (h >= 12 && h < 18) return 120;
+    return 100;
+  });
+  const a = core.analyzeItem(7, series, windows, sell => sell * 0.02);
+  assert.strictEqual(a.id, 7);
+  assert.ok(a.predBuy < a.predSell);
+  assert.strictEqual(a.confidence, 1);
+  assert.ok(a.profit > 0);
+  assert.ok(a.profitPct > 0);
+  assert.ok(a.score > 0);
+  assert.strictEqual(a.curve.length, 24);
+});
