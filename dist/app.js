@@ -1453,10 +1453,31 @@ function detailRow(label, value, opts = {}) {
   return tr;
 }
 
+// External reference links for the modal. Points at the result item.
+// The recipe name is stripped of " — via X" / "(via X)" disambiguators so
+// it resolves to a real wiki article title.
+function renderModalLinks(recipe) {
+  const box = document.getElementById("modal-links");
+  const baseName = recipe.name
+    .replace(/\s*—\s*via.*$/, "")
+    .replace(/\s*\(via[^)]*\)/, "")
+    .trim();
+  const mk = (href, label) => el("a", {
+    class: "modal-link", text: label,
+    attrs: { href, target: "_blank", rel: "noopener" },
+  });
+  box.replaceChildren(
+    mk("https://oldschool.runescape.wiki/w/" + encodeURIComponent(baseName.replace(/ /g, "_")), "Wiki ↗"),
+    mk("https://prices.runescape.wiki/osrs/item/" + recipe.id, "Live prices ↗"),
+    mk("https://www.ge-tracker.com/item/" + recipe.id, "GE-Tracker ↗"),
+  );
+}
+
 function openModal(recipe) {
   activeModalRecipe = recipe;
   activeChartTab = "combined";  // default each open to the combined overlay
   modalTitle.textContent = recipe.name;
+  renderModalLinks(recipe);
   if (typeof modal.showModal === "function") modal.showModal();
   else modal.setAttribute("open", "");
   loadModalChart(recipe);  // chart + stats render together via drawActiveTab

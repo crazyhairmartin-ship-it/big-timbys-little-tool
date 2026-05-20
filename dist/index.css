@@ -939,6 +939,28 @@ dialog#chart-modal::backdrop {
 
 .modal-body { padding: 16px 20px 20px; }
 
+.modal-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.modal-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.modal-link:hover {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
 .modal-controls {
   display: flex;
   align-items: center;
