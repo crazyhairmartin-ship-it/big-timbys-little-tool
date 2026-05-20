@@ -152,57 +152,86 @@ function overnightWindowLabel(hours) {
   return `${pad(s)}-${pad(end)} UTC`;
 }
 
-// A tiny 24-bar sparkline of an item's hour-of-day curve, buy/sell shaded.
-function overnightSparkline(curve, windows) {
-  const wrap = el("div", { class: "ov-spark" });
-  const vals = curve.filter(v => v != null);
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const span = max - min || 1;
-  const buy = new Set(windows.buyHours), sell = new Set(windows.sellHours);
-  for (let h = 0; h < 24; h++) {
-    const v = curve[h];
-    const bar = el("div", { class: "ov-spark-bar" });
-    bar.style.height = v == null ? "2px" : `${4 + Math.round(((v - min) / span) * 22)}px`;
-    if (buy.has(h)) bar.classList.add("buy");
-    else if (sell.has(h)) bar.classList.add("sell");
-    wrap.appendChild(bar);
+// The recipe's confidence = minimum confidence among product + all components.
+// Returns a 0–1 number, or null if any prediction is missing.
+function overnightRecipeConfidence(recipe) {
+  const pm = overnightData.predMap;
+  let min = Infinity;
+  for (const id of [recipe.id, ...recipe.components.map(c => c.id)]) {
+    const p = pm[id];
+    if (!p || p.confidence == null) return null;
+    if (p.confidence < min) min = p.confidence;
   }
-  return wrap;
+  return min === Infinity ? null : min;
 }
 
-// One Overnight card for an analysis result.
-function overnightCard(a, windows) {
-  const m = state.mapping[a.id];
-  const name = m?.name || `#${a.id}`;
-  const card = el("article", { class: "card ov-card " + (a.profit > 0 ? "profit" : "loss") });
+// One Overnight recipe card, mirroring the realtime renderCard DOM structure.
+function overnightRecipeCard(recipe, calc) {
+  const card = el("article", { class: "card" });
+  card.classList.add(calc.margin > 0 ? "profit" : "loss");
+  card.onclick = () => openOvernightModal(recipe, calc);
 
-  const img = el("img", { attrs: { alt: "", loading: "lazy", src: iconUrl(a.id) } });
+  // Head
+  const iconBox = el("div", { class: "card-icon" });
+  const img = el("img", { attrs: { alt: "", loading: "lazy", src: recipeIcon(recipe) } });
   img.onerror = () => { img.style.display = "none"; };
-  const iconBox = el("div", { class: "card-icon" }, img);
-  const confChip = el("span", {
-    class: "skill-chip", text: `${Math.round(a.confidence * 100)}% reliable`,
-  });
-  const title = el("div", { class: "card-title" },
-    el("div", { class: "card-name", text: name }),
-    el("div", { class: "card-cat-row" }, confChip));
-  const head = el("div", { class: "card-head" }, iconBox, title);
+  iconBox.appendChild(img);
 
-  const heroVal = el("div", {
-    class: "card-hero-value " + (a.profit > 0 ? "pos" : "neg"),
-    text: `${a.profitPct >= 0 ? "+" : ""}${(a.profitPct * 100).toFixed(1)}%`,
-  });
-  const hero = el("div", { class: "card-hero" },
-    el("div", { class: "card-hero-label", text: "Predicted profit" }),
+  const conf = overnightRecipeConfidence(recipe);
+  const catRow = el("div", { class: "card-cat-row" },
+    el("span", { class: "card-cat", text: recipe.cat }),
+  );
+  if (conf !== null) {
+    catRow.appendChild(el("span", { class: "skill-chip", text: Math.round(conf * 100) + "% reliable" }));
+  }
+  const nameDiv = el("div", { class: "card-name", text: recipe.name });
+  const titleBox = el("div", { class: "card-title" }, nameDiv, catRow);
+  const head = el("div", { class: "card-head" }, iconBox, titleBox);
+
+  // Hero margin block
+  const heroVal = el("div", { class: "card-hero-value " + (calc.margin > 0 ? "pos" : "neg") });
+  heroVal.textContent = fmtGp(calc.margin);
+  const heroSub = el("div", { class: "card-hero-sub" });
+  if (calc.roi != null) {
+    heroSub.appendChild(el("span", { class: "card-hero-roi", text: calc.roi.toFixed(1) + "% ROI" }));
+  }
+  const heroMargin = el("div", { class: "card-hero" },
+    el("div", { class: "card-hero-label", text: "Predicted margin" }),
     heroVal,
-    el("div", { class: "card-hero-sub", text: `${fmtGp(a.profit)} / unit` }));
+    heroSub,
+  );
 
-  // Reuse app.js's row() helper so the rows match the existing card styling.
-  const stats = el("div", { class: "components" });
-  row(stats, { label: "Predicted buy", value: fmtGp(a.predBuy) });
-  row(stats, { label: "Predicted sell", value: fmtGp(a.predSell) });
+  // Supporting 3-col mini stats
+  const flipsPerHour = perHour(calc.maxFlips);
+  const fmtFlips = flipsPerHour != null ? String(Math.round(flipsPerHour * 10) / 10) : "—";
+  const dailyText = calc.maxFlips != null && calc.margin != null ? fmtGp(calc.maxFlips * calc.margin) : "—";
+  const stats = el("div", { class: "card-stats card-stats-3 card-stats-mini" },
+    el("div", { class: "stat cost" },
+      el("span", { class: "stat-label", text: "Total cost" }),
+      el("span", { class: "stat-value", text: fmtGp(calc.totalCost) })),
+    el("div", { class: "stat flips" },
+      el("span", { class: "stat-label", text: "Trades/hr" }),
+      el("span", { class: "stat-value", text: flipsPerHour != null ? fmtFlips : "—" })),
+    el("div", { class: "stat daily" },
+      el("span", { class: "stat-label", text: "Daily potential" }),
+      el("span", { class: "stat-value", text: dailyText })),
+  );
 
-  card.append(head, hero, stats, overnightSparkline(a.curve, windows));
-  card.onclick = () => openOvernightModal(a, windows);
+  // Component breakdown
+  const comp = el("div", { class: "components" });
+  for (const c of recipe.components) {
+    const cName = state.mapping[c.id]?.name || "#" + c.id;
+    const price = overnightData.predMap[c.id]?.overnight;
+    const value = price != null
+      ? (c.qty > 1 ? c.qty + "× " + fmtGp(price) : fmtGp(price))
+      : "—";
+    row(comp, { label: cName, value });
+  }
+  row(comp, { cls: "tax", label: "GE tax", value: "-" + fmtGp(calc.geTax) });
+  const sellLabel = calc.resultQty > 1 ? "Sell price ×" + calc.resultQty : "Sell price";
+  row(comp, { cls: "sell", label: sellLabel, value: fmtGp(calc.revenue) });
+
+  card.append(head, heroMargin, stats, comp);
   return card;
 }
 
@@ -230,19 +259,21 @@ function overnightHeader(progress) {
   return bar;
 }
 
-// Apply the sidebar search + cost-range filters to the analysis list.
+// Recipes with a complete, profitable predicted margin, after sidebar filters.
 function overnightVisible() {
   const f = state.filters;
   const q = f.search.toLowerCase().trim();
-  return overnightData.items.filter(a => {
-    if (a.confidence < OC_CONFIDENCE_FLOOR) return false;
-    if (a.profit <= 0) return false;
-    const name = (state.mapping[a.id]?.name || "").toLowerCase();
-    if (q && !name.includes(q)) return false;
-    if (f.minCost !== null && a.predBuy < f.minCost) return false;
-    if (f.maxCost !== null && a.predBuy > f.maxCost) return false;
-    return true;
-  });
+  const out = [];
+  for (const recipe of RECIPES) {
+    const calc = calcMargin(recipe, overnightData.predMap);
+    if (!calc.allPresent || !(calc.margin > 0)) continue;
+    if (q && !recipe.name.toLowerCase().includes(q)) continue;
+    if (f.minCost !== null && calc.totalCost < f.minCost) continue;
+    if (f.maxCost !== null && calc.totalCost > f.maxCost) continue;
+    out.push({ recipe, calc });
+  }
+  out.sort((a, b) => b.calc.margin - a.calc.margin);
+  return out;
 }
 
 // Paint the grid for Overnight mode. With `progress`, shows the progress bar.
@@ -254,15 +285,15 @@ function paintOvernight(progress) {
   if (progress) return;
   const visible = overnightVisible();
   if (!visible.length) {
-    grid.appendChild(el("div", { class: "empty", text: "No overnight opportunities match the filters." }));
+    grid.appendChild(el("div", { class: "empty", text: "No profitable overnight recipes match the filters." }));
     return;
   }
   const wrap = el("div", { class: "grid ov-grid" });
-  for (const a of visible) wrap.appendChild(overnightCard(a, overnightData.windows));
+  for (const { recipe, calc } of visible) wrap.appendChild(overnightRecipeCard(recipe, calc));
   grid.appendChild(wrap);
 }
 
-function openOvernightModal(a, windows) { /* implemented in Task 10 */ }
+function openOvernightModal(recipe, calc) { /* implemented in R3 */ }
 
 // Entry point called by app.js renderGrid() when state.mode === "overnight".
 function renderOvernight() {
