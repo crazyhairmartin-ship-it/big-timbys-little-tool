@@ -1286,3 +1286,13 @@ footer {
 #grid > .ov-header,
 #grid > .ov-empty { grid-column: 1 / -1; }
 
+.ov-time-filter .time-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ov-time-filter .time-range select { min-width: 0; flex: 1; }
+.ov-time-filter .time-range span { color: var(--text-2); font-size: 12px; }
+/* The time filter only applies in Experimental mode — hide it otherwise. */
+#layout:not(.mode-overnight) .ov-time-filter { display: none; }
+

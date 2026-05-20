@@ -597,6 +597,8 @@ const state = {
     hideLowVolume: false,
     favoritesOnly: false,
     activeCats: new Set(CATEGORIES),
+    buyHourStart: 0, buyHourEnd: 23,
+    sellHourStart: 0, sellHourEnd: 23,
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -2234,6 +2236,31 @@ async function init() {
     renderGrid();
   });
 
+  // Experimental-mode time filter: populate the hour selects + wire them.
+  const hourLabel = (h) => {
+    const ap = h < 12 ? "AM" : "PM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12} ${ap}`;
+  };
+  const timeSelects = [
+    ["buy-hour-start", "buyHourStart"], ["buy-hour-end", "buyHourEnd"],
+    ["sell-hour-start", "sellHourStart"], ["sell-hour-end", "sellHourEnd"],
+  ];
+  for (const [elId, filterKey] of timeSelects) {
+    const sel = document.getElementById(elId);
+    for (let h = 0; h < 24; h++) {
+      const opt = document.createElement("option");
+      opt.value = String(h);
+      opt.textContent = hourLabel(h);
+      sel.appendChild(opt);
+    }
+    sel.value = String(state.filters[filterKey]);
+    sel.addEventListener("change", (e) => {
+      state.filters[filterKey] = parseInt(e.target.value, 10);
+      renderGrid();
+    });
+  }
+
   // View toggle (cards / table)
   const setView = (v) => {
     state.view = v;
@@ -2251,6 +2278,7 @@ async function init() {
     localStorage.setItem("osrs-combo-mode", m);
     document.getElementById("mode-realtime").classList.toggle("active", m === "realtime");
     document.getElementById("mode-overnight").classList.toggle("active", m === "overnight");
+    document.getElementById("layout").classList.toggle("mode-overnight", m === "overnight");
     renderGrid();
   };
   document.getElementById("mode-realtime").addEventListener("click", () => setMode("realtime"));

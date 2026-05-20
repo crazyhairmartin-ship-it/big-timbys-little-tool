@@ -268,6 +268,19 @@ function overnightVisible() {
     if (q && !recipe.name.toLowerCase().includes(q)) continue;
     if (f.minCost !== null && calc.totalCost < f.minCost) continue;
     if (f.maxCost !== null && calc.totalCost > f.maxCost) continue;
+    // Experimental time filter: every component's buy hour must fall in the
+    // buy range, and the product's sell hour in the sell range (local time).
+    const localHour = (utc) => new Date(Date.UTC(2000, 0, 1, utc)).getHours();
+    const inRange = (h, lo, hi) => (lo <= hi ? (h >= lo && h <= hi) : (h >= lo || h <= hi));
+    const pm = overnightData.predMap;
+    const sellH = localHour(pm[recipe.id].sellHour);
+    if (!inRange(sellH, f.sellHourStart, f.sellHourEnd)) continue;
+    let timeOk = true;
+    for (const c of recipe.components) {
+      const bh = localHour(pm[c.id].buyHour);
+      if (!inRange(bh, f.buyHourStart, f.buyHourEnd)) { timeOk = false; break; }
+    }
+    if (!timeOk) continue;
     out.push({ recipe, calc });
   }
   out.sort((a, b) => b.calc.margin - a.calc.margin);

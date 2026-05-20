@@ -102,12 +102,26 @@
       <label>Tags</label>
       <div class="categories" id="categories"><!-- categories injected --></div>
     </div>
+    <div class="filter-group ov-time-filter">
+      <label>Experimental: buy time (local)</label>
+      <div class="time-range">
+        <select id="buy-hour-start"></select>
+        <span>to</span>
+        <select id="buy-hour-end"></select>
+      </div>
+      <label>Experimental: sell time (local)</label>
+      <div class="time-range">
+        <select id="sell-hour-start"></select>
+        <span>to</span>
+        <select id="sell-hour-end"></select>
+      </div>
+    </div>
   </aside>
 
   <main id="main" class="main">
     <div class="mode-toggle">
       <button id="mode-realtime" class="mode-btn active" data-mode="realtime">Real-time</button>
-      <button id="mode-overnight" class="mode-btn" data-mode="overnight">Overnight</button>
+      <button id="mode-overnight" class="mode-btn" data-mode="overnight">Experimental</button>
     </div>
     <div class="view-toggle">
       <button id="view-cards" class="vt-btn active" data-view="cards">Cards</button>
