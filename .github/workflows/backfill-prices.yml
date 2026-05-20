@@ -1,0 +1,63 @@
+name: Backfill price history
+
+# One-time (manually triggered) backfill: pulls ~15 days of hourly history
+# from the wiki /timeseries API for every tracked recipe item and writes it
+# into the recorder's per-day files on the `price-history` branch, merging
+# with whatever the hourly recorder has already captured.
+#
+# Security note: no untrusted event input (issue/PR/commit text) is used in
+# any run: step — only `date`, git, node, and the committed scripts.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: record-prices  # shared with the hourly recorder — never run together
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (default branch — for the script + recipe data)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract tracked item IDs from dist/app.js
+        run: |
+          node -e '
+            const fs = require("fs");
+            const src = fs.readFileSync("dist/app.js", "utf8");
+            const rec = src.match(/const RECIPES = \[[\s\S]*?\n\];/)[0];
+            const ids = [...new Set([...rec.matchAll(/\bid:(\d+)/g)].map(m => m[1]))];
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/ids.json", JSON.stringify(ids));
+            console.log("extracted " + ids.length + " item ids");
+          '
+
+      - name: Stash the backfill script
+        run: cp scripts/backfill-prices.mjs "$RUNNER_TEMP/backfill-prices.mjs"
+
+      - name: Switch to the price-history data branch
+        run: |
+          git config user.name "price-recorder"
+          git config user.email "noreply@github.com"
+          if git show-ref --verify --quiet refs/remotes/origin/price-history; then
+            git checkout price-history
+          else
+            git checkout --orphan price-history
+            git rm -rf --quiet . 2>/dev/null || true
+          fi
+
+      - name: Backfill ~15 days of hourly history
+        run: node "$RUNNER_TEMP/backfill-prices.mjs" "$RUNNER_TEMP/ids.json"
+
+      - name: Commit & push
+        run: |
+          git add prices
+          if git commit -m "Backfill price history ($(date -u +'%Y-%m-%d'))"; then
+            git push origin price-history
+          else
+            echo "nothing to commit"
+          fi
