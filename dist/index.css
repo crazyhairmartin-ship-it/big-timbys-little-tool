@@ -1257,3 +1257,42 @@ footer {
   .summary-value { font-size: 16px; }
   .grid { grid-template-columns: 1fr; }
 }
+
+.ov-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.ov-windows { font-weight: 700; color: var(--gold); }
+.ov-meta { color: var(--text-2); }
+.ov-progress { color: var(--text-1); font-weight: 600; }
+.ov-refresh {
+  margin-left: auto;
+  background: var(--bg-2);
+  color: var(--text-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.ov-spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 28px;
+  margin-top: 10px;
+}
+.ov-spark-bar {
+  flex: 1;
+  background: var(--line-2);
+  border-radius: 1px;
+}
+.ov-spark-bar.buy  { background: #4ade80; }
+.ov-spark-bar.sell { background: #f5c518; }

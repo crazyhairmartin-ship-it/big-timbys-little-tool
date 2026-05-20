@@ -128,15 +128,151 @@ async function ensureOvernightAnalysis(onProgress, force = false) {
   }
 }
 
+// Format an hour list like [22,23,0,1,2,3] as "22:00-04:00 UTC".
+function overnightWindowLabel(hours) {
+  const start = hours.reduce((a, b) => Math.min(a, b), 24);
+  // hours are contiguous mod 24; find the true start (the hour whose
+  // predecessor is absent) so a wrapping window reads correctly.
+  const set = new Set(hours);
+  let s = hours[0];
+  for (const h of hours) if (!set.has((h + 23) % 24)) s = h;
+  const end = (s + hours.length) % 24;
+  const pad = h => String(h).padStart(2, "0") + ":00";
+  return `${pad(s)}-${pad(end)} UTC`;
+}
+
+// A tiny 24-bar sparkline of an item's hour-of-day curve, buy/sell shaded.
+function overnightSparkline(curve, windows) {
+  const wrap = el("div", { class: "ov-spark" });
+  const vals = curve.filter(v => v != null);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const span = max - min || 1;
+  const buy = new Set(windows.buyHours), sell = new Set(windows.sellHours);
+  for (let h = 0; h < 24; h++) {
+    const v = curve[h];
+    const bar = el("div", { class: "ov-spark-bar" });
+    bar.style.height = v == null ? "2px" : `${4 + Math.round(((v - min) / span) * 22)}px`;
+    if (buy.has(h)) bar.classList.add("buy");
+    else if (sell.has(h)) bar.classList.add("sell");
+    wrap.appendChild(bar);
+  }
+  return wrap;
+}
+
+// One Overnight card for an analysis result.
+function overnightCard(a, windows) {
+  const m = state.mapping[a.id];
+  const name = m?.name || `#${a.id}`;
+  const card = el("article", { class: "card ov-card " + (a.profit > 0 ? "profit" : "loss") });
+
+  const img = el("img", { attrs: { alt: "", loading: "lazy", src: iconUrl(a.id) } });
+  img.onerror = () => { img.style.display = "none"; };
+  const iconBox = el("div", { class: "card-icon" }, img);
+  const confChip = el("span", {
+    class: "skill-chip", text: `${Math.round(a.confidence * 100)}% reliable`,
+  });
+  const title = el("div", { class: "card-title" },
+    el("div", { class: "card-name", text: name }),
+    el("div", { class: "card-cat-row" }, confChip));
+  const head = el("div", { class: "card-head" }, iconBox, title);
+
+  const heroVal = el("div", {
+    class: "card-hero-value " + (a.profit > 0 ? "pos" : "neg"),
+    text: `${a.profitPct >= 0 ? "+" : ""}${(a.profitPct * 100).toFixed(1)}%`,
+  });
+  const hero = el("div", { class: "card-hero" },
+    el("div", { class: "card-hero-label", text: "Predicted profit" }),
+    heroVal,
+    el("div", { class: "card-hero-sub", text: `${fmtGp(a.profit)} / unit` }));
+
+  // Reuse app.js's row() helper so the rows match the existing card styling.
+  const stats = el("div", { class: "components" });
+  row(stats, { label: "Predicted buy", value: fmtGp(a.predBuy) });
+  row(stats, { label: "Predicted sell", value: fmtGp(a.predSell) });
+
+  card.append(head, hero, stats, overnightSparkline(a.curve, windows));
+  card.onclick = () => openOvernightModal(a, windows);
+  return card;
+}
+
+// Header strip: windows, freshness, refresh, or a progress bar mid-analysis.
+function overnightHeader(progress) {
+  const bar = el("div", { class: "ov-header" });
+  if (progress) {
+    bar.appendChild(el("span", { class: "ov-progress",
+      text: `Analysing ${progress.done} / ${progress.total} items...` }));
+    return bar;
+  }
+  const d = overnightData;
+  const ageMin = Math.round(window.Overnight.overnightCacheAgeMs() / 60000);
+  bar.appendChild(el("span", { class: "ov-windows",
+    text: `Buy ${overnightWindowLabel(d.windows.buyHours)} - Sell ${overnightWindowLabel(d.windows.sellHours)}` }));
+  bar.appendChild(el("span", { class: "ov-meta",
+    text: `Analysed ${ageMin}m ago - ${d.items.length} items` +
+          (d.skipped ? ` - ${d.skipped} skipped` : "") }));
+  const refresh = el("button", { class: "ov-refresh", text: "⟳", attrs: { title: "Re-analyse" } });
+  refresh.onclick = async () => {
+    await window.Overnight.ensureOvernightAnalysis(p => paintOvernight(p), true);
+    paintOvernight();
+  };
+  bar.appendChild(refresh);
+  return bar;
+}
+
+// Apply the sidebar search + cost-range filters to the analysis list.
+function overnightVisible() {
+  const f = state.filters;
+  const q = f.search.toLowerCase().trim();
+  return overnightData.items.filter(a => {
+    if (a.confidence < OC_CONFIDENCE_FLOOR) return false;
+    if (a.profit <= 0) return false;
+    const name = (state.mapping[a.id]?.name || "").toLowerCase();
+    if (q && !name.includes(q)) return false;
+    if (f.minCost !== null && a.predBuy < f.minCost) return false;
+    if (f.maxCost !== null && a.predBuy > f.maxCost) return false;
+    return true;
+  });
+}
+
+// Paint the grid for Overnight mode. With `progress`, shows the progress bar.
+function paintOvernight(progress) {
+  const grid = document.getElementById("grid");
+  grid.hidden = false;
+  document.getElementById("table-wrap").hidden = true;
+  grid.replaceChildren(overnightHeader(progress));
+  if (progress) return;
+  const visible = overnightVisible();
+  if (!visible.length) {
+    grid.appendChild(el("div", { class: "empty", text: "No overnight opportunities match the filters." }));
+    return;
+  }
+  const wrap = el("div", { class: "grid ov-grid" });
+  for (const a of visible) wrap.appendChild(overnightCard(a, overnightData.windows));
+  grid.appendChild(wrap);
+}
+
+function openOvernightModal(a, windows) { /* implemented in Task 10 */ }
+
+// Entry point called by app.js renderGrid() when state.mode === "overnight".
+function renderOvernight() {
+  // Seed overnightData from cache BEFORE painting — paintOvernight() with no
+  // progress arg reads overnightData and would throw if it were still null.
+  if (!overnightData) overnightData = window.Overnight.loadOvernightCache();
+  if (overnightData) paintOvernight();
+  else paintOvernight({ done: 0, total: 1 });
+  // Refresh in the background; only show the progress bar if we had nothing
+  // cached to display in the meantime.
+  window.Overnight.ensureOvernightAnalysis(p => {
+    if (!overnightData) paintOvernight(p);
+  }).then(() => {
+    if (state.mode === "overnight") paintOvernight();
+  });
+}
+
 window.Overnight = {
   runOvernightAnalysis, ensureOvernightAnalysis,
   loadOvernightCache, overnightCacheAgeMs,
   get data() { return overnightData; },
   get running() { return overnightRunning; },
-  renderOvernight() {
-    const grid = document.getElementById("grid");
-    grid.hidden = false;
-    document.getElementById("table-wrap").hidden = true;
-    grid.replaceChildren(el("div", { class: "loading", text: "Overnight mode — coming in Task 9" }));
-  },
+  renderOvernight: renderOvernight,
 };
