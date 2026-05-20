@@ -9,7 +9,8 @@
     "prebuild": "find . -name '._*' -not -path './node_modules/*' -delete 2>/dev/null; true",
     "dev": "CARGO_TARGET_DIR=$HOME/.big-timby-target tauri dev",
     "build": "CARGO_TARGET_DIR=$HOME/.big-timby-target tauri build",
-    "serve": "cd dist && python3 -m http.server 8765"
+    "serve": "cd dist && python3 -m http.server 8765",
+    "test": "node --test test/*.test.js"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"
