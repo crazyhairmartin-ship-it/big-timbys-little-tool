@@ -108,11 +108,15 @@ function saveOvernightCache(data) {
   } catch (_) { /* quota / disabled — cache is best-effort */ }
 }
 
-// Load a cached analysis, or null if absent / unparseable.
+// Load a cached analysis, or null if absent / unparseable / written by an
+// older build with an incompatible shape (missing predMap / windows).
 function loadOvernightCache() {
   try {
     const raw = localStorage.getItem(OVERNIGHT_CACHE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.predMap || !parsed.windows) return null;
+    return parsed;
   } catch (_) {
     return null;
   }
