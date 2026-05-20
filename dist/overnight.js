@@ -287,12 +287,10 @@ function paintOvernight(progress) {
   if (progress) return;
   const visible = overnightVisible();
   if (!visible.length) {
-    grid.appendChild(el("div", { class: "empty", text: "No profitable overnight recipes match the filters." }));
+    grid.appendChild(el("div", { class: "empty ov-empty", text: "No profitable overnight recipes match the filters." }));
     return;
   }
-  const wrap = el("div", { class: "grid ov-grid" });
-  for (const { recipe, calc } of visible) wrap.appendChild(overnightRecipeCard(recipe, calc));
-  grid.appendChild(wrap);
+  for (const { recipe, calc } of visible) grid.appendChild(overnightRecipeCard(recipe, calc));
 }
 
 // Clicking an Overnight recipe card opens the same price-history chart modal

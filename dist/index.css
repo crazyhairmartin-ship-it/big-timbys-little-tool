@@ -1283,3 +1283,6 @@ footer {
   cursor: pointer;
 }
 
+#grid > .ov-header,
+#grid > .ov-empty { grid-column: 1 / -1; }
+
