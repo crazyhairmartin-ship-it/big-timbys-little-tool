@@ -159,6 +159,24 @@ const RECIPES = [
   { key:"zenyte-necklace", id:19535, name:"Zenyte necklace", cat:"Zenyte", components:[{id:2357,qty:1},{id:19493,qty:1}] },
   { key:"zenyte-ring", id:19538, name:"Zenyte ring", cat:"Zenyte", components:[{id:2357,qty:1},{id:19493,qty:1}] },
 
+  // --- GE Item Sets (bundle ↔ pieces, exchangeable at the Grand Exchange clerk) ---
+  // Each bundle is a single tradeable item; flipping is buy bundle + sell pieces
+  // (or vice versa) when the GE spread favors one side.
+  { key:"set-ahrim",      id:12881, name:"Ahrim's armour set",      cat:"Sets", components:[{id:4708,qty:1},{id:4712,qty:1},{id:4714,qty:1},{id:4710,qty:1}] },
+  { key:"set-dharok",     id:12877, name:"Dharok's armour set",     cat:"Sets", components:[{id:4716,qty:1},{id:4720,qty:1},{id:4722,qty:1},{id:4718,qty:1}] },
+  { key:"set-guthan",     id:12873, name:"Guthan's armour set",     cat:"Sets", components:[{id:4724,qty:1},{id:4728,qty:1},{id:4730,qty:1},{id:4726,qty:1}] },
+  { key:"set-karil",      id:12883, name:"Karil's armour set",      cat:"Sets", components:[{id:4732,qty:1},{id:4736,qty:1},{id:4738,qty:1},{id:4734,qty:1}] },
+  { key:"set-torag",      id:12879, name:"Torag's armour set",      cat:"Sets", components:[{id:4745,qty:1},{id:4749,qty:1},{id:4751,qty:1},{id:4747,qty:1}] },
+  { key:"set-verac",      id:12875, name:"Verac's armour set",      cat:"Sets", components:[{id:4753,qty:1},{id:4757,qty:1},{id:4759,qty:1},{id:4755,qty:1}] },
+  { key:"set-blood-moon",   id:31136, name:"Blood moon armour set",   cat:"Sets", components:[{id:29028,qty:1},{id:29022,qty:1},{id:29025,qty:1}] },
+  { key:"set-blue-moon",    id:31139, name:"Blue moon armour set",    cat:"Sets", components:[{id:29019,qty:1},{id:29013,qty:1},{id:29016,qty:1}] },
+  { key:"set-eclipse-moon", id:31142, name:"Eclipse moon armour set", cat:"Sets", components:[{id:29010,qty:1},{id:29004,qty:1},{id:29007,qty:1}] },
+  { key:"set-torva",        id:31145, name:"Torva armour set",        cat:"Sets", components:[{id:26382,qty:1},{id:26384,qty:1},{id:26386,qty:1}] },
+  { key:"set-virtus",       id:31148, name:"Virtus armour set",       cat:"Sets", components:[{id:26241,qty:1},{id:26243,qty:1},{id:26245,qty:1}] },
+  { key:"set-masori-f",     id:27355, name:"Masori armour set (f)",   cat:"Sets", components:[{id:27235,qty:1},{id:27238,qty:1},{id:27241,qty:1}] },
+  { key:"set-justiciar",    id:22438, name:"Justiciar armour set",    cat:"Sets", components:[{id:22326,qty:1},{id:22327,qty:1},{id:22328,qty:1}] },
+  { key:"set-inquisitor",   id:24488, name:"Inquisitor's armour set", cat:"Sets", components:[{id:24419,qty:1},{id:24420,qty:1},{id:24421,qty:1}] },
+
   // --- Barrows Repairs (broken → repaired) ---
   { key:"ahrh", id:4708, name:"Ahrim's hood",       cat:"Barrows", components:[{id:4860,qty:1}], repairBase:60_000 },
   { key:"ahrt", id:4712, name:"Ahrim's robetop",    cat:"Barrows", components:[{id:4872,qty:1}], repairBase:90_000 },
@@ -222,6 +240,7 @@ function tagsFor(r) {
     "Toxic":          ["Weapon"],
     "Barrows":        ["Repair"],
     "Moons":          ["Repair", "Armor"],
+    "Sets":           ["Armor", "Item Set"],
     "Dragon": [], "Misc": [], "Top-tier": [],
   };
   (baseByCategory[cat] || []).forEach(t => tags.add(t));
@@ -294,6 +313,24 @@ function tagsFor(r) {
   if (cat === "Torva")          tags.add("Nex");
   if (cat === "Barrows")        tags.add("Barrows");
   if (cat === "Moons")          tags.add("Moons of Peril");
+  // Set-bundle theme tagging — inherits the source theme of the contained pieces
+  if (cat === "Sets") {
+    if (/^(ahrim|dharok|guthan|karil|torag|verac)/.test(n)) tags.add("Barrows");
+    if (/moon armour set/.test(n))   tags.add("Moons of Peril");
+    if (/^torva armour set/.test(n)) tags.add("Nex");
+    if (/^masori armour set/.test(n)){ tags.add("Masori"); tags.add("Ranged"); }
+    if (/^virtus/.test(n))           tags.add("Magic");
+    if (/^justiciar/.test(n))        tags.add("Melee");
+    if (/inquisitor/.test(n))        tags.add("Melee");
+    if (/^(ahrim)/.test(n))          tags.add("Magic");
+    if (/^(karil)/.test(n))          tags.add("Ranged");
+    if (/^(dharok|guthan|torag|verac)/.test(n)) tags.add("Melee");
+    if (/blood moon|eclipse moon|blue moon/.test(n)) {
+      if (/blood/.test(n))   tags.add("Melee");
+      if (/blue/.test(n))    tags.add("Magic");
+      if (/eclipse/.test(n)) tags.add("Ranged");
+    }
+  }
   if (cat === "Zenyte")         tags.add("Zenyte");
   if (cat === "Onyx")           tags.add("Onyx");
   if (cat === "Dragon")         tags.add("Dragon");
@@ -328,7 +365,7 @@ const TAG_ORDER = [
   "Godswords", "Spirit Shields", "Nex", "Masori", "Barrows", "Moons of Peril",
   "Zenyte", "Onyx", "Dragon", "Zulrah", "Wilderness",
   // Mechanic
-  "Repair", "Decombine", "Component", "Other"
+  "Repair", "Decombine", "Component", "Item Set", "Other"
 ];
 const TAGS = TAG_ORDER.filter(t => RECIPES.some(r => r._tags.includes(t)));
 const CATEGORIES = TAGS; // alias kept for filter state compat
