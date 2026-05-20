@@ -350,6 +350,77 @@ const RECIPES = [
   { key:"emt",  id:29007, name:"Eclipse moon tassets",    cat:"Moons", components:[{id:29052,qty:1}], repairBase:1_500_000 },
 ];
 
+/* ---------------- Skill requirements ----------------
+   Skill level needed to perform the combination, sourced from the OSRS
+   Wiki {{Recipe}} templates. Keyed by recipe key. Trivial level-1 gates
+   (e.g. stringing an amulet) are omitted — only meaningful gates listed.
+   GE-clerk set exchanges, repairs, and decombines need no skill so are absent.
+---------------------------------------------------- */
+const SKILL_REQS = {
+  "dragon-crossbow":             "78 Fletching",
+  "dragon-crossbow-u":           "78 Fletching",
+  "dragon-kiteshield":           "75 Smithing",
+  "dragon-platebody":            "90 Smithing",
+  "dragon-sq-shield":            "60 Smithing",
+  "godsword-blade":              "80 Smithing",
+  "masori-mask-f-helmet":        "90 Crafting",
+  "masori-mask-f-plate":         "90 Crafting",
+  "masori-body-f-chestplate":    "90 Crafting",
+  "masori-body-f-helmet":        "90 Crafting",
+  "masori-body-f-plate":         "90 Crafting",
+  "masori-chaps-f-chainskirt":   "90 Crafting",
+  "masori-chaps-f-helmet":       "90 Crafting",
+  "masori-chaps-f-plate":        "90 Crafting",
+  "armadylean-plate-helmet":     "90 Crafting",
+  "armadylean-plate-chestplate": "90 Crafting",
+  "armadylean-plate-chainskirt": "90 Crafting",
+  "ancient-wyvern-shield":       "66 Smithing + 66 Magic",
+  "amulet-of-fury":              "87 Magic",
+  "dragonfire-shield":           "90 Smithing",
+  "dragonfire-ward":             "90 Smithing",
+  "berserker-necklace":          "87 Magic",
+  "onyx-amulet-u":               "90 Crafting",
+  "onyx-bracelet":               "84 Crafting",
+  "onyx-necklace":               "82 Crafting",
+  "onyx-ring":                   "67 Crafting",
+  "ring-of-stone":               "87 Magic",
+  "heavy-ballista":              "72 Fletching",
+  "incomplete-heavy-ballista":   "72 Fletching",
+  "incomplete-light-ballista":   "47 Fletching",
+  "light-ballista":              "47 Fletching",
+  "unstrung-heavy-ballista":     "72 Fletching",
+  "unstrung-light-ballista":     "47 Fletching",
+  "huey-coif":                   "76 Crafting",
+  "huey-body":                   "78 Crafting",
+  "huey-chaps":                  "77 Crafting",
+  "huey-vambraces":              "76 Crafting",
+  "arcane-spirit-shield":        "90 Prayer + 85 Smithing",
+  "blessed-spirit-shield":       "85 Prayer",
+  "elysian-spirit-shield":       "90 Prayer + 85 Smithing",
+  "spectral-spirit-shield":      "90 Prayer + 85 Smithing",
+  "torva-helm-components":       "90 Smithing",
+  "torva-helm-tassets":          "90 Smithing",
+  "torva-helm-chestplate":       "90 Smithing",
+  "torva-body-components":       "90 Smithing",
+  "torva-body-tassets":          "90 Smithing",
+  "torva-body-chestplate":       "90 Smithing",
+  "torva-legs-components":       "90 Smithing",
+  "torva-legs-tassets":          "90 Smithing",
+  "torva-legs-chestplate":       "90 Smithing",
+  "eternal-boots":               "60 Magic + 60 Runecraft",
+  "pegasian-boots":              "60 Magic + 60 Runecraft",
+  "primordial-boots":            "60 Magic + 60 Runecraft",
+  "amulet-of-torture":           "93 Magic",
+  "necklace-of-anguish":         "93 Magic",
+  "ring-of-suffering":           "93 Magic",
+  "tormented-bracelet":          "93 Magic",
+  "uncut-zenyte":                "70 Crafting",
+  "zenyte-amulet-u":             "98 Crafting",
+  "zenyte-bracelet":             "95 Crafting",
+  "zenyte-necklace":             "92 Crafting",
+  "zenyte-ring":                 "89 Crafting",
+};
+
 /* ---------------- Tag taxonomy ----------------
    Each recipe can have multiple tags. Filters use OR logic — show if the
    recipe has ANY of the user-selected tags. The tag list below is the union
@@ -668,6 +739,14 @@ function trendChip(trend) {
     text: `${arrow} ${sign}${trend.pct.toFixed(1)}%`,
   });
   chip.title = `5m avg ${sign}${trend.pct.toFixed(2)}% vs 1h avg`;
+  return chip;
+}
+
+// Skill requirement chip — the level(s) needed to perform the combination.
+// Sourced from SKILL_REQS (OSRS Wiki {{Recipe}} data).
+function skillChip(req) {
+  const chip = el("span", { class: "skill-chip", text: `⚒ ${req}` });
+  chip.title = `Requires ${req} to craft`;
   return chip;
 }
 
@@ -994,6 +1073,8 @@ function renderCard(recipe, calc) {
   );
   if (recipeTrend)  catRow.appendChild(trendChip(recipeTrend));
   if (productStale) catRow.appendChild(staleChip(productLastTs));
+  const skillReq = SKILL_REQS[recipe.key];
+  if (skillReq) catRow.appendChild(skillChip(skillReq));
 
   // Name turns red on stale too (low-effort secondary signal).
   const nameDiv = el("div", {
@@ -1104,10 +1185,12 @@ function renderCard(recipe, calc) {
   const comp = el("div", { class: "components" });
   for (const c of recipe.components) {
     const m = state.mapping[c.id];
-    const cName = (m?.name || `#${c.id}`) + (c.qty > 1 ? ` ×${c.qty}` : "");
+    const cName = m?.name || `#${c.id}`;
     const p = state.prices[c.id];
     const bp = supplyPrice(p);
-    const value = bp ? fmtGp(bp * c.qty) : "—";
+    const value = bp
+      ? (c.qty > 1 ? `${c.qty}× ${fmtGp(bp)}` : fmtGp(bp))
+      : "—";
     const vol = calc.compVols[c.id];
     const lim = calc.compLimits[c.id];
     // Inline hint: just trade volume. GE buy limit moves to the row tooltip.
@@ -1557,6 +1640,7 @@ function renderRecipeStats(recipe) {
   const marginClass = (calc.margin ?? 0) >= 0 ? "v-pos" : "v-neg";
   const roiClass    = (calc.roi    ?? 0) >= 0 ? "v-pos" : "v-neg";
   modalDetail.replaceChildren(
+    ...(SKILL_REQS[recipe.key] ? [detailRow("Skill to craft", SKILL_REQS[recipe.key], { cls: "v-skill" })] : []),
     detailRow(sellLbl, fmtGp(calc.revenue), { cls: sellSideClass }),
     detailRow(supplyLbl, fmtGp(calc.componentCost), { cls: "v-supply" }),
     ...(calc.repairCost ? [detailRow(`Repair @ ${state.smithing} smithing`, fmtGp(calc.repairCost), { cls: "v-gold" })] : []),

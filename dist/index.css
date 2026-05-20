@@ -640,6 +640,22 @@ header {
   cursor: help;
   white-space: nowrap;
 }
+/* Skill chip — informational; the skill level needed to perform the combination */
+.skill-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  color: #818cf8;
+  background: rgba(129, 140, 248, 0.12);
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  cursor: help;
+  white-space: nowrap;
+}
+
 .card-cat-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 
 /* Component row that is stale: dim red name + cursor hint */
@@ -1106,6 +1122,7 @@ dialog#chart-modal::backdrop {
 .modal-detail td.v-gold   { color: var(--gold); }
 .modal-detail td.v-cost   { color: var(--text-0); }
 .modal-detail td.v-supply { color: #4ade80; }
+.modal-detail td.v-skill  { color: #818cf8; }
 
 /* Component mini charts */
 .component-charts {
