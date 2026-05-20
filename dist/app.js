@@ -899,11 +899,13 @@ function productSellTime(p) {
   return state.productStrategy === "insta-sell" ? (p.lowTime ?? null) : (p.highTime ?? null);
 }
 
-function calcMargin(recipe) {
+function calcMargin(recipe, predMap) {
   const qty = recipe.resultQty || 1;
-  const result = state.prices[recipe.id];
-  const sellPricePerUnit = productSell(result);
-  const sellTime = productSellTime(result);
+  const result = predMap ? null : state.prices[recipe.id];
+  const sellPricePerUnit = predMap
+    ? (predMap[recipe.id]?.daytime ?? null)
+    : productSell(result);
+  const sellTime = predMap ? null : productSellTime(result);
 
   // Track oldest "trusted" timestamp across all prices used so we can flag
   // recipes where any leg of the calc is stale (not just the product side).
@@ -912,12 +914,17 @@ function calcMargin(recipe) {
   let componentCost = 0;
   let allPresent = sellPricePerUnit !== null;
   for (const c of recipe.components) {
-    const p = state.prices[c.id];
-    const sp = supplyPrice(p);
+    let sp;
+    if (predMap) {
+      sp = predMap[c.id]?.overnight ?? null;
+    } else {
+      const p = state.prices[c.id];
+      sp = supplyPrice(p);
+      const t = supplyTime(p);
+      if (t != null && (oldestTime == null || t < oldestTime)) oldestTime = t;
+    }
     if (!sp) { allPresent = false; break; }
     componentCost += sp * c.qty;
-    const t = supplyTime(p);
-    if (t != null && (oldestTime == null || t < oldestTime)) oldestTime = t;
   }
   if (recipe.extraCost) componentCost += recipe.extraCost;
   const rc = repairCost(recipe.repairBase, state.smithing);

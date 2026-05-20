@@ -14,12 +14,15 @@ const OVERNIGHT_CACHE_TTL_MS = 24 * 3600 * 1000;
 let overnightData = null; // { analysedAt, windows, items: analysis[] , skipped:int }
 let overnightRunning = false;
 
-// Every distinct combination-item id the real-time tracker shows — the recipe
-// products. Components are intentionally NOT analysed: overnight flipping
-// targets the same combination items as the realtime view.
+// Every distinct item id referenced by any recipe — products AND components.
+// Components are analysed because their predicted overnight prices feed each
+// recipe's predicted cost; the recipe products are what gets shown as cards.
 function overnightItemIds() {
   const ids = new Set();
-  for (const r of RECIPES) ids.add(r.id);
+  for (const r of RECIPES) {
+    ids.add(r.id);
+    for (const c of r.components) ids.add(c.id);
+  }
   return [...ids];
 }
 
@@ -80,10 +83,19 @@ async function runOvernightAnalysis(onProgress) {
   }
   items.sort((a, b) => b.score - a.score);
 
+  // Per-item-id predicted price map: { id: { overnight, daytime, confidence } }.
+  // Recipe margins (calcMargin with predMap) look up component overnight prices
+  // and product daytime prices from this.
+  const predMap = {};
+  for (const a of items) {
+    predMap[a.id] = { overnight: a.predBuy, daytime: a.predSell, confidence: a.confidence };
+  }
+
   overnightData = {
     analysedAt: Date.now(),
     windows,
     items,
+    predMap,
     skipped: candidates.length - seriesById.size,
   };
   return overnightData;
