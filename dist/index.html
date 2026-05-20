@@ -67,8 +67,8 @@
       <select id="sort">
         <option value="margin-desc">Margin (high → low)</option>
         <option value="roi-desc">ROI % (high → low)</option>
-        <option value="daily-desc">Projected daily margin</option>
-        <option value="flips-desc">Flips/day (high → low)</option>
+        <option value="daily-desc">Daily potential (high → low)</option>
+        <option value="flips-desc">Trades/day (high → low)</option>
         <option value="cost-asc">Cost (low → high)</option>
         <option value="cost-desc">Cost (high → low)</option>
         <option value="name">Name (A→Z)</option>
@@ -90,8 +90,9 @@
     <div class="filter-group toggles">
       <label class="toggle"><input type="checkbox" id="favorites-only"> ⭐ Favorites only</label>
       <label class="toggle"><input type="checkbox" id="profitable-only"> Profitable only</label>
-      <label class="toggle"><input type="checkbox" id="hide-stale"> Hide stale</label>
-      <label class="toggle"><input type="checkbox" id="hide-low-volume"> Hide low volume (&lt;1 flip/hr)</label>
+      <label class="toggle"><input type="checkbox" id="hide-stale-products"> Hide stale products</label>
+      <label class="toggle"><input type="checkbox" id="hide-stale-components"> Hide stale components</label>
+      <label class="toggle"><input type="checkbox" id="hide-low-volume"> Hide low volume (&lt;1 trade/hr)</label>
     </div>
     <div class="filter-group">
       <label>Tags</label>

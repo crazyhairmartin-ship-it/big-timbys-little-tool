@@ -573,6 +573,80 @@ header {
   border: 1px solid var(--gold-dim);
 }
 
+/* Trend indicators */
+.card-badge.trend                     { border: 1px solid transparent; }
+.card-badge.trend.trend-spike         {
+  background: rgba(74, 222, 128, 0.18);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.6);
+  animation: trend-pulse 2s ease-in-out infinite;
+}
+.card-badge.trend.trend-crash         {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.6);
+  animation: trend-pulse 2s ease-in-out infinite;
+}
+.card-badge.trend.trend-trending-up   {
+  background: rgba(74, 222, 128, 0.10);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.35);
+}
+.card-badge.trend.trend-trending-down {
+  background: rgba(248, 113, 113, 0.10);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+@keyframes trend-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+  50%      { box-shadow: 0 0 0 4px rgba(74, 222, 128, 0); }
+}
+
+/* Table Trend column coloring */
+.recipe-table .t-trend.t-trend-spike         { color: var(--green); font-weight: 700; }
+.recipe-table .t-trend.t-trend-crash         { color: var(--red);   font-weight: 700; }
+.recipe-table .t-trend.t-trend-trending-up   { color: var(--green); }
+.recipe-table .t-trend.t-trend-trending-down { color: var(--red);   }
+
+/* Inline trend chip (recipe card head + component rows) */
+.trend-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.trend-chip.trend-spike         { color: #4ade80; background: rgba(74,222,128,0.16); border-color: rgba(74,222,128,0.5); }
+.trend-chip.trend-crash         { color: #f87171; background: rgba(248,113,113,0.16); border-color: rgba(248,113,113,0.5); }
+.trend-chip.trend-trending-up   { color: #4ade80; background: rgba(74,222,128,0.08); }
+.trend-chip.trend-trending-down { color: #f87171; background: rgba(248,113,113,0.08); }
+
+/* Stale chip — same shape as trend chip but dim red, signals "old data" */
+.stale-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  cursor: help;
+  white-space: nowrap;
+}
+.card-cat-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+/* Component row that is stale: dim red name + cursor hint */
+.components .row.comp-stale .name { color: var(--red); cursor: help; }
+.components .row.comp-stale { cursor: help; }
+.components .row { cursor: default; }
+
 .card-head {
   display: flex;
   align-items: center;
@@ -614,6 +688,7 @@ header {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.card-name.stale { color: var(--red); cursor: help; }
 
 .card-cat {
   color: var(--text-2);
@@ -772,8 +847,8 @@ header {
   margin-left: 4px;
 }
 .components .row.repair .name { color: var(--gold-dim); }
-.components .row.tax .name { color: var(--red); }
-.components .row.tax .val { color: var(--red); }
+.components .row.tax .name { color: #c2410c; }
+.components .row.tax .val { color: #c2410c; }
 .components .row.sell { font-weight: 600; }
 .components .row.sell .name { color: var(--green); }
 .components .row.sell-fast .name { color: var(--blue); font-size: 11px; }
@@ -1027,6 +1102,7 @@ dialog#chart-modal::backdrop {
 .modal-detail td.v-low  { color: #60a5fa; }
 .modal-detail td.v-pos  { color: var(--green); }
 .modal-detail td.v-neg  { color: var(--red); }
+.modal-detail td.v-tax  { color: #c2410c; }
 .modal-detail td.v-gold   { color: var(--gold); }
 .modal-detail td.v-cost   { color: var(--text-0); }
 .modal-detail td.v-supply { color: #4ade80; }

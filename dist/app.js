@@ -338,6 +338,8 @@ const state = {
   mapping: {},
   prices: {},
   volumes: {},          // id → 24h trade count
+  avg5m: {},            // id → {avgHighPrice, avgLowPrice, ...}   (last 5 min)
+  avg1h: {},            // id → {avgHighPrice, avgLowPrice, ...}   (last 1 hour)
   lastFetched: 0,
   history: loadHistory(),
   filters: {
@@ -346,7 +348,8 @@ const state = {
     minCost: null,        // gp; null = no lower bound
     maxCost: null,        // gp; null = no upper bound
     profitableOnly: false,
-    hideStale: false,
+    hideStaleProducts: false,
+    hideStaleComponents: false,
     hideLowVolume: false,
     favoritesOnly: false,
     activeCats: new Set(CATEGORIES),
@@ -416,6 +419,86 @@ function repairCost(base, level) {
   return Math.round(base * (1 - level / 200));
 }
 
+/* ---------------- Trend classifier ----------------
+   Given an item id, compares the 5-minute rolling average to the 1-hour
+   rolling average. Returns one of:
+     "spike"        — 5m avg ≥ +5% above 1h avg (sudden upward move)
+     "crash"        — 5m avg ≤ -5% below 1h avg (sudden downward move)
+     "trending-up"  — 5m avg +1% to +5% above 1h avg
+     "trending-down"— 5m avg -1% to -5% below 1h avg
+     null           — within ±1% (stable / noise)
+   Uses avgHighPrice (insta-buy side) as the reference price.
+---------------------------------------------------- */
+const SPIKE_PCT = 5;
+const TREND_PCT = 1;
+function trendOf(itemId) {
+  const a5 = state.avg5m[itemId];
+  const a1 = state.avg1h[itemId];
+  if (!a5 || !a1) return null;
+  const recent = a5.avgHighPrice ?? a5.avgLowPrice;
+  const base   = a1.avgHighPrice ?? a1.avgLowPrice;
+  if (!recent || !base) return null;
+  const deltaPct = ((recent - base) / base) * 100;
+  if (deltaPct >=  SPIKE_PCT) return { kind: "spike",         pct: deltaPct };
+  if (deltaPct <= -SPIKE_PCT) return { kind: "crash",         pct: deltaPct };
+  if (deltaPct >=  TREND_PCT) return { kind: "trending-up",   pct: deltaPct };
+  if (deltaPct <= -TREND_PCT) return { kind: "trending-down", pct: deltaPct };
+  return null;
+}
+
+// Most recent traded timestamp (seconds) across both sides of the spread.
+// Returns null if neither side has a timestamp.
+function lastTradedSec(itemId) {
+  const p = state.prices[itemId];
+  if (!p) return null;
+  const hi = p.highTime ?? 0;
+  const lo = p.lowTime  ?? 0;
+  const t = Math.max(hi, lo);
+  return t > 0 ? t : null;
+}
+// Human-readable age string for a last-traded timestamp.
+function ageString(tsSec) {
+  if (!tsSec) return null;
+  const ageSec = Math.max(0, Math.floor(Date.now() / 1000 - tsSec));
+  if (ageSec < 60)       return `${ageSec}s ago`;
+  if (ageSec < 3600)     return `${Math.floor(ageSec / 60)}m ago`;
+  if (ageSec < 86400)    return `${Math.floor(ageSec / 3600)}h ago`;
+  return `${Math.floor(ageSec / 86400)}d ago`;
+}
+// True if the item's most recent trade is older than the stale cutoff.
+function isItemStale(itemId) {
+  const t = lastTradedSec(itemId);
+  if (!t) return false;
+  return (Date.now() / 1000 - t) * 1000 > STALE_MS;
+}
+
+// Small inline stale chip — sits in the same row as the trend chip when an
+// item hasn't traded in 6h+. Shows the age directly so you don't have to hover.
+function staleChip(lastTs) {
+  const age = lastTs ? ageString(lastTs) : "no data";
+  const chip = el("span", { class: "stale-chip", text: `⏱ ${age}` });
+  chip.title = `Last traded ${age}`;
+  return chip;
+}
+
+// Render a small inline trend chip. Used both in the card head (recipe-level)
+// and inline in component breakdown rows (component-level).
+function trendChip(trend) {
+  const arrow = ({
+    "spike":         "▲▲",
+    "crash":         "▼▼",
+    "trending-up":   "↗",
+    "trending-down": "↘",
+  })[trend.kind];
+  const sign = trend.pct >= 0 ? "+" : "";
+  const chip = el("span", {
+    class: "trend-chip trend-" + trend.kind,
+    text: `${arrow} ${sign}${trend.pct.toFixed(1)}%`,
+  });
+  chip.title = `5m avg ${sign}${trend.pct.toFixed(2)}% vs 1h avg`;
+  return chip;
+}
+
 // Safe DOM helpers (avoid innerHTML with interpolated data)
 function el(tag, opts = {}, ...children) {
   const node = document.createElement(tag);
@@ -427,10 +510,19 @@ function el(tag, opts = {}, ...children) {
 }
 function row(parent, opts) {
   const r = el("div", { class: "row" + (opts.cls ? " " + opts.cls : "") });
-  r.appendChild(el("span", { class: "name", text: opts.label }));
+  const nameSpan = el("span", { class: "name", text: opts.label });
+  // opts.nameExtras: inline elements appended next to the name (e.g. trend chip)
+  if (Array.isArray(opts.nameExtras)) {
+    for (const ext of opts.nameExtras) if (ext) nameSpan.appendChild(ext);
+  }
+  r.appendChild(nameSpan);
   const valSpan = el("span", { class: "val", text: opts.value });
   if (opts.hint != null) {
     valSpan.appendChild(el("span", { class: "hint", text: ` ${opts.hint}` }));
+  }
+  // opts.extras: inline elements appended after the value (legacy support)
+  if (Array.isArray(opts.extras)) {
+    for (const ext of opts.extras) if (ext) valSpan.appendChild(ext);
   }
   r.appendChild(valSpan);
   parent.appendChild(r);
@@ -495,6 +587,17 @@ async function fetchLatest() {
 }
 async function fetchVolumes() {
   const data = await api("/volumes");
+  return data.data;
+}
+async function fetchAvg5m() {
+  // Rolling average over the last 5 minutes; covers all items in one call.
+  const data = await api("/5m");
+  return data.data;
+}
+async function fetchAvg1h() {
+  // Rolling average over the last 1 hour. Used as the "baseline" we compare
+  // the 5m average against to classify trend / spike.
+  const data = await api("/1h");
   return data.data;
 }
 async function fetchTimeseries(id, step) {
@@ -697,12 +800,10 @@ function renderCard(recipe, calc) {
   }
   card.onclick = () => openModal(recipe);
 
-  const stale = calc.oldestTime && (Date.now() / 1000 - calc.oldestTime) * 1000 > STALE_MS;
   const isHighRoi = calc.allPresent && calc.roi !== null && calc.roi >= HIGH_ROI_THRESHOLD;
-  if (stale || isHighRoi) {
+  if (isHighRoi) {
     const badges = el("div", { class: "card-badges" });
-    if (isHighRoi) badges.appendChild(el("span", { class: "card-badge high-roi", text: "HIGH ROI" }));
-    if (stale)     badges.appendChild(el("span", { class: "card-stale", text: "stale" }));
+    badges.appendChild(el("span", { class: "card-badge high-roi", text: "HIGH ROI" }));
     card.appendChild(badges);
   }
 
@@ -711,10 +812,27 @@ function renderCard(recipe, calc) {
   const img = el("img", { attrs: { alt: "", loading: "lazy", src: recipeIcon(recipe) } });
   img.onerror = () => { img.style.display = "none"; };
   iconBox.appendChild(img);
-  const titleBox = el("div", { class: "card-title" },
-    el("div", { class: "card-name", text: recipe.name }),
-    el("div", { class: "card-cat", text: recipe.cat }),
+  // Recipe-level trend chip lives next to the category subtitle so it's
+  // visible without crowding the top-right badge corner.
+  const recipeTrend = trendOf(recipe.id);
+  const productStale = isItemStale(recipe.id);
+  const productLastTs = lastTradedSec(recipe.id);
+  const catRow = el("div", { class: "card-cat-row" },
+    el("span", { class: "card-cat", text: recipe.cat }),
   );
+  if (recipeTrend)  catRow.appendChild(trendChip(recipeTrend));
+  if (productStale) catRow.appendChild(staleChip(productLastTs));
+
+  // Name turns red on stale too (low-effort secondary signal).
+  const nameDiv = el("div", {
+    class: "card-name" + (productStale ? " stale" : ""),
+    text: recipe.name,
+  });
+  if (productLastTs) {
+    nameDiv.title = `${recipe.name} — last traded ${ageString(productLastTs)}` +
+                    (productStale ? " (stale)" : "");
+  }
+  const titleBox = el("div", { class: "card-title" }, nameDiv, catRow);
   // Favorite star — inline in card-head before the icon; can't collide with
   // top-right badges and visually anchors the row on its leading edge.
   const isFav = state.favorites.has(recipe.key);
@@ -792,7 +910,7 @@ function renderCard(recipe, calc) {
       el("span", { class: "stat-label", text: "Total cost" }),
       cVal),
     el("div", { class: "stat flips" },
-      el("span", { class: "stat-label", text: "Flips/hr" }),
+      el("span", { class: "stat-label", text: "Trades/hr" }),
       fVal),
   );
   // Add a "Daily margin" mini-stat if we have flips
@@ -805,7 +923,7 @@ function renderCard(recipe, calc) {
     dailyVal.textContent = "—";
   }
   stats.appendChild(el("div", { class: "stat daily" },
-    el("span", { class: "stat-label", text: "Margin/day" }),
+    el("span", { class: "stat-label", text: "Daily potential" }),
     dailyVal));
   // We still keep the unused mVal/rVal references quiet — they're not used in hero layout but built above to preserve neg/pos classes when re-used elsewhere.
   void mVal; void rVal;
@@ -816,23 +934,36 @@ function renderCard(recipe, calc) {
     const m = state.mapping[c.id];
     const cName = (m?.name || `#${c.id}`) + (c.qty > 1 ? ` ×${c.qty}` : "");
     const p = state.prices[c.id];
-    const bp = p?.high ?? null;
+    const bp = supplyPrice(p);
     const value = bp ? fmtGp(bp * c.qty) : "—";
     const vol = calc.compVols[c.id];
     const lim = calc.compLimits[c.id];
-    const parts = [];
-    if (vol != null) parts.push(`${fmtVol(perHour(vol))}/hr`);
-    if (lim != null) parts.push(`lim ${lim.toLocaleString()}/4h`);
-    const hint = parts.length ? "· " + parts.join(" · ") : null;
-    row(comp, { label: cName, value, hint });
+    // Inline hint: just trade volume. GE buy limit moves to the row tooltip.
+    const hint = vol != null ? `· ${fmtVol(perHour(vol))}/hr` : null;
+    const compTrend = trendOf(c.id);
+    const compStale = isItemStale(c.id);
+    const lastTs    = lastTradedSec(c.id);
+    const nameChips = [];
+    if (compTrend) nameChips.push(trendChip(compTrend));
+    if (compStale) nameChips.push(staleChip(lastTs));
+    const r = row(comp, {
+      cls: compStale ? "comp-stale" : "",
+      label: cName,
+      value,
+      hint,
+      nameExtras: nameChips.length ? nameChips : null,
+    });
+    // Combined tooltip: last traded + GE buy limit (+ stale flag)
+    const ttBits = [];
+    if (lastTs) ttBits.push(`Last traded ${ageString(lastTs)}` + (compStale ? " (stale)" : ""));
+    if (lim != null) ttBits.push(`GE buy limit: ${lim.toLocaleString()} per 4h`);
+    if (ttBits.length) r.title = `${m?.name || `#${c.id}`}\n${ttBits.join("\n")}`;
   }
   if (recipe.extraCost) row(comp, { label: "Runes/extras", value: fmtGp(recipe.extraCost) });
   if (recipe.repairBase) row(comp, { cls: "repair", label: `Repair @ ${state.smithing}`, value: fmtGp(calc.repairCost) });
   row(comp, { cls: "tax", label: "GE tax", value: `-${fmtGp(calc.geTax)}` });
   const qty = calc.resultQty;
-  const sellLabel = state.productStrategy === "insta-sell"
-    ? (qty > 1 ? `Insta-sell ×${qty}` : "Insta-sell")
-    : (qty > 1 ? `List @ high ×${qty}` : "List @ high");
+  const sellLabel = qty > 1 ? `Sell price ×${qty}` : "Sell price";
   const sellValue = qty > 1
     ? `${fmtGp(calc.revenue)} (${fmtGp(calc.sellPrice)}/ea)`
     : fmtGp(calc.sellPrice);
@@ -857,10 +988,8 @@ function applyFilters(items) {
     if (f.profitableOnly && !(calc.margin > 0)) return false;
     if (f.minCost !== null && calc.totalCost < f.minCost) return false;
     if (f.maxCost !== null && calc.totalCost > f.maxCost) return false;
-    if (f.hideStale) {
-      const isStale = calc.oldestTime && (nowSec - calc.oldestTime) > staleSec;
-      if (isStale) return false;
-    }
+    if (f.hideStaleProducts && isItemStale(recipe.id)) return false;
+    if (f.hideStaleComponents && recipe.components.some(c => isItemStale(c.id))) return false;
     if (f.hideLowVolume) {
       const productVolPerHr = perHour(calc.resultVol);
       if (productVolPerHr == null || productVolPerHr < 1) return false;
@@ -909,12 +1038,14 @@ function renderGrid() {
 
 const TABLE_COLUMNS = [
   { key: "star",     label: "★",         get: () => null,                    sortable: false },
+  { key: "trend",    label: "Trend",      get: x => trendOf(x.recipe.id)?.pct ?? null, sortable: true, num: true,
+                     fmt: v => v == null ? "" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%` },
   { key: "name",     label: "Recipe",     get: x => x.recipe.name,            sortable: true },
   { key: "sell",     label: "Sell",       get: x => x.calc.sellPrice,         sortable: true, num: true, fmt: v => fmtGp(v) },
   { key: "cost",     label: "Cost",       get: x => x.calc.totalCost,         sortable: true, num: true, fmt: v => fmtGp(v) },
   { key: "margin",   label: "Margin",     get: x => x.calc.margin,            sortable: true, num: true, fmt: v => fmtGp(v) },
   { key: "roi",      label: "ROI",        get: x => x.calc.roi,               sortable: true, num: true, fmt: v => fmtPct(v) },
-  { key: "flipsHr",  label: "Flips/hr",   get: x => perHour(x.calc.maxFlips), sortable: true, num: true, fmt: v => v == null ? "—" : fmtVol(v) },
+  { key: "flipsHr",  label: "Trades/hr",  get: x => perHour(x.calc.maxFlips), sortable: true, num: true, fmt: v => v == null ? "—" : fmtVol(v) },
   { key: "vol24",    label: "Vol (24h)",  get: x => x.calc.resultVol,         sortable: true, num: true, fmt: v => v == null ? "—" : v.toLocaleString() },
   { key: "limit4h",  label: "Lim/4h",     get: x => x.calc.limitFlipsPer4h,   sortable: true, num: true, fmt: v => v == null ? "—" : v.toLocaleString() },
 ];
@@ -980,6 +1111,14 @@ function renderTable(container, items) {
         td.textContent = col.fmt ? col.fmt(v) : (v ?? "—");
         if (col.key === "margin")  td.classList.add("t-margin", (x.calc.margin ?? 0) >= 0 ? "pos" : "neg");
         if (col.key === "roi")     td.classList.add("t-roi",    (x.calc.roi    ?? 0) >= 0 ? "pos" : "neg");
+        if (col.key === "trend") {
+          const t = trendOf(x.recipe.id);
+          if (t) {
+            td.classList.add("t-trend", "t-trend-" + t.kind);
+            const arrow = ({ "spike":"▲▲","crash":"▼▼","trending-up":"↗","trending-down":"↘" })[t.kind];
+            td.textContent = `${arrow} ${t.pct >= 0 ? "+" : ""}${t.pct.toFixed(1)}%`;
+          }
+        }
         if (col.key === "flipsHr") {
           td.classList.add("t-flips");
           const hr = perHour(x.calc.maxFlips);
@@ -1208,19 +1347,31 @@ function renderTabStats(recipe) {
     trendClass = trend >= 0 ? "v-pos" : "v-neg";
   }
 
+  const highTime = live?.highTime ?? null;
+  const lowTime  = live?.lowTime  ?? null;
+  const recentestSec = Math.max(highTime ?? 0, lowTime ?? 0) || null;
+  const isStale = recentestSec && (Date.now() / 1000 - recentestSec) * 1000 > STALE_MS;
   const rows = [
     detailRow("Item", name + (qty > 1 ? ` (×${qty} in recipe)` : "")),
     detailRow("Insta-buy (high)",  high != null ? fmtGp(high) : "—", { cls: "v-high" }),
     detailRow("Insta-sell (low)",  low  != null ? fmtGp(low)  : "—", { cls: "v-low"  }),
+    detailRow("Last insta-buy",    highTime ? ageString(highTime) : "—"),
+    detailRow("Last insta-sell",   lowTime  ? ageString(lowTime)  : "—"),
+    detailRow("Most recent trade", recentestSec ? ageString(recentestSec) : "—",
+              { cls: isStale ? "v-neg" : "" }),
     detailRow("Spread",            spread != null ? fmtGp(spread) : "—"),
     detailRow("Spread %",          spreadPct != null ? `${spreadPct.toFixed(2)}%` : "—"),
     detailRow(`Trend over ${activeTimeframe}`, trend != null ? `${trend >= 0 ? "+" : ""}${trend.toFixed(2)}%` : "—", { cls: trendClass }),
     detailRow("Volume (24h)",      vol != null ? `${vol.toLocaleString()} traded` : "—"),
     detailRow("GE buy limit (4h)", limit != null ? limit.toLocaleString() : "—"),
   ];
-  // Cost contribution (component only)
-  if (!isResult && high != null) {
-    rows.push(detailRow("Contributes to total cost", fmtGp(high * qty), { cls: "v-supply" }));
+  // Cost contribution (component only) — strategy-aware
+  if (!isResult) {
+    const supply = supplyPrice(live);
+    const label = state.supplyStrategy === "slow-buy"
+      ? "Contributes to total cost (slow-buy)"
+      : "Contributes to total cost (insta-buy)";
+    if (supply != null) rows.push(detailRow(label, fmtGp(supply * qty), { cls: "v-supply" }));
   }
   modalDetail.replaceChildren(...rows);
 }
@@ -1228,9 +1379,7 @@ function renderTabStats(recipe) {
 function renderRecipeStats(recipe) {
   const calc = calcMargin(recipe);
   const q = calc.resultQty;
-  const sellLbl = state.productStrategy === "insta-sell"
-    ? (q > 1 ? `Insta-sell ${q} × ${fmtGp(calc.sellPrice)}` : "Insta-sell (low price)")
-    : (q > 1 ? `List @ high ${q} × ${fmtGp(calc.sellPrice)}` : "List @ high (insta-buy price)");
+  const sellLbl = q > 1 ? `Sell price ${q} × ${fmtGp(calc.sellPrice)}` : "Sell price";
   const supplyLbl = state.supplyStrategy === "slow-buy" ? "Supply cost (slow-buy, low)" : "Supply cost (insta-buy, high)";
   const sellSideClass = state.productStrategy === "insta-sell" ? "v-low" : "v-high";
   const marginClass = (calc.margin ?? 0) >= 0 ? "v-pos" : "v-neg";
@@ -1240,7 +1389,7 @@ function renderRecipeStats(recipe) {
     detailRow(supplyLbl, fmtGp(calc.componentCost), { cls: "v-supply" }),
     ...(calc.repairCost ? [detailRow(`Repair @ ${state.smithing} smithing`, fmtGp(calc.repairCost), { cls: "v-gold" })] : []),
     detailRow("Total cost", fmtGp(calc.totalCost), { strong: true, cls: "v-cost" }),
-    detailRow("GE tax (2% capped 5M)", `-${fmtGp(calc.geTax)}`, { cls: "v-neg" }),
+    detailRow("GE tax (2% capped 5M)", `-${fmtGp(calc.geTax)}`, { cls: "v-tax" }),
     detailRow("Margin (per craft)", fmtGp(calc.margin), { strong: true, cls: marginClass }),
     detailRow("ROI", fmtPct(calc.roi), { strong: true, cls: roiClass }),
     detailRow("Result volume (24h)", calc.resultVol != null ? `${calc.resultVol.toLocaleString()} traded` : "—"),
@@ -1549,21 +1698,28 @@ function drawChart(points, opts = {}) {
   }
 
   // -- Volume bars (stacked: insta-sell vol on top of insta-buy vol) --
-  const barW = Math.max(1.5, (w - padL - padR) / points.length - 0.5);
+  // Use integer coordinates so adjacent thin bars (Day view: 288 bars in ~700px)
+  // don't smear into each other through canvas anti-aliasing.
+  const plotWidth = w - padL - padR;
+  const spacing = points.length > 1 ? plotWidth / (points.length - 1) : plotWidth;
+  const barW = Math.max(1, Math.floor(spacing - 1));      // 1px guaranteed gap
+  const baseY = Math.round(volTop + volH);
+  const maxBarH = Math.floor(volH - 4);
   points.forEach((p) => {
     const totalV = (p.highVol || 0) + (p.lowVol || 0);
     if (totalV <= 0) return;
-    const x = xs(p.ts) - barW / 2;
-    const totalH = totalV / vMax * (volH - 4);
-    const highH  = (p.highVol || 0) / vMax * (volH - 4);
-    const baseY  = volTop + volH;
-    if (p.highVol) {
+    const cx = xs(p.ts);
+    const x  = Math.round(cx - barW / 2);
+    const totalH = Math.round(totalV / vMax * maxBarH);
+    const highH  = Math.round((p.highVol || 0) / vMax * maxBarH);
+    if (highH > 0) {
       ctx.fillStyle = "rgba(245, 158, 11, 0.7)";
       ctx.fillRect(x, baseY - highH, barW, highH);
     }
-    if (p.lowVol) {
+    const lowH = totalH - highH;
+    if (lowH > 0) {
       ctx.fillStyle = "rgba(96, 165, 250, 0.7)";
-      ctx.fillRect(x, baseY - totalH, barW, totalH - highH);
+      ctx.fillRect(x, baseY - totalH, barW, lowH);
     }
   });
 
@@ -1628,12 +1784,16 @@ async function refresh() {
     }
     state.lastMargin = snapshot;
 
-    const [prices, volumes] = await Promise.all([
+    const [prices, volumes, avg5m, avg1h] = await Promise.all([
       fetchLatest(),
       fetchVolumes().catch(e => { console.warn("Volumes failed:", e); return state.volumes; }),
+      fetchAvg5m().catch(e => { console.warn("5m avg failed:", e); return state.avg5m; }),
+      fetchAvg1h().catch(e => { console.warn("1h avg failed:", e); return state.avg1h; }),
     ]);
     state.prices = prices;
     state.volumes = volumes;
+    state.avg5m = avg5m;
+    state.avg1h = avg1h;
     state.lastFetched = Date.now();
     renderGrid();
   } catch (e) {
@@ -1680,8 +1840,12 @@ async function init() {
     renderGrid();
     if (activeModalRecipe && modal.open) drawActiveTab(activeModalRecipe);
   });
-  document.getElementById("hide-stale").addEventListener("change", (e) => {
-    state.filters.hideStale = e.target.checked;
+  document.getElementById("hide-stale-products").addEventListener("change", (e) => {
+    state.filters.hideStaleProducts = e.target.checked;
+    renderGrid();
+  });
+  document.getElementById("hide-stale-components").addEventListener("change", (e) => {
+    state.filters.hideStaleComponents = e.target.checked;
     renderGrid();
   });
   document.getElementById("hide-low-volume").addEventListener("change", (e) => {
@@ -1770,7 +1934,8 @@ async function init() {
       if (!r._tags.some(t => f.activeCats.has(t))) continue;
       if (q && !r.name.toLowerCase().includes(q)) continue;
       if (f.profitableOnly && !(c.margin > 0)) continue;
-      if (f.hideStale && c.oldestTime && (nowSec - c.oldestTime) > staleSec) continue;
+      if (f.hideStaleProducts && isItemStale(r.id)) continue;
+      if (f.hideStaleComponents && r.components.some(comp => isItemStale(comp.id))) continue;
       if (f.hideLowVolume) {
         const productVolPerHr = perHour(c.resultVol);
         if (productVolPerHr == null || productVolPerHr < 1) continue;
