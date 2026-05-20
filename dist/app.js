@@ -1272,7 +1272,9 @@ function renderCard(recipe, calc) {
 //   roi   — capital efficiency right now
 //   daily — current absolute profit (margin × realistic trades/day)
 //   hist  — 24h-average margin, so a momentary snapshot spike doesn't win
-//   vol   — liquidity / fill speed
+//   vol   — liquidity / fill speed; only a light tiebreaker, because `daily`
+//           already encodes volume through its maxFlips bottleneck — a heavier
+//           `vol` weight would double-count liquidity.
 // Stale items are demoted, losing/no-data flips sink below everything, and
 // any flip clearing REC_MARGIN_PRIORITY is floated into a top tier.
 const REC_SENTINEL = -1e15;          // stand-in for "no data" — keeps subtraction finite
@@ -1295,8 +1297,8 @@ function scoreRecommended(items) {
     pct[key] = m;
   }
   for (const it of items) {
-    let s = 0.25 * pct.roi.get(it)  + 0.30 * pct.daily.get(it)
-          + 0.25 * pct.hist.get(it) + 0.20 * pct.vol.get(it);
+    let s = 0.30 * pct.roi.get(it)  + 0.30 * pct.daily.get(it)
+          + 0.30 * pct.hist.get(it) + 0.10 * pct.vol.get(it);
     const stale = isItemStale(it.recipe.id) ||
                   it.recipe.components.some(c => isItemStale(c.id));
     if (stale) s *= 0.2;
