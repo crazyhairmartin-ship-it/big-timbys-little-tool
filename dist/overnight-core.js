@@ -188,6 +188,25 @@ function extremeHours(curve) {
   };
 }
 
+// Fractional price drift across the series: the recent OC_BASELINE_DAYS-day
+// median vs the median of everything older. +0.08 = up 8%, -0.12 = down 12%.
+// Returns 0 when there isn't enough data on both sides to compare.
+function priceTrend(series) {
+  if (!series.length) return 0;
+  let maxTs = 0;
+  for (const p of series) if (p.timestamp > maxTs) maxTs = p.timestamp;
+  const cutoff = maxTs - OC_BASELINE_DAYS * 24 * 3600;
+  const recent = [], older = [];
+  for (const p of series) {
+    const x = ocMidPrice(p);
+    if (x == null) continue;
+    (p.timestamp >= cutoff ? recent : older).push(x);
+  }
+  const r = medianOf(recent), o = medianOf(older);
+  if (r == null || o == null || o === 0) return 0;
+  return (r - o) / o;
+}
+
 // ---- functions added in later tasks ----
 
 // Node test harness can require() this; browsers skip the guard.
@@ -197,6 +216,6 @@ if (typeof module !== "undefined" && module.exports) {
     ocMidPrice, ocLowPrice, ocHighPrice, hourlyProfile,
     medianOf, windowPrices, recentBaseline, predictPrices,
     confidenceOf, predictedProfit, rankScore, analyzeItem,
-    extremeHours,
+    extremeHours, priceTrend,
   };
 }

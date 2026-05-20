@@ -179,3 +179,21 @@ test("predictPrices uses the low at the buy hour and the high at the sell hour",
   assert.ok(Math.abs(p.predBuy - 80) < 8, `predBuy ~80 (the LOW at hour 2), got ${p.predBuy}`);
   assert.ok(Math.abs(p.predSell - 160) < 12, `predSell ~160 (the HIGH at hour 14), got ${p.predSell}`);
 });
+
+test("priceTrend is positive for a rising series, negative for a falling one", () => {
+  const start = Date.UTC(2026, 0, 1, 0);
+  const mk = (priceForDay) => {
+    const s = [];
+    for (let d = 0; d < 14; d++) {
+      for (let h = 0; h < 24; h++) {
+        const ts = Math.floor((start + (d * 24 + h) * 3600 * 1000) / 1000);
+        const p = priceForDay(d);
+        s.push({ timestamp: ts, avgHighPrice: p, avgLowPrice: p });
+      }
+    }
+    return s;
+  };
+  assert.ok(core.priceTrend(mk(d => 100 + d * 5)) > 0.1, "rising series -> positive");
+  assert.ok(core.priceTrend(mk(d => 200 - d * 5)) < -0.1, "falling series -> negative");
+  assert.strictEqual(core.priceTrend(mk(() => 100)), 0, "flat series -> 0");
+});

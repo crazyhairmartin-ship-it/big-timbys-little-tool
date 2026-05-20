@@ -9,6 +9,7 @@ const OVERNIGHT_MIN_VOLUME = 10;    // skip items trading < 10/24h (too thin to 
 const OVERNIGHT_FETCH_CONCURRENCY = 5;
 const OVERNIGHT_CACHE_KEY = "osrs-combo-overnight";
 const OVERNIGHT_CACHE_TTL_MS = 24 * 3600 * 1000;
+const OVERNIGHT_TREND_DISCOUNT = 0.5;  // fraction of a downtrend applied as a sell-price haircut
 
 // In-memory analysis result; also mirrored to localStorage.
 let overnightData = null; // { analysedAt, predMap, analysed, skipped } — see runOvernightAnalysis
@@ -79,12 +80,14 @@ async function runOvernightAnalysis(onProgress) {
     const windows = extremeHours(hourlyProfile(series));
     const a = analyzeItem(id, series, windows, geTax);
     if (!a) continue;
+    const trend = priceTrend(series);
     predMap[id] = {
       overnight: a.predBuy,
-      daytime: a.predSell,
+      daytime: a.predSell * (1 + OVERNIGHT_TREND_DISCOUNT * Math.min(0, trend)),
       confidence: a.confidence,
       buyHour: windows.buyHours[0] ?? null,
       sellHour: windows.sellHours[0] ?? null,
+      trend,
     };
     analysed += 1;
   }
@@ -164,6 +167,26 @@ function overnightRecipeConfidence(recipe) {
   return min === Infinity ? null : min;
 }
 
+// A trend chip for the recipe card — reuses the realtime .trend-chip styling.
+// Returns null for a roughly-flat trend (no chip).
+function overnightTrendChip(t) {
+  if (t == null) return null;
+  const pct = t * 100;
+  let kind, arrow;
+  if (t <= -0.05)      { kind = "crash";         arrow = "▼▼"; }
+  else if (t < -0.01)  { kind = "trending-down"; arrow = "↘"; }
+  else if (t >= 0.05)  { kind = "spike";         arrow = "▲▲"; }
+  else if (t > 0.01)   { kind = "trending-up";   arrow = "↗"; }
+  else return null;
+  const sign = pct >= 0 ? "+" : "";
+  const chip = el("span", {
+    class: "trend-chip trend-" + kind,
+    text: `${arrow} ${sign}${pct.toFixed(1)}%`,
+  });
+  chip.title = `Price ${sign}${pct.toFixed(1)}% — recent vs earlier in the analysis window`;
+  return chip;
+}
+
 // One Overnight recipe card, mirroring the realtime renderCard DOM structure.
 function overnightRecipeCard(recipe, calc) {
   const card = el("article", { class: "card ov-card " + (calc.margin > 0 ? "profit" : "loss") });
@@ -182,6 +205,8 @@ function overnightRecipeCard(recipe, calc) {
   if (conf !== null) {
     catRow.appendChild(el("span", { class: "skill-chip", text: Math.round(conf * 100) + "% reliable" }));
   }
+  const trendChipEl = overnightTrendChip(overnightData.predMap[recipe.id] && overnightData.predMap[recipe.id].trend);
+  if (trendChipEl) catRow.appendChild(trendChipEl);
   const nameDiv = el("div", { class: "card-name", text: recipe.name });
   const titleBox = el("div", { class: "card-title" }, nameDiv, catRow);
   const head = el("div", { class: "card-head" }, iconBox, titleBox);
