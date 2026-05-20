@@ -171,8 +171,7 @@ function overnightRecipeConfidence(recipe) {
 
 // One Overnight recipe card, mirroring the realtime renderCard DOM structure.
 function overnightRecipeCard(recipe, calc) {
-  const card = el("article", { class: "card" });
-  card.classList.add(calc.margin > 0 ? "profit" : "loss");
+  const card = el("article", { class: "card ov-card " + (calc.margin > 0 ? "profit" : "loss") });
   card.onclick = () => openOvernightModal(recipe, calc);
 
   // Head
@@ -297,7 +296,11 @@ function paintOvernight(progress) {
   grid.appendChild(wrap);
 }
 
-function openOvernightModal(recipe, calc) { /* implemented in R3 */ }
+// Clicking an Overnight recipe card opens the same price-history chart modal
+// the realtime view uses — the charts are the basis for the predictions.
+function openOvernightModal(recipe, calc) {
+  openModal(recipe);
+}
 
 // Entry point called by app.js renderGrid() when state.mode === "overnight".
 function renderOvernight() {
