@@ -17,6 +17,9 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 const UA = "big-timbys-little-tool price-recorder (github.com/crazyhairmartin-ship-it/big-timbys-little-tool)";
 const DIR = "prices";
 const CONCURRENCY = 5;
+// The wiki /timeseries endpoint always returns its last 365 points. For rarely
+// traded items at a 1h step those points span years, not days — so cap by age.
+const CUTOFF = Math.floor(Date.now() / 1000) - 16 * 86400;
 
 const idsFile = process.argv[2];
 if (!idsFile) { console.error("usage: node backfill-prices.mjs <ids.json>"); process.exit(1); }
@@ -59,6 +62,7 @@ await throttle(ids, CONCURRENCY, async (id) => {
   const series = await fetchSeries(id);
   if (!series) { failed++; return; }
   for (const p of series) {
+    if (p.timestamp < CUTOFF) continue;
     const hi = p.avgHighPrice ?? null;
     const lo = p.avgLowPrice ?? null;
     if (hi == null && lo == null) continue;
