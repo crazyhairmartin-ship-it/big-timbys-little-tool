@@ -583,6 +583,7 @@ const state = {
   volumes: {},          // id → 24h trade count
   avg5m: {},            // id → {avgHighPrice, avgLowPrice, ...}   (last 5 min)
   avg1h: {},            // id → {avgHighPrice, avgLowPrice, ...}   (last 1 hour)
+  avg24h: {},           // id → {high, low}  (24h avg, normalised for calcMargin)
   lastFetched: 0,
   history: loadHistory(),
   filters: {
@@ -851,6 +852,18 @@ async function fetchAvg1h() {
   const data = await api("/1h");
   return data.data;
 }
+async function fetchAvg24h() {
+  // Rolling 24-hour average — the "recent history" baseline for the
+  // Recommended sort. Normalised to {high, low} so the margin calculator
+  // (supplyPrice / productSell) can price a recipe straight off it, exactly
+  // like the live /latest snapshot.
+  const data = await api("/24h");
+  const out = {};
+  for (const [id, p] of Object.entries(data.data)) {
+    out[id] = { high: p.avgHighPrice ?? null, low: p.avgLowPrice ?? null };
+  }
+  return out;
+}
 async function fetchTimeseries(id, step) {
   const data = await api(`/timeseries?id=${id}&timestep=${step}`);
   return data.data;
@@ -958,6 +971,26 @@ function calcMargin(recipe) {
     maxFlips, resultVol, compVols, resultQty: qty,
     compLimits, limitFlipsPer4h, limitFlipsPerDay,
   };
+}
+
+// Per-craft margin computed from 24h-average prices — the "has this been
+// profitable lately" signal, so the Recommended sort isn't fooled by a
+// momentary snapshot spike. Mirrors the core of calcMargin (strategy-aware,
+// GE tax, repair) but skips the volume/limit machinery. Returns null if any
+// leg lacks 24h data.
+function historicalMargin(recipe) {
+  const src = state.avg24h;
+  const qty = recipe.resultQty || 1;
+  const sell = productSell(src[recipe.id]);
+  if (sell === null) return null;
+  let cost = recipe.extraCost || 0;
+  for (const c of recipe.components) {
+    const sp = supplyPrice(src[c.id]);
+    if (sp === null) return null;
+    cost += sp * c.qty;
+  }
+  cost += repairCost(recipe.repairBase, state.smithing);
+  return sell * qty - geTax(sell) * qty - cost;
 }
 
 /* ---------------- Rendering ---------------- */
@@ -1233,11 +1266,17 @@ function renderCard(recipe, calc) {
 
 // "Recommended" sort — a balanced composite that rewards items which are
 // profitable AND liquid AND capital-efficient, not just one of those.
-// Each metric is rank-normalised to a 0–1 percentile across the visible
-// set (robust to whale outliers that would dominate a raw min-max scale),
-// then weight-blended. Stale items are demoted and losing/no-data flips
-// sink below everything so they can never top the list.
-const REC_SENTINEL = -1e15;  // stand-in for "no data" — keeps subtraction finite
+// Four metrics are each rank-normalised to a 0–1 percentile across the
+// visible set (robust to whale outliers that would dominate a raw min-max
+// scale), then weight-blended:
+//   roi   — capital efficiency right now
+//   daily — current absolute profit (margin × realistic trades/day)
+//   hist  — 24h-average margin, so a momentary snapshot spike doesn't win
+//   vol   — liquidity / fill speed
+// Stale items are demoted, losing/no-data flips sink below everything, and
+// any flip clearing REC_MARGIN_PRIORITY is floated into a top tier.
+const REC_SENTINEL = -1e15;          // stand-in for "no data" — keeps subtraction finite
+const REC_MARGIN_PRIORITY = 50_000;  // flips with margin ≥ this are floated to the top
 function scoreRecommended(items) {
   const n = items.length;
   if (!n) return;
@@ -1245,6 +1284,7 @@ function scoreRecommended(items) {
     roi:   it => (it.calc.allPresent && it.calc.roi != null) ? it.calc.roi : REC_SENTINEL,
     daily: it => (it.calc.allPresent && it.calc.margin != null && it.calc.maxFlips != null)
                    ? it.calc.margin * it.calc.maxFlips : REC_SENTINEL,
+    hist:  it => historicalMargin(it.recipe) ?? REC_SENTINEL,
     vol:   it => it.calc.resultVol ?? 0,
   };
   const pct = {};
@@ -1255,12 +1295,16 @@ function scoreRecommended(items) {
     pct[key] = m;
   }
   for (const it of items) {
-    let s = 0.35 * pct.roi.get(it) + 0.40 * pct.daily.get(it) + 0.25 * pct.vol.get(it);
+    let s = 0.25 * pct.roi.get(it)  + 0.30 * pct.daily.get(it)
+          + 0.25 * pct.hist.get(it) + 0.20 * pct.vol.get(it);
     const stale = isItemStale(it.recipe.id) ||
                   it.recipe.components.some(c => isItemStale(c.id));
     if (stale) s *= 0.2;
     // A losing flip or one with missing prices can never be "recommended".
     if (!it.calc.allPresent || !(it.calc.margin > 0)) s = -1;
+    // The blended score is 0–1, so a +1 bump floats every ≥50k-margin flip
+    // above every sub-50k one while the score still orders within each tier.
+    else if (it.calc.margin >= REC_MARGIN_PRIORITY) s += 1;
     it._recScore = s;
   }
 }
@@ -2104,16 +2148,18 @@ async function refresh() {
     }
     state.lastMargin = snapshot;
 
-    const [prices, volumes, avg5m, avg1h] = await Promise.all([
+    const [prices, volumes, avg5m, avg1h, avg24h] = await Promise.all([
       fetchLatest(),
       fetchVolumes().catch(e => { console.warn("Volumes failed:", e); return state.volumes; }),
       fetchAvg5m().catch(e => { console.warn("5m avg failed:", e); return state.avg5m; }),
       fetchAvg1h().catch(e => { console.warn("1h avg failed:", e); return state.avg1h; }),
+      fetchAvg24h().catch(e => { console.warn("24h avg failed:", e); return state.avg24h; }),
     ]);
     state.prices = prices;
     state.volumes = volumes;
     state.avg5m = avg5m;
     state.avg1h = avg1h;
+    state.avg24h = avg24h;
     state.lastFetched = Date.now();
     renderGrid();
   } catch (e) {
