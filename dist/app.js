@@ -152,7 +152,7 @@ const RECIPES = [
   { key:"ursine-chainmace-u", id:27657, name:"Ursine chainmace (u)", cat:"Wilderness", components:[{id:22542,qty:1},{id:27667,qty:1}] },
   { key:"voidwaker", id:27690, name:"Voidwaker", cat:"Wilderness", components:[{id:27684,qty:1},{id:27681,qty:1},{id:27687,qty:1}], extraCost:500000 },
   { key:"webweaver-bow-u", id:27652, name:"Webweaver bow (u)", cat:"Wilderness", components:[{id:22547,qty:1},{id:27670,qty:1}] },
-  { key:"zamorakian-hasta", id:11889, name:"Zamorakian hasta", cat:"Wilderness", components:[{id:11824,qty:1}], extraCost:150000 },
+  { key:"zamorakian-hasta", id:11889, name:"Zamorakian hasta", cat:"Misc", components:[{id:11824,qty:1}], extraCost:150000 },
 
   { key:"amulet-of-torture", id:19553, name:"Amulet of torture", cat:"Zenyte", components:[{id:19541,qty:1},{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
   { key:"necklace-of-anguish", id:19547, name:"Necklace of anguish", cat:"Zenyte", components:[{id:19535,qty:1},{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
@@ -556,22 +556,42 @@ function tagsFor(r) {
   if (/^berserker necklace$/.test(n)) tags.add("Melee");
 
   if (tags.size === 0) tags.add("Other");
-  return [...tags];
+
+  // ----- Curate: cull broad slot/class tags, rename, add theme tags. -----
+  // The filter UI shows only this curated subset.
+  const TAG_RENAME = { "Godswords": "God Wars", "Decombine": "Breakdown" };
+  const TAG_ALLOWED = new Set([
+    "God Wars", "Nex", "Slayer", "Barrows", "Moons of Peril", "Masori",
+    "Dragon", "Zulrah", "Wilderness", "Spirit Shields", "Shield", "Jewelry",
+    "Repair", "Breakdown", "Item Set", "Other",
+  ]);
+  const out = new Set();
+  for (let t of tags) { t = TAG_RENAME[t] || t; if (TAG_ALLOWED.has(t)) out.add(t); }
+  if (r.key === "zaryte-crossbow") out.add("Nex");            // Zaryte crossbow is a Nex drop
+  // God Wars Dungeon items: godswords, Nex (Torva), Armadyl plate (Masori),
+  // the hasta, the hydra-claw lance, and any staff-of-the-dead (id 11791) build.
+  let godwars = out.has("Nex") || cat === "Godswords" || cat === "Torva" || cat === "Masori";
+  if (r.key === "zamorakian-hasta" || r.key === "dragon-hunter-lance") godwars = true;
+  if (r.components.some(c => c.id === 11791)) godwars = true;
+  if (godwars) out.add("God Wars");
+  // Slayer: boot upgrades from slayer bosses, plus the hydra-claw lance.
+  if (cat === "Upgrade boots" || r.key === "dragon-hunter-lance") out.add("Slayer");
+  // The Dragon hunter lance is a God Wars / Slayer weapon, not a Dragon-themed item.
+  if (r.key === "dragon-hunter-lance") out.delete("Dragon");
+  out.delete("Other");
+  if (out.size === 0) out.add("Other");
+  return [...out];
 }
 // Pre-compute and cache tags on each recipe
 for (const r of RECIPES) r._tags = tagsFor(r);
 
 // Stable order for the chip bar — combat / slot / theme / mechanic
 const TAG_ORDER = [
-  // Combat class
-  "Melee", "Magic", "Ranged",
-  // Slot
-  "Weapon", "Armor", "Shield", "Jewelry", "Boots",
-  // Theme / source
-  "Godswords", "Spirit Shields", "Nex", "Masori", "Barrows", "Moons of Peril",
-  "Zenyte", "Onyx", "Dragon", "Zulrah", "Wilderness",
-  // Mechanic
-  "Repair", "Decombine", "Component", "Item Set", "Other"
+  "God Wars", "Nex", "Slayer",
+  "Barrows", "Moons of Peril", "Masori",
+  "Dragon", "Zulrah", "Wilderness",
+  "Spirit Shields", "Shield", "Jewelry",
+  "Repair", "Breakdown", "Item Set", "Other",
 ];
 const TAGS = TAG_ORDER.filter(t => RECIPES.some(r => r._tags.includes(t)));
 const CATEGORIES = TAGS; // alias kept for filter state compat
@@ -596,7 +616,9 @@ const state = {
     hideStaleComponents: false,
     hideLowVolume: false,
     favoritesOnly: false,
-    activeCats: new Set(CATEGORIES),
+    activeCats: new Set(),
+    buyHourStart: 0, buyHourEnd: 23,
+    sellHourStart: 0, sellHourEnd: 23,
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -605,6 +627,7 @@ const state = {
   lastMargin: {},
   // Active view mode: "cards" or "table"
   view: localStorage.getItem("osrs-combo-view") || "cards",
+  mode: localStorage.getItem("osrs-combo-mode") || "realtime",
   smithing: parseInt(localStorage.getItem("osrs-combo-smithing") || "99", 10),
   // Independent strategies — each picks one side of the spread:
   //   supplies: "insta-buy" (pay high to acquire now) | "slow-buy" (offer at low, wait)
@@ -898,11 +921,13 @@ function productSellTime(p) {
   return state.productStrategy === "insta-sell" ? (p.lowTime ?? null) : (p.highTime ?? null);
 }
 
-function calcMargin(recipe) {
+function calcMargin(recipe, predMap) {
   const qty = recipe.resultQty || 1;
-  const result = state.prices[recipe.id];
-  const sellPricePerUnit = productSell(result);
-  const sellTime = productSellTime(result);
+  const result = predMap ? null : state.prices[recipe.id];
+  const sellPricePerUnit = predMap
+    ? (predMap[recipe.id]?.daytime ?? null)
+    : productSell(result);
+  const sellTime = predMap ? null : productSellTime(result);
 
   // Track oldest "trusted" timestamp across all prices used so we can flag
   // recipes where any leg of the calc is stale (not just the product side).
@@ -911,12 +936,17 @@ function calcMargin(recipe) {
   let componentCost = 0;
   let allPresent = sellPricePerUnit !== null;
   for (const c of recipe.components) {
-    const p = state.prices[c.id];
-    const sp = supplyPrice(p);
+    let sp;
+    if (predMap) {
+      sp = predMap[c.id]?.overnight ?? null;
+    } else {
+      const p = state.prices[c.id];
+      sp = supplyPrice(p);
+      const t = supplyTime(p);
+      if (t != null && (oldestTime == null || t < oldestTime)) oldestTime = t;
+    }
     if (!sp) { allPresent = false; break; }
     componentCost += sp * c.qty;
-    const t = supplyTime(p);
-    if (t != null && (oldestTime == null || t < oldestTime)) oldestTime = t;
   }
   if (recipe.extraCost) componentCost += recipe.extraCost;
   const rc = repairCost(recipe.repairBase, state.smithing);
@@ -1005,41 +1035,39 @@ function recipeIcon(recipe) {
 
 function renderCategories() {
   const container = document.getElementById("categories");
-  container.title = "Click to isolate · Shift+click (or ⌘/Ctrl+click) to add tags · Click the active one again to restore all";
+  container.title = "";
   container.replaceChildren();
+  const active = state.filters.activeCats;
+
+  const grid = el("div", { class: "cat-grid" });
+  const clearBtn = el("button", { class: "cat-clear", text: "Clear tags" });
+
   const refresh = () => {
-    for (const c of container.children) {
-      const cat = c.textContent;
-      c.classList.toggle("active", state.filters.activeCats.has(cat));
+    for (const chip of grid.children) {
+      chip.classList.toggle("active", active.has(chip.dataset.tag));
     }
+    clearBtn.hidden = active.size === 0;
   };
+
   for (const cat of CATEGORIES) {
-    const chip = el("span", {
-      class: "cat-chip" + (state.filters.activeCats.has(cat) ? " active" : ""),
+    const chip = el("button", {
+      class: "cat-chip" + (active.has(cat) ? " active" : ""),
       text: cat,
+      attrs: { "data-tag": cat },
     });
-    chip.onclick = (e) => {
-      const active = state.filters.activeCats;
-      const fullState = active.size === CATEGORIES.length;
-      if (e.shiftKey || e.metaKey || e.ctrlKey) {
-        // Modifier-click = toggle this tag in/out of the current selection (multi-select)
-        if (fullState) { active.clear(); active.add(cat); }     // first modifier-click narrows
-        else if (active.has(cat)) active.delete(cat);
-        else active.add(cat);
-      } else {
-        // Plain click = isolate this tag. If it's the only one, restore all.
-        const onlyThis = active.size === 1 && active.has(cat);
-        active.clear();
-        if (onlyThis) for (const c of CATEGORIES) active.add(c);
-        else active.add(cat);
-      }
-      // Auto-recovery: empty set restores all (so user can't get stuck)
-      if (active.size === 0) for (const c of CATEGORIES) active.add(c);
+    chip.onclick = () => {
+      if (active.has(cat)) active.delete(cat);
+      else active.add(cat);
       refresh();
       renderGrid();
     };
-    container.appendChild(chip);
+    grid.appendChild(chip);
   }
+
+  clearBtn.hidden = active.size === 0;
+  clearBtn.onclick = () => { active.clear(); refresh(); renderGrid(); };
+
+  container.append(grid, clearBtn);
 }
 
 function sparkline(series) {
@@ -1318,7 +1346,7 @@ function applyFilters(items) {
   const staleSec = STALE_MS / 1000;
   let out = items.filter(({ recipe, calc }) => {
     // OR logic: include if recipe has ANY of the active tags
-    if (!recipe._tags.some(t => f.activeCats.has(t))) return false;
+    if (f.activeCats.size && !recipe._tags.some(t => f.activeCats.has(t))) return false;
     if (q && !recipe.name.toLowerCase().includes(q)) return false;
     if (f.profitableOnly && !(calc.margin > 0)) return false;
     if (f.minCost !== null && calc.totalCost < f.minCost) return false;
@@ -1348,6 +1376,7 @@ function applyFilters(items) {
 }
 
 function renderGrid() {
+  if (state.mode === "overnight" && window.Overnight) { window.Overnight.renderOvernight(); return; }
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
   const items = RECIPES.map(r => ({ recipe: r, calc: calcMargin(r) }));
@@ -2225,6 +2254,31 @@ async function init() {
     renderGrid();
   });
 
+  // Experimental-mode time filter: populate the hour selects + wire them.
+  const hourLabel = (h) => {
+    const ap = h < 12 ? "AM" : "PM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12} ${ap}`;
+  };
+  const timeSelects = [
+    ["buy-hour-start", "buyHourStart"], ["buy-hour-end", "buyHourEnd"],
+    ["sell-hour-start", "sellHourStart"], ["sell-hour-end", "sellHourEnd"],
+  ];
+  for (const [elId, filterKey] of timeSelects) {
+    const sel = document.getElementById(elId);
+    for (let h = 0; h < 24; h++) {
+      const opt = document.createElement("option");
+      opt.value = String(h);
+      opt.textContent = hourLabel(h);
+      sel.appendChild(opt);
+    }
+    sel.value = String(state.filters[filterKey]);
+    sel.addEventListener("change", (e) => {
+      state.filters[filterKey] = parseInt(e.target.value, 10);
+      renderGrid();
+    });
+  }
+
   // View toggle (cards / table)
   const setView = (v) => {
     state.view = v;
@@ -2237,6 +2291,17 @@ async function init() {
   document.getElementById("view-table").addEventListener("click", () => setView("table"));
   // Apply persisted view on init
   setView(state.view);
+  const setMode = (m) => {
+    state.mode = m;
+    localStorage.setItem("osrs-combo-mode", m);
+    document.getElementById("mode-realtime").classList.toggle("active", m === "realtime");
+    document.getElementById("mode-overnight").classList.toggle("active", m === "overnight");
+    document.getElementById("layout").classList.toggle("mode-overnight", m === "overnight");
+    renderGrid();
+  };
+  document.getElementById("mode-realtime").addEventListener("click", () => setMode("realtime"));
+  document.getElementById("mode-overnight").addEventListener("click", () => setMode("overnight"));
+  setMode(state.mode);
   document.getElementById("search").addEventListener("input", (e) => {
     state.filters.search = e.target.value;
     renderGrid();
@@ -2299,7 +2364,7 @@ async function init() {
     for (const r of RECIPES) {
       const c = calcMargin(r);
       if (!c.allPresent) continue;
-      if (!r._tags.some(t => f.activeCats.has(t))) continue;
+      if (f.activeCats.size && !r._tags.some(t => f.activeCats.has(t))) continue;
       if (q && !r.name.toLowerCase().includes(q)) continue;
       if (f.profitableOnly && !(c.margin > 0)) continue;
       if (f.hideStaleProducts && isItemStale(r.id)) continue;
