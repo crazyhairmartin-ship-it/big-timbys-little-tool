@@ -1453,12 +1453,13 @@ function detailRow(label, value, opts = {}) {
   return tr;
 }
 
-// External reference links for the modal. Points at the result item.
-// The recipe name is stripped of " — via X" / "(via X)" disambiguators so
-// it resolves to a real wiki article title.
-function renderModalLinks(recipe) {
+// External reference links for the modal — Wiki / live prices / GE-Tracker.
+// Tracks whichever tab is active: the result item on Combined, or the
+// highlighted component otherwise. The name is stripped of " — via X"
+// disambiguators so the wiki link resolves to a real article title.
+function renderModalLinks(id, name) {
   const box = document.getElementById("modal-links");
-  const baseName = recipe.name
+  const wikiName = (name || "")
     .replace(/\s*—\s*via.*$/, "")
     .replace(/\s*\(via[^)]*\)/, "")
     .trim();
@@ -1467,9 +1468,9 @@ function renderModalLinks(recipe) {
     attrs: { href, target: "_blank", rel: "noopener" },
   });
   box.replaceChildren(
-    mk("https://oldschool.runescape.wiki/w/" + encodeURIComponent(baseName.replace(/ /g, "_")), "Wiki ↗"),
-    mk("https://prices.runescape.wiki/osrs/item/" + recipe.id, "Live prices ↗"),
-    mk("https://www.ge-tracker.com/item/" + recipe.id, "GE-Tracker ↗"),
+    mk("https://oldschool.runescape.wiki/w/" + encodeURIComponent(wikiName.replace(/ /g, "_")), "Wiki ↗"),
+    mk("https://prices.runescape.wiki/osrs/item/" + id, "Live prices ↗"),
+    mk("https://www.ge-tracker.com/item/" + id, "GE-Tracker ↗"),
   );
 }
 
@@ -1477,7 +1478,6 @@ function openModal(recipe) {
   activeModalRecipe = recipe;
   activeChartTab = "combined";  // default each open to the combined overlay
   modalTitle.textContent = recipe.name;
-  renderModalLinks(recipe);
   if (typeof modal.showModal === "function") modal.showModal();
   else modal.setAttribute("open", "");
   loadModalChart(recipe);  // chart + stats render together via drawActiveTab
@@ -1573,6 +1573,13 @@ function renderChartTabs(recipe) {
 
 function drawActiveTab(recipe) {
   const preset = TIMEFRAME_PRESETS[activeTimeframe] || TIMEFRAME_PRESETS.week;
+  // External links follow the active tab's item.
+  if (activeChartTab === "combined") {
+    renderModalLinks(recipe.id, state.mapping[recipe.id]?.name || recipe.name);
+  } else {
+    const tabId = +activeChartTab;
+    renderModalLinks(tabId, state.mapping[tabId]?.name || `#${tabId}`);
+  }
   if (activeChartTab === "combined") {
     const points = buildCombinedPoints(recipe);
     if (!points.length) { drawChartMessage("No data"); modalStatus.textContent = "No data"; return; }
@@ -2287,6 +2294,18 @@ async function init() {
     localStorage.setItem("osrs-combo-sidebar", collapsed ? "collapsed" : "expanded");
     sidebarToggle.title = collapsed ? "Expand filters" : "Collapse filters";
   });
+
+  // Browsers restore <input>/<select>/checkbox values on reload, but the
+  // input/change events don't fire for that restoration — so a restored
+  // filter would look active yet not actually filter. Seed state.filters
+  // from whatever the controls currently show so the two stay in sync.
+  state.filters.search              = document.getElementById("search").value;
+  state.filters.sort                = document.getElementById("sort").value;
+  state.filters.profitableOnly      = document.getElementById("profitable-only").checked;
+  state.filters.hideStaleProducts   = document.getElementById("hide-stale-products").checked;
+  state.filters.hideStaleComponents = document.getElementById("hide-stale-components").checked;
+  state.filters.hideLowVolume       = document.getElementById("hide-low-volume").checked;
+  state.filters.favoritesOnly       = document.getElementById("favorites-only").checked;
 
   renderCategories();
 

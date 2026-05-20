@@ -903,6 +903,8 @@ dialog#chart-modal {
   border-radius: 14px;
   padding: 0;
   width: min(880px, 92vw);
+  max-height: 92vh;
+  overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0,0,0,0.6);
 }
 
@@ -943,7 +945,9 @@ dialog#chart-modal::backdrop {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 .modal-link {
   font-size: 12px;
