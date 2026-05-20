@@ -94,6 +94,12 @@ const RECIPES = [
   { key:"zaryte-crossbow", id:26374, name:"Zaryte crossbow", cat:"Ranged", components:[{id:11785,qty:1},{id:26372,qty:1},{id:26231,qty:250}] },
   { key:"venator-bow-uncharged", id:27612, name:"Venator bow (uncharged)", cat:"Ranged", components:[{id:27614,qty:5}] },
 
+  // --- Hueycoatl hide armour (crafted from hides; 76-78 Crafting) ---
+  { key:"huey-coif",       id:30073, name:"Hueycoatl hide coif",       cat:"Ranged", components:[{id:30085,qty:2}] },
+  { key:"huey-body",       id:30076, name:"Hueycoatl hide body",       cat:"Ranged", components:[{id:30085,qty:3}] },
+  { key:"huey-chaps",      id:30079, name:"Hueycoatl hide chaps",      cat:"Ranged", components:[{id:30085,qty:2}] },
+  { key:"huey-vambraces",  id:30082, name:"Hueycoatl hide vambraces",  cat:"Ranged", components:[{id:30085,qty:1}] },
+
   // ----- Decombinations (destroy assembled, recover the more valuable part) -----
   // Profitable when the part trades higher than the assembled minus tax.
   { key:"decomb-arcane",   id:12827, name:"Arcane sigil ← Arcane shield",   cat:"Decombines", components:[{id:12825,qty:1}] },
@@ -176,6 +182,135 @@ const RECIPES = [
   { key:"set-masori-f",     id:27355, name:"Masori armour set (f)",   cat:"Sets", components:[{id:27235,qty:1},{id:27238,qty:1},{id:27241,qty:1}] },
   { key:"set-justiciar",    id:22438, name:"Justiciar armour set",    cat:"Sets", components:[{id:22326,qty:1},{id:22327,qty:1},{id:22328,qty:1}] },
   { key:"set-inquisitor",   id:24488, name:"Inquisitor's armour set", cat:"Sets", components:[{id:24419,qty:1},{id:24420,qty:1},{id:24421,qty:1}] },
+
+  // === Item sets pulled from wiki Item_set page (100 entries) ===
+  // --- Standard metal (lg/sk) ---
+  { key:"set-adamant-lg",   id:13012, name:"Adamant set (lg)",          cat:"Sets", components:[{id:1161,qty:1},{id:1123,qty:1},{id:1073,qty:1},{id:1199,qty:1}] },
+  { key:"set-adamant-sk",   id:13014, name:"Adamant set (sk)",          cat:"Sets", components:[{id:1161,qty:1},{id:1123,qty:1},{id:1091,qty:1},{id:1199,qty:1}] },
+  { key:"set-black-lg",     id:12988, name:"Black set (lg)",            cat:"Sets", components:[{id:1165,qty:1},{id:1125,qty:1},{id:1077,qty:1},{id:1195,qty:1}] },
+  { key:"set-black-sk",     id:12990, name:"Black set (sk)",            cat:"Sets", components:[{id:1165,qty:1},{id:1125,qty:1},{id:1089,qty:1},{id:1195,qty:1}] },
+  { key:"set-bronze-lg",    id:12960, name:"Bronze set (lg)",           cat:"Sets", components:[{id:1155,qty:1},{id:1117,qty:1},{id:1075,qty:1},{id:1189,qty:1}] },
+  { key:"set-bronze-sk",    id:12962, name:"Bronze set (sk)",           cat:"Sets", components:[{id:1155,qty:1},{id:1117,qty:1},{id:1087,qty:1},{id:1189,qty:1}] },
+  { key:"set-dragon-lg",    id:21882, name:"Dragon armour set (lg)",    cat:"Sets", components:[{id:11335,qty:1},{id:21892,qty:1},{id:4087,qty:1},{id:21895,qty:1}] },
+  { key:"set-dragon-sk",    id:21885, name:"Dragon armour set (sk)",    cat:"Sets", components:[{id:11335,qty:1},{id:21892,qty:1},{id:4585,qty:1},{id:21895,qty:1}] },
+  { key:"set-gilded-lg",    id:13036, name:"Gilded armour set (lg)",    cat:"Sets", components:[{id:3486,qty:1},{id:3481,qty:1},{id:3483,qty:1},{id:3488,qty:1}] },
+  { key:"set-gilded-sk",    id:13038, name:"Gilded armour set (sk)",    cat:"Sets", components:[{id:3486,qty:1},{id:3481,qty:1},{id:3485,qty:1},{id:3488,qty:1}] },
+  { key:"set-guthix-lg",    id:13048, name:"Guthix armour set (lg)",    cat:"Sets", components:[{id:2673,qty:1},{id:2669,qty:1},{id:2671,qty:1},{id:2675,qty:1}] },
+  { key:"set-guthix-sk",    id:13050, name:"Guthix armour set (sk)",    cat:"Sets", components:[{id:2673,qty:1},{id:2669,qty:1},{id:3480,qty:1},{id:2675,qty:1}] },
+  { key:"set-iron-lg",      id:12972, name:"Iron set (lg)",             cat:"Sets", components:[{id:1153,qty:1},{id:1115,qty:1},{id:1067,qty:1},{id:1191,qty:1}] },
+  { key:"set-iron-sk",      id:12974, name:"Iron set (sk)",             cat:"Sets", components:[{id:1153,qty:1},{id:1115,qty:1},{id:1081,qty:1},{id:1191,qty:1}] },
+  { key:"set-mithril-lg",   id:13000, name:"Mithril set (lg)",          cat:"Sets", components:[{id:1159,qty:1},{id:1121,qty:1},{id:1071,qty:1},{id:1197,qty:1}] },
+  { key:"set-mithril-sk",   id:13002, name:"Mithril set (sk)",          cat:"Sets", components:[{id:1159,qty:1},{id:1121,qty:1},{id:1085,qty:1},{id:1197,qty:1}] },
+  { key:"set-rune-lg",      id:13024, name:"Rune armour set (lg)",      cat:"Sets", components:[{id:1163,qty:1},{id:1127,qty:1},{id:1079,qty:1},{id:1201,qty:1}] },
+  { key:"set-rune-sk",      id:13026, name:"Rune armour set (sk)",      cat:"Sets", components:[{id:1163,qty:1},{id:1127,qty:1},{id:1093,qty:1},{id:1201,qty:1}] },
+  { key:"set-saradomin-lg", id:13040, name:"Saradomin armour set (lg)", cat:"Sets", components:[{id:2665,qty:1},{id:2661,qty:1},{id:2663,qty:1},{id:2667,qty:1}] },
+  { key:"set-saradomin-sk", id:13042, name:"Saradomin armour set (sk)", cat:"Sets", components:[{id:2665,qty:1},{id:2661,qty:1},{id:3479,qty:1},{id:2667,qty:1}] },
+  { key:"set-steel-lg",     id:12984, name:"Steel set (lg)",            cat:"Sets", components:[{id:1157,qty:1},{id:1119,qty:1},{id:1069,qty:1},{id:1193,qty:1}] },
+  { key:"set-steel-sk",     id:12986, name:"Steel set (sk)",            cat:"Sets", components:[{id:1157,qty:1},{id:1119,qty:1},{id:1083,qty:1},{id:1193,qty:1}] },
+  { key:"set-zamorak-lg",   id:13044, name:"Zamorak armour set (lg)",   cat:"Sets", components:[{id:2657,qty:1},{id:2653,qty:1},{id:2655,qty:1},{id:2659,qty:1}] },
+  { key:"set-zamorak-sk",   id:13046, name:"Zamorak armour set (sk)",   cat:"Sets", components:[{id:2657,qty:1},{id:2653,qty:1},{id:3478,qty:1},{id:2659,qty:1}] },
+
+  // --- Trimmed metal ---
+  { key:"set-adamant-trimmed-lg", id:13016, name:"Adamant trimmed set (lg)", cat:"Sets", components:[{id:2605,qty:1},{id:2599,qty:1},{id:2601,qty:1},{id:2603,qty:1}] },
+  { key:"set-adamant-trimmed-sk", id:13018, name:"Adamant trimmed set (sk)", cat:"Sets", components:[{id:2605,qty:1},{id:2599,qty:1},{id:3474,qty:1},{id:2603,qty:1}] },
+  { key:"set-black-trimmed-lg",   id:12992, name:"Black trimmed set (lg)",   cat:"Sets", components:[{id:2587,qty:1},{id:2583,qty:1},{id:2585,qty:1},{id:2589,qty:1}] },
+  { key:"set-black-trimmed-sk",   id:12994, name:"Black trimmed set (sk)",   cat:"Sets", components:[{id:2587,qty:1},{id:2583,qty:1},{id:3472,qty:1},{id:2589,qty:1}] },
+  { key:"set-bronze-trimmed-lg",  id:12964, name:"Bronze trimmed set (lg)",  cat:"Sets", components:[{id:12221,qty:1},{id:12215,qty:1},{id:12217,qty:1},{id:12223,qty:1}] },
+  { key:"set-bronze-trimmed-sk",  id:12966, name:"Bronze trimmed set (sk)",  cat:"Sets", components:[{id:12221,qty:1},{id:12215,qty:1},{id:12219,qty:1},{id:12223,qty:1}] },
+  { key:"set-iron-trimmed-lg",    id:12976, name:"Iron trimmed set (lg)",    cat:"Sets", components:[{id:12231,qty:1},{id:12225,qty:1},{id:12227,qty:1},{id:12233,qty:1}] },
+  { key:"set-iron-trimmed-sk",    id:12978, name:"Iron trimmed set (sk)",    cat:"Sets", components:[{id:12231,qty:1},{id:12225,qty:1},{id:12229,qty:1},{id:12233,qty:1}] },
+  { key:"set-mithril-trimmed-lg", id:13004, name:"Mithril trimmed set (lg)", cat:"Sets", components:[{id:12293,qty:1},{id:12287,qty:1},{id:12289,qty:1},{id:12291,qty:1}] },
+  { key:"set-mithril-trimmed-sk", id:13006, name:"Mithril trimmed set (sk)", cat:"Sets", components:[{id:12293,qty:1},{id:12287,qty:1},{id:12295,qty:1},{id:12291,qty:1}] },
+  { key:"set-rune-trimmed-lg",    id:13028, name:"Rune trimmed set (lg)",    cat:"Sets", components:[{id:2627,qty:1},{id:2623,qty:1},{id:2625,qty:1},{id:2629,qty:1}] },
+  { key:"set-rune-trimmed-sk",    id:13030, name:"Rune trimmed set (sk)",    cat:"Sets", components:[{id:2627,qty:1},{id:2623,qty:1},{id:3477,qty:1},{id:2629,qty:1}] },
+  { key:"set-steel-trimmed-lg",   id:20376, name:"Steel trimmed set (lg)",   cat:"Sets", components:[{id:20193,qty:1},{id:20184,qty:1},{id:20187,qty:1},{id:20196,qty:1}] },
+  { key:"set-steel-trimmed-sk",   id:20379, name:"Steel trimmed set (sk)",   cat:"Sets", components:[{id:20193,qty:1},{id:20184,qty:1},{id:20190,qty:1},{id:20196,qty:1}] },
+
+  // --- Gold-trimmed metal ---
+  { key:"set-adamant-gold-trimmed-lg", id:13020, name:"Adamant gold-trimmed set (lg)", cat:"Sets", components:[{id:2613,qty:1},{id:2607,qty:1},{id:2609,qty:1},{id:2611,qty:1}] },
+  { key:"set-adamant-gold-trimmed-sk", id:13022, name:"Adamant gold-trimmed set (sk)", cat:"Sets", components:[{id:2613,qty:1},{id:2607,qty:1},{id:3475,qty:1},{id:2611,qty:1}] },
+  { key:"set-black-gold-trimmed-lg",   id:12996, name:"Black gold-trimmed set (lg)",   cat:"Sets", components:[{id:2595,qty:1},{id:2591,qty:1},{id:2593,qty:1},{id:2597,qty:1}] },
+  { key:"set-black-gold-trimmed-sk",   id:12998, name:"Black gold-trimmed set (sk)",   cat:"Sets", components:[{id:2595,qty:1},{id:2591,qty:1},{id:3473,qty:1},{id:2597,qty:1}] },
+  { key:"set-bronze-gold-trimmed-lg",  id:12968, name:"Bronze gold-trimmed set (lg)",  cat:"Sets", components:[{id:12211,qty:1},{id:12205,qty:1},{id:12207,qty:1},{id:12213,qty:1}] },
+  { key:"set-bronze-gold-trimmed-sk",  id:12970, name:"Bronze gold-trimmed set (sk)",  cat:"Sets", components:[{id:12211,qty:1},{id:12205,qty:1},{id:12209,qty:1},{id:12213,qty:1}] },
+  { key:"set-iron-gold-trimmed-lg",    id:12980, name:"Iron gold-trimmed set (lg)",    cat:"Sets", components:[{id:12241,qty:1},{id:12235,qty:1},{id:12237,qty:1},{id:12243,qty:1}] },
+  { key:"set-iron-gold-trimmed-sk",    id:12982, name:"Iron gold-trimmed set (sk)",    cat:"Sets", components:[{id:12241,qty:1},{id:12235,qty:1},{id:12239,qty:1},{id:12243,qty:1}] },
+  { key:"set-mithril-gold-trimmed-lg", id:13008, name:"Mithril gold-trimmed set (lg)", cat:"Sets", components:[{id:12283,qty:1},{id:12277,qty:1},{id:12279,qty:1},{id:12281,qty:1}] },
+  { key:"set-mithril-gold-trimmed-sk", id:13010, name:"Mithril gold-trimmed set (sk)", cat:"Sets", components:[{id:12283,qty:1},{id:12277,qty:1},{id:12285,qty:1},{id:12281,qty:1}] },
+  { key:"set-rune-gold-trimmed-lg",    id:13032, name:"Rune gold-trimmed set (lg)",    cat:"Sets", components:[{id:2619,qty:1},{id:2615,qty:1},{id:2617,qty:1},{id:2621,qty:1}] },
+  { key:"set-rune-gold-trimmed-sk",    id:13034, name:"Rune gold-trimmed set (sk)",    cat:"Sets", components:[{id:2619,qty:1},{id:2615,qty:1},{id:3476,qty:1},{id:2621,qty:1}] },
+  { key:"set-steel-gold-trimmed-lg",   id:20382, name:"Steel gold-trimmed set (lg)",   cat:"Sets", components:[{id:20178,qty:1},{id:20169,qty:1},{id:20172,qty:1},{id:20181,qty:1}] },
+  { key:"set-steel-gold-trimmed-sk",   id:20385, name:"Steel gold-trimmed set (sk)",   cat:"Sets", components:[{id:20178,qty:1},{id:20169,qty:1},{id:20175,qty:1},{id:20181,qty:1}] },
+
+  // --- God rune armour ---
+  { key:"set-ancient-rune-lg", id:13060, name:"Ancient rune armour set (lg)", cat:"Sets", components:[{id:12466,qty:1},{id:12460,qty:1},{id:12462,qty:1},{id:12468,qty:1}] },
+  { key:"set-ancient-rune-sk", id:13062, name:"Ancient rune armour set (sk)", cat:"Sets", components:[{id:12466,qty:1},{id:12460,qty:1},{id:12464,qty:1},{id:12468,qty:1}] },
+  { key:"set-armadyl-rune-lg", id:13052, name:"Armadyl rune armour set (lg)", cat:"Sets", components:[{id:12476,qty:1},{id:12470,qty:1},{id:12472,qty:1},{id:12478,qty:1}] },
+  { key:"set-armadyl-rune-sk", id:13054, name:"Armadyl rune armour set (sk)", cat:"Sets", components:[{id:12476,qty:1},{id:12470,qty:1},{id:12474,qty:1},{id:12478,qty:1}] },
+  { key:"set-bandos-rune-lg",  id:13056, name:"Bandos rune armour set (lg)",  cat:"Sets", components:[{id:12486,qty:1},{id:12480,qty:1},{id:12482,qty:1},{id:12488,qty:1}] },
+  { key:"set-bandos-rune-sk",  id:13058, name:"Bandos rune armour set (sk)",  cat:"Sets", components:[{id:12486,qty:1},{id:12480,qty:1},{id:12484,qty:1},{id:12488,qty:1}] },
+
+  // --- Dragonhide ---
+  { key:"set-ancient-dragonhide",   id:13171, name:"Ancient dragonhide set",   cat:"Sets", components:[{id:12496,qty:1},{id:12492,qty:1},{id:12494,qty:1},{id:12490,qty:1}] },
+  { key:"set-armadyl-dragonhide",   id:13169, name:"Armadyl dragonhide set",   cat:"Sets", components:[{id:12512,qty:1},{id:12508,qty:1},{id:12510,qty:1},{id:12506,qty:1}] },
+  { key:"set-bandos-dragonhide",    id:13167, name:"Bandos dragonhide set",    cat:"Sets", components:[{id:12504,qty:1},{id:12500,qty:1},{id:12502,qty:1},{id:12498,qty:1}] },
+  { key:"set-black-dragonhide",     id:12871, name:"Black dragonhide set",     cat:"Sets", components:[{id:2503,qty:1},{id:2497,qty:1},{id:2491,qty:1}] },
+  { key:"set-blue-dragonhide",      id:12867, name:"Blue dragonhide set",      cat:"Sets", components:[{id:2499,qty:1},{id:2493,qty:1},{id:2487,qty:1}] },
+  { key:"set-gilded-dragonhide",    id:23124, name:"Gilded dragonhide set",    cat:"Sets", components:[{id:23264,qty:1},{id:23267,qty:1},{id:23261,qty:1}] },
+  { key:"set-green-dragonhide",     id:12865, name:"Green dragonhide set",     cat:"Sets", components:[{id:1135,qty:1},{id:1099,qty:1},{id:1065,qty:1}] },
+  { key:"set-guthix-dragonhide",    id:13165, name:"Guthix dragonhide set",    cat:"Sets", components:[{id:10382,qty:1},{id:10378,qty:1},{id:10380,qty:1},{id:10376,qty:1}] },
+  { key:"set-red-dragonhide",       id:12869, name:"Red dragonhide set",       cat:"Sets", components:[{id:2501,qty:1},{id:2495,qty:1},{id:2489,qty:1}] },
+  { key:"set-saradomin-dragonhide", id:13163, name:"Saradomin dragonhide set", cat:"Sets", components:[{id:10390,qty:1},{id:10386,qty:1},{id:10388,qty:1},{id:10384,qty:1}] },
+  { key:"set-zamorak-dragonhide",   id:13161, name:"Zamorak dragonhide set",   cat:"Sets", components:[{id:10374,qty:1},{id:10370,qty:1},{id:10372,qty:1},{id:10368,qty:1}] },
+
+  // --- Mystic ---
+  { key:"set-mystic-blue",  id:23113, name:"Mystic set (blue)",  cat:"Sets", components:[{id:4089,qty:1},{id:4091,qty:1},{id:4093,qty:1},{id:4095,qty:1},{id:4097,qty:1}] },
+  { key:"set-mystic-dark",  id:23116, name:"Mystic set (dark)",  cat:"Sets", components:[{id:4099,qty:1},{id:4101,qty:1},{id:4103,qty:1},{id:4105,qty:1},{id:4107,qty:1}] },
+  { key:"set-mystic-dusk",  id:23119, name:"Mystic set (dusk)",  cat:"Sets", components:[{id:23047,qty:1},{id:23050,qty:1},{id:23053,qty:1},{id:23056,qty:1},{id:23059,qty:1}] },
+  { key:"set-mystic-light", id:23110, name:"Mystic set (light)", cat:"Sets", components:[{id:4109,qty:1},{id:4111,qty:1},{id:4113,qty:1},{id:4115,qty:1},{id:4117,qty:1}] },
+
+  // --- Bark (magic) ---
+  { key:"set-bloodbark", id:31163, name:"Bloodbark armour set", cat:"Sets", components:[{id:25413,qty:1},{id:25404,qty:1},{id:25416,qty:1},{id:25407,qty:1},{id:25410,qty:1}] },
+  { key:"set-swampbark", id:31160, name:"Swampbark armour set", cat:"Sets", components:[{id:25398,qty:1},{id:25389,qty:1},{id:25401,qty:1},{id:25392,qty:1},{id:25395,qty:1}] },
+
+  // --- Fremennik (Rellekka) ---
+  { key:"set-mixed-hide", id:31166, name:"Mixed hide armour set", cat:"Sets", components:[{id:29280,qty:1},{id:29283,qty:1},{id:29286,qty:1},{id:29289,qty:1}] },
+  { key:"set-rock-shell", id:31151, name:"Rock-shell armour set", cat:"Sets", components:[{id:6128,qty:1},{id:6129,qty:1},{id:6130,qty:1},{id:6149,qty:1},{id:6143,qty:1}] },
+  { key:"set-skeletal",   id:31154, name:"Skeletal armour set",   cat:"Sets", components:[{id:6137,qty:1},{id:6139,qty:1},{id:6141,qty:1},{id:6153,qty:1},{id:6147,qty:1}] },
+  { key:"set-spined",     id:31157, name:"Spined armour set",     cat:"Sets", components:[{id:6131,qty:1},{id:6133,qty:1},{id:6135,qty:1},{id:6149,qty:1},{id:6143,qty:1}] },
+
+  // --- Book pages ---
+  { key:"set-book-of-balance-page",  id:13153, name:"Book of balance page set",  cat:"Sets", components:[{id:3835,qty:1},{id:3836,qty:1},{id:3837,qty:1},{id:3838,qty:1}] },
+  { key:"set-book-of-darkness-page", id:13159, name:"Book of darkness page set", cat:"Sets", components:[{id:12621,qty:1},{id:12622,qty:1},{id:12623,qty:1},{id:12624,qty:1}] },
+  { key:"set-book-of-law-page",      id:13157, name:"Book of law page set",      cat:"Sets", components:[{id:12617,qty:1},{id:12618,qty:1},{id:12619,qty:1},{id:12620,qty:1}] },
+  { key:"set-book-of-war-page",      id:13155, name:"Book of war page set",      cat:"Sets", components:[{id:12613,qty:1},{id:12614,qty:1},{id:12615,qty:1},{id:12616,qty:1}] },
+  { key:"set-holy-book-page",        id:13149, name:"Holy book page set",        cat:"Sets", components:[{id:3827,qty:1},{id:3828,qty:1},{id:3829,qty:1},{id:3830,qty:1}] },
+  { key:"set-unholy-book-page",      id:13151, name:"Unholy book page set",      cat:"Sets", components:[{id:3831,qty:1},{id:3832,qty:1},{id:3833,qty:1},{id:3834,qty:1}] },
+
+  // --- Holiday (rares) ---
+  { key:"set-halloween-mask", id:13175, name:"Halloween mask set", cat:"Sets", components:[{id:1057,qty:1},{id:1053,qty:1},{id:1055,qty:1}] },
+  { key:"set-partyhat",       id:13173, name:"Partyhat set",       cat:"Sets", components:[{id:1038,qty:1},{id:1040,qty:1},{id:1042,qty:1},{id:1046,qty:1},{id:1044,qty:1},{id:1048,qty:1}] },
+
+  // --- Temple Knight (Initiate / Proselyte) ---
+  { key:"set-initiate-harness-m",  id: 9668, name:"Initiate harness m",  cat:"Sets", components:[{id:5574,qty:1},{id:5575,qty:1},{id:5576,qty:1}] },
+  { key:"set-proselyte-harness-f", id: 9670, name:"Proselyte harness f", cat:"Sets", components:[{id:9672,qty:1},{id:9674,qty:1},{id:9678,qty:1}] },
+  { key:"set-proselyte-harness-m", id: 9666, name:"Proselyte harness m", cat:"Sets", components:[{id:9672,qty:1},{id:9674,qty:1},{id:9676,qty:1}] },
+
+  // --- Potion sets ---
+  { key:"set-combat-potion", id:13064, name:"Combat potion set", cat:"Sets", components:[{id:2428,qty:1},{id:113,qty:1},{id:2432,qty:1}] },
+  { key:"set-super-potion",  id:13066, name:"Super potion set",  cat:"Sets", components:[{id:2436,qty:1},{id:2440,qty:1},{id:2442,qty:1}] },
+
+  // --- Cannon ---
+  { key:"set-dwarf-cannon", id:12863, name:"Dwarf cannon set", cat:"Sets", components:[{id:6,qty:1},{id:8,qty:1},{id:10,qty:1},{id:12,qty:1}] },
+
+  // --- High-tier / misc ---
+  { key:"set-ancestral-robes", id:21049, name:"Ancestral robes set",        cat:"Sets", components:[{id:21018,qty:1},{id:21021,qty:1},{id:21024,qty:1}] },
+  { key:"set-dagonhai-robes",  id:24333, name:"Dagon'hai robes set",        cat:"Sets", components:[{id:24288,qty:1},{id:24291,qty:1},{id:24294,qty:1}] },
+  { key:"set-dragonstone",     id:23667, name:"Dragonstone armour set",     cat:"Sets", components:[{id:24034,qty:1},{id:24037,qty:1},{id:24040,qty:1},{id:24046,qty:1},{id:24043,qty:1}] },
+  { key:"set-hueycoatl-hide",  id:31169, name:"Hueycoatl hide armour set",  cat:"Sets", components:[{id:30073,qty:1},{id:30076,qty:1},{id:30079,qty:1},{id:30082,qty:1}] },
+  { key:"set-oathplate",       id:30744, name:"Oathplate armour set",       cat:"Sets", components:[{id:30750,qty:1},{id:30753,qty:1},{id:30756,qty:1}] },
+  { key:"set-obsidian",        id:21279, name:"Obsidian armour set",        cat:"Sets", components:[{id:21298,qty:1},{id:21301,qty:1},{id:21304,qty:1}] },
+  { key:"set-sunfire-fanatic", id:29424, name:"Sunfire fanatic armour set", cat:"Sets", components:[{id:28933,qty:1},{id:28936,qty:1},{id:28939,qty:1}] },
 
   // --- Barrows Repairs (broken → repaired) ---
   { key:"ahrh", id:4708, name:"Ahrim's hood",       cat:"Barrows", components:[{id:4860,qty:1}], repairBase:60_000 },
