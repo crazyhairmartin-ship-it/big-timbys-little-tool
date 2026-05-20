@@ -12,7 +12,7 @@
 
    Usage: node backfill-prices.mjs <ids.json> */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 
 const UA = "big-timbys-little-tool price-recorder (github.com/crazyhairmartin-ship-it/big-timbys-little-tool)";
 const DIR = "prices";
@@ -81,5 +81,14 @@ for (const [day, dd] of Object.entries(dayCache)) {
   writeFileSync(`${DIR}/${day}.json`, JSON.stringify(dd));
 }
 
+// Refresh prices/index.json — the sorted list of available day-files. The
+// app reads this so it fetches exactly what exists instead of probing dates.
+const days = readdirSync(DIR)
+  .filter(f => /^\d{4}-\d{2}-\d{2}\.json$/.test(f))
+  .map(f => f.slice(0, 10))
+  .sort();
+writeFileSync(`${DIR}/index.json`, JSON.stringify(days));
+
 console.log(`backfill: ${ids.length} items (${failed} fetch failures) -> ` +
-            `${Object.keys(dayCache).length} day-files, ${written} point-values written`);
+            `${Object.keys(dayCache).length} day-files, ${written} point-values written, ` +
+            `${days.length} day-files indexed`);

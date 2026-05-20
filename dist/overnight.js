@@ -10,6 +10,13 @@ const OVERNIGHT_FETCH_CONCURRENCY = 5;
 const OVERNIGHT_CACHE_KEY = "osrs-combo-overnight";
 const OVERNIGHT_CACHE_TTL_MS = 24 * 3600 * 1000;
 const OVERNIGHT_TREND_DISCOUNT = 0.5;  // fraction of a downtrend applied as a sell-price haircut
+// Recorded price-history store: per-day files committed to the `price-history`
+// branch by the hourly recorder, served raw from GitHub. Read alongside the
+// live wiki /timeseries so the analysis can see history past the wiki's
+// ~15-day /timeseries ceiling.
+const OVERNIGHT_STORE_BASE =
+  "https://raw.githubusercontent.com/crazyhairmartin-ship-it/big-timbys-little-tool/price-history/prices/";
+const OVERNIGHT_STORE_DAYS = 90;    // how far back to probe (matches recorder retention)
 
 // In-memory analysis result; also mirrored to localStorage.
 let overnightData = null; // { analysedAt, predMap, analysed, skipped } — see runOvernightAnalysis
@@ -42,8 +49,8 @@ async function overnightThrottle(items, limit, worker) {
   await Promise.all(runners);
 }
 
-// Fetch ~15 days of hourly history for one item. Returns the series array
-// or null on failure / empty.
+// Fetch ~15 days of live hourly history for one item from the wiki
+// /timeseries. Returns the series array or null on failure / empty.
 async function overnightFetchSeries(id) {
   try {
     const series = await fetchTimeseries(id, "1h");
@@ -53,18 +60,68 @@ async function overnightFetchSeries(id) {
   }
 }
 
+// The store's index.json lists every day-file present. Returns that array, or
+// null if the index is missing/unreadable — the caller then probes by date.
+async function overnightFetchStoreIndex() {
+  try {
+    const r = await fetch(OVERNIGHT_STORE_BASE + "index.json");
+    if (!r.ok) return null;
+    const days = await r.json();
+    return Array.isArray(days) && days.length ? days : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Fetch the recorded price-history store and pivot it into a
+// Map<itemId, point[]> of /timeseries-shaped points. Uses index.json to fetch
+// exactly the day-files that exist; only if the index is unavailable does it
+// fall back to probing the last OVERNIGHT_STORE_DAYS UTC dates. Returns
+// whatever it gathered — an empty Map on total failure, so the caller can
+// still run on live data alone.
+async function overnightFetchStore() {
+  let days = await overnightFetchStoreIndex();
+  if (!days) {
+    const now = new Date();
+    days = [];
+    for (let i = 0; i < OVERNIGHT_STORE_DAYS; i++) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i));
+      days.push(d.toISOString().slice(0, 10));
+    }
+  }
+  const byId = new Map();
+  await overnightThrottle(days, OVERNIGHT_FETCH_CONCURRENCY, async (day) => {
+    try {
+      const r = await fetch(OVERNIGHT_STORE_BASE + day + ".json");
+      if (!r.ok) return;
+      const dayFile = await r.json();
+      for (const { id, point } of dayFileToPoints(dayFile)) {
+        let arr = byId.get(id);
+        if (!arr) { arr = []; byId.set(id, arr); }
+        arr.push(point);
+      }
+    } catch (_) { /* unreachable day — skip it */ }
+  });
+  return byId;
+}
+
 // Full analysis run: fetch each item's history, self-calibrate, predict.
+// Each item's series is the live wiki /timeseries merged with the recorded
+// price-history store, so analysis sees history past the ~15-day wiki ceiling.
 // `onProgress({ done, total })` is called as fetches complete.
 async function runOvernightAnalysis(onProgress) {
   const candidates = overnightItemIds().filter(id => {
     const vol = state.volumes[id];
     return vol != null && vol >= OVERNIGHT_MIN_VOLUME;
   });
+  if (onProgress) onProgress({ done: 0, total: candidates.length });
+  const store = await overnightFetchStore();
   const seriesById = new Map();
   let done = 0;
   await overnightThrottle(candidates, OVERNIGHT_FETCH_CONCURRENCY, async (id) => {
-    const series = await overnightFetchSeries(id);
-    if (series) seriesById.set(id, series);
+    const live = await overnightFetchSeries(id);
+    const series = mergeSeries(store.get(id) || [], live || []);
+    if (series.length) seriesById.set(id, series);
     done += 1;
     if (onProgress) onProgress({ done, total: candidates.length });
   });
@@ -290,6 +347,7 @@ function overnightVisible() {
   for (const recipe of RECIPES) {
     const calc = calcMargin(recipe, overnightData.predMap);
     if (!calc.allPresent || !(calc.margin > 0)) continue;
+    if (f.maxSlots !== null && recipe.components.length > f.maxSlots) continue;
     if (q && !recipe.name.toLowerCase().includes(q)) continue;
     if (f.minCost !== null && calc.totalCost < f.minCost) continue;
     if (f.maxCost !== null && calc.totalCost > f.maxCost) continue;

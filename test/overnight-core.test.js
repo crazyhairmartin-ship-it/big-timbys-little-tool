@@ -197,3 +197,44 @@ test("priceTrend is positive for a rising series, negative for a falling one", (
   assert.ok(core.priceTrend(mk(d => 200 - d * 5)) < -0.1, "falling series -> negative");
   assert.strictEqual(core.priceTrend(mk(() => 100)), 0, "flat series -> 0");
 });
+
+test("dayFileToPoints converts a recorder day-file to hour-aligned points", () => {
+  const pts = core.dayFileToPoints({
+    date: "2026-05-04",
+    hours: { "0": { "11802": [120, 100] }, "13": { "11802": [200, 180], "999": [5, 4] } },
+  });
+  assert.strictEqual(pts.length, 3);
+  const ags0 = pts.find(p => p.id === 11802 && p.point.timestamp === Date.UTC(2026, 4, 4, 0) / 1000);
+  assert.deepStrictEqual(ags0.point, {
+    timestamp: Date.UTC(2026, 4, 4, 0) / 1000, avgHighPrice: 120, avgLowPrice: 100,
+  });
+  assert.strictEqual(typeof ags0.id, "number"); // ids coerced from JSON string keys
+  const ags13 = pts.find(p => p.id === 11802 && p.point.timestamp === Date.UTC(2026, 4, 4, 13) / 1000);
+  assert.strictEqual(ags13.point.avgHighPrice, 200);
+});
+
+test("dayFileToPoints tolerates a malformed day-file", () => {
+  assert.deepStrictEqual(core.dayFileToPoints(null), []);
+  assert.deepStrictEqual(core.dayFileToPoints({ date: "2026-05-04" }), []);
+  assert.deepStrictEqual(core.dayFileToPoints({ hours: { "0": {} } }), []);
+});
+
+test("mergeSeries dedups by timestamp with live winning over recorded", () => {
+  const recorded = [
+    { timestamp: 100, avgHighPrice: 10, avgLowPrice: 8 },
+    { timestamp: 200, avgHighPrice: 20, avgLowPrice: 18 }, // overlaps live
+  ];
+  const live = [
+    { timestamp: 200, avgHighPrice: 99, avgLowPrice: 90 }, // wins the 200 slot
+    { timestamp: 300, avgHighPrice: 30, avgLowPrice: 28 },
+  ];
+  const merged = core.mergeSeries(recorded, live);
+  assert.deepStrictEqual(merged.map(p => p.timestamp), [100, 200, 300], "sorted, deduped");
+  assert.strictEqual(merged.find(p => p.timestamp === 200).avgHighPrice, 99, "live wins overlap");
+});
+
+test("mergeSeries handles empty / missing inputs", () => {
+  assert.deepStrictEqual(core.mergeSeries([], []), []);
+  assert.deepStrictEqual(core.mergeSeries(null, null), []);
+  assert.strictEqual(core.mergeSeries([{ timestamp: 1, avgHighPrice: 1, avgLowPrice: 1 }], null).length, 1);
+});

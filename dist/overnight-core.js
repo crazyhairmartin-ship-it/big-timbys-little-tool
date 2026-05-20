@@ -207,7 +207,41 @@ function priceTrend(series) {
   return (r - o) / o;
 }
 
-// ---- functions added in later tasks ----
+// Convert one recorder day-file — { date:"YYYY-MM-DD", hours:{ H:{ id:[hi,lo] } } }
+// — into a flat list of { id, point } entries. Each `point` matches the wiki
+// /timeseries shape ({ timestamp, avgHighPrice, avgLowPrice }) with the
+// timestamp aligned to the start of that UTC hour, so recorded and live
+// points for the same hour share an identical timestamp key.
+function dayFileToPoints(dayFile) {
+  const out = [];
+  if (!dayFile || typeof dayFile.date !== "string" || !dayFile.hours) return out;
+  const [y, mo, d] = dayFile.date.split("-").map(Number);
+  if (!y || !mo || !d) return out;
+  for (const [hourKey, idMap] of Object.entries(dayFile.hours)) {
+    const hour = Number(hourKey);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !idMap) continue;
+    const timestamp = Date.UTC(y, mo - 1, d, hour) / 1000;
+    for (const [id, pair] of Object.entries(idMap)) {
+      if (!Array.isArray(pair)) continue;
+      out.push({
+        id: Number(id),
+        point: { timestamp, avgHighPrice: pair[0] ?? null, avgLowPrice: pair[1] ?? null },
+      });
+    }
+  }
+  return out;
+}
+
+// Merge two timeseries-point arrays into one, deduped by timestamp and sorted
+// ascending. `live` (the wiki's own hourly aggregation) wins over `recorded`
+// (our once-an-hour snapshot) on any shared timestamp — live is the more
+// complete source for the window it covers; recorded extends it further back.
+function mergeSeries(recorded, live) {
+  const byTs = new Map();
+  for (const p of (recorded || [])) if (p && p.timestamp != null) byTs.set(p.timestamp, p);
+  for (const p of (live || [])) if (p && p.timestamp != null) byTs.set(p.timestamp, p);
+  return [...byTs.values()].sort((a, b) => a.timestamp - b.timestamp);
+}
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
@@ -216,6 +250,6 @@ if (typeof module !== "undefined" && module.exports) {
     ocMidPrice, ocLowPrice, ocHighPrice, hourlyProfile,
     medianOf, windowPrices, recentBaseline, predictPrices,
     confidenceOf, predictedProfit, rankScore, analyzeItem,
-    extremeHours, priceTrend,
+    extremeHours, priceTrend, dayFileToPoints, mergeSeries,
   };
 }

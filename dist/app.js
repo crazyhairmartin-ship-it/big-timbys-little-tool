@@ -431,6 +431,11 @@ function tagsFor(r) {
   const n = r.name.toLowerCase();
   const cat = r.cat;
 
+  // GE armour sets carry only the "Item Set" tag — they bundle pieces from
+  // many themes, so inheriting each piece's theme tag would scatter them
+  // across unrelated filters.
+  if (cat === "Sets") return ["Item Set"];
+
   // Base category tags
   const baseByCategory = {
     "Godswords":      ["Weapon", "Melee"],
@@ -446,7 +451,6 @@ function tagsFor(r) {
     "Toxic":          ["Weapon"],
     "Barrows":        ["Repair"],
     "Moons":          ["Repair", "Armor"],
-    "Sets":           ["Armor", "Item Set"],
     "Dragon": [], "Misc": [], "Top-tier": [],
   };
   (baseByCategory[cat] || []).forEach(t => tags.add(t));
@@ -519,24 +523,6 @@ function tagsFor(r) {
   if (cat === "Torva")          tags.add("Nex");
   if (cat === "Barrows")        tags.add("Barrows");
   if (cat === "Moons")          tags.add("Moons of Peril");
-  // Set-bundle theme tagging — inherits the source theme of the contained pieces
-  if (cat === "Sets") {
-    if (/^(ahrim|dharok|guthan|karil|torag|verac)/.test(n)) tags.add("Barrows");
-    if (/moon armour set/.test(n))   tags.add("Moons of Peril");
-    if (/^torva armour set/.test(n)) tags.add("Nex");
-    if (/^masori armour set/.test(n)){ tags.add("Masori"); tags.add("Ranged"); }
-    if (/^virtus/.test(n))           tags.add("Magic");
-    if (/^justiciar/.test(n))        tags.add("Melee");
-    if (/inquisitor/.test(n))        tags.add("Melee");
-    if (/^(ahrim)/.test(n))          tags.add("Magic");
-    if (/^(karil)/.test(n))          tags.add("Ranged");
-    if (/^(dharok|guthan|torag|verac)/.test(n)) tags.add("Melee");
-    if (/blood moon|eclipse moon|blue moon/.test(n)) {
-      if (/blood/.test(n))   tags.add("Melee");
-      if (/blue/.test(n))    tags.add("Magic");
-      if (/eclipse/.test(n)) tags.add("Ranged");
-    }
-  }
   if (cat === "Zenyte")         tags.add("Zenyte");
   if (cat === "Onyx")           tags.add("Onyx");
   if (cat === "Dragon")         tags.add("Dragon");
@@ -619,6 +605,7 @@ const state = {
     activeCats: new Set(),
     buyHourStart: 0, buyHourEnd: 23,
     sellHourStart: 0, sellHourEnd: 23,
+    maxSlots: null,       // max distinct components per craft; null = no limit
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -1347,6 +1334,7 @@ function applyFilters(items) {
   let out = items.filter(({ recipe, calc }) => {
     // OR logic: include if recipe has ANY of the active tags
     if (f.activeCats.size && !recipe._tags.some(t => f.activeCats.has(t))) return false;
+    if (f.maxSlots !== null && recipe.components.length > f.maxSlots) return false;
     if (q && !recipe.name.toLowerCase().includes(q)) return false;
     if (f.profitableOnly && !(calc.margin > 0)) return false;
     if (f.minCost !== null && calc.totalCost < f.minCost) return false;
@@ -2279,6 +2267,24 @@ async function init() {
     });
   }
 
+  // GE-slots filter: one GE slot per distinct component a craft needs.
+  // Options are the component counts actually present, plus an "Any" default.
+  const slotSelect = document.getElementById("ge-slots");
+  const anyOpt = document.createElement("option");
+  anyOpt.value = ""; anyOpt.textContent = "Any";
+  slotSelect.appendChild(anyOpt);
+  for (const n of [...new Set(RECIPES.map(r => r.components.length))].sort((a, b) => a - b)) {
+    const opt = document.createElement("option");
+    opt.value = String(n);
+    opt.textContent = `${n} slot${n === 1 ? "" : "s"} or fewer`;
+    slotSelect.appendChild(opt);
+  }
+  slotSelect.value = state.filters.maxSlots == null ? "" : String(state.filters.maxSlots);
+  slotSelect.addEventListener("change", (e) => {
+    state.filters.maxSlots = e.target.value === "" ? null : parseInt(e.target.value, 10);
+    renderGrid();
+  });
+
   // View toggle (cards / table)
   const setView = (v) => {
     state.view = v;
@@ -2365,6 +2371,7 @@ async function init() {
       const c = calcMargin(r);
       if (!c.allPresent) continue;
       if (f.activeCats.size && !r._tags.some(t => f.activeCats.has(t))) continue;
+      if (f.maxSlots !== null && r.components.length > f.maxSlots) continue;
       if (q && !r.name.toLowerCase().includes(q)) continue;
       if (f.profitableOnly && !(c.margin > 0)) continue;
       if (f.hideStaleProducts && isItemStale(r.id)) continue;

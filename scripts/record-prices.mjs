@@ -4,9 +4,9 @@
    per-day JSON file under prices/. Run by .github/workflows/record-prices.yml
    on the `price-history` branch.
 
-   Purpose: accumulate hourly price history beyond the wiki's ~15-day window,
-   so the Experimental prediction can eventually train on a deeper dataset.
-   The app does not consume this data yet — it just builds up over time.
+   Purpose: accumulate hourly price history beyond the wiki's ~15-day window.
+   The app's Experimental mode reads these day-files (via prices/index.json)
+   and merges them with the live wiki /timeseries.
 
    Day-files older than RETENTION_DAYS are pruned each run so the branch
    doesn't grow without bound. */
@@ -52,16 +52,25 @@ const dayData = existsSync(file)
 dayData.hours[hour] = snapshot;
 writeFileSync(file, JSON.stringify(dayData));
 
+// Matches only the YYYY-MM-DD.json day-files — never index.json.
+const DAY_FILE = /^\d{4}-\d{2}-\d{2}\.json$/;
+
 // Prune day-files older than the retention window.
 const cutoff = new Date(now.getTime() - RETENTION_DAYS * 86400000)
   .toISOString().slice(0, 10);
 let pruned = 0;
 for (const f of readdirSync(DIR)) {
-  if (f.endsWith(".json") && f.slice(0, 10) < cutoff) {
+  if (DAY_FILE.test(f) && f.slice(0, 10) < cutoff) {
     rmSync(`${DIR}/${f}`);
     pruned++;
   }
 }
 
-console.log(`recorded ${kept} items — ${day} hour ${hour} UTC` +
-            (pruned ? ` (pruned ${pruned} old day-file${pruned === 1 ? "" : "s"})` : ""));
+// Refresh prices/index.json — the sorted list of available day-files. The
+// app reads this so it fetches exactly what exists instead of probing dates.
+const days = readdirSync(DIR).filter(f => DAY_FILE.test(f)).map(f => f.slice(0, 10)).sort();
+writeFileSync(`${DIR}/index.json`, JSON.stringify(days));
+
+console.log(`recorded ${kept} items — ${day} hour ${hour} UTC ` +
+            `(${days.length} day-files indexed` +
+            (pruned ? `, pruned ${pruned}` : "") + ")");
