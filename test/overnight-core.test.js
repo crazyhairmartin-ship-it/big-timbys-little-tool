@@ -161,3 +161,21 @@ test("extremeHours skips null-valued hours", () => {
   assert.deepStrictEqual(w.buyHours, [3]);
   assert.deepStrictEqual(w.sellHours, [9]);
 });
+
+test("predictPrices uses the low at the buy hour and the high at the sell hour", () => {
+  // 14 days; hour 2: low 80 / high 100; hour 14: low 120 / high 160; else 100/120.
+  const start = Date.UTC(2026, 0, 1, 0);
+  const series = [];
+  for (let d = 0; d < 14; d++) {
+    for (let h = 0; h < 24; h++) {
+      const ts = Math.floor((start + (d * 24 + h) * 3600 * 1000) / 1000);
+      let lo = 100, hi = 120;
+      if (h === 2) { lo = 80; hi = 100; }
+      if (h === 14) { lo = 120; hi = 160; }
+      series.push({ timestamp: ts, avgLowPrice: lo, avgHighPrice: hi });
+    }
+  }
+  const p = core.predictPrices(series, { buyHours: [2], sellHours: [14] });
+  assert.ok(Math.abs(p.predBuy - 80) < 8, `predBuy ~80 (the LOW at hour 2), got ${p.predBuy}`);
+  assert.ok(Math.abs(p.predSell - 160) < 12, `predSell ~160 (the HIGH at hour 14), got ${p.predSell}`);
+});

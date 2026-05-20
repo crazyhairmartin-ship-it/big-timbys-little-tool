@@ -16,6 +16,22 @@ function ocMidPrice(point) {
   return null;
 }
 
+// Buy-side price: what you'd pay placing a buy offer (avgLowPrice).
+function ocLowPrice(point) {
+  const l = point.avgLowPrice, h = point.avgHighPrice;
+  if (l != null) return l;
+  if (h != null) return h;
+  return null;
+}
+
+// Sell-side price: what you'd receive listing to sell (avgHighPrice).
+function ocHighPrice(point) {
+  const h = point.avgHighPrice, l = point.avgLowPrice;
+  if (h != null) return h;
+  if (l != null) return l;
+  return null;
+}
+
 // 24-element curve: mean midPrice per UTC hour-of-day, null for empty hours.
 function hourlyProfile(series) {
   const sums = new Array(24).fill(0);
@@ -39,11 +55,11 @@ function medianOf(values) {
 }
 
 // midPrices of the points whose UTC hour is in `hours`.
-function windowPrices(series, hours) {
+function windowPrices(series, hours, priceFn = ocMidPrice) {
   const set = new Set(hours);
   const out = [];
   for (const point of series) {
-    const price = ocMidPrice(point);
+    const price = priceFn(point);
     if (price == null) continue;
     if (set.has(new Date(point.timestamp * 1000).getUTCHours())) out.push(price);
   }
@@ -51,7 +67,7 @@ function windowPrices(series, hours) {
 }
 
 // Median midPrice of the points within the last `days` days of the series.
-function recentBaseline(series, days = OC_BASELINE_DAYS) {
+function recentBaseline(series, days = OC_BASELINE_DAYS, priceFn = ocMidPrice) {
   if (!series.length) return null;
   let maxTs = 0;
   for (const p of series) if (p.timestamp > maxTs) maxTs = p.timestamp;
@@ -59,29 +75,33 @@ function recentBaseline(series, days = OC_BASELINE_DAYS) {
   const recent = [];
   for (const p of series) {
     if (p.timestamp < cutoff) continue;
-    const price = ocMidPrice(p);
+    const price = priceFn(p);
     if (price != null) recent.push(price);
   }
   return medianOf(recent);
 }
 
-// Predicted overnight buy + daytime sell, ratios anchored to recent baseline.
+// Predicted buy + sell price. Buy side uses avgLowPrice (you place buy offers
+// and get filled at the low); sell side uses avgHighPrice (you list to sell).
+// Each is a ratio — the chosen hours' median vs the item's overall median —
+// anchored to the recent baseline, so a trending item still predicts correctly.
 function predictPrices(series, windows) {
-  const baseline = recentBaseline(series);
-  const allPrices = [];
-  for (const p of series) {
-    const price = ocMidPrice(p);
-    if (price != null) allPrices.push(price);
-  }
-  const allMedian = medianOf(allPrices);
-  if (baseline == null || allMedian == null || allMedian === 0) {
-    return { predBuy: null, predSell: null };
-  }
-  const overnightRatio = medianOf(windowPrices(series, windows.buyHours)) / allMedian;
-  const daytimeRatio = medianOf(windowPrices(series, windows.sellHours)) / allMedian;
+  const predict = (hours, priceFn) => {
+    const baseline = recentBaseline(series, OC_BASELINE_DAYS, priceFn);
+    const all = [];
+    for (const p of series) {
+      const x = priceFn(p);
+      if (x != null) all.push(x);
+    }
+    const allMedian = medianOf(all);
+    if (baseline == null || allMedian == null || allMedian === 0) return null;
+    const hourMedian = medianOf(windowPrices(series, hours, priceFn));
+    if (hourMedian == null) return null;
+    return baseline * (hourMedian / allMedian);
+  };
   return {
-    predBuy: baseline * overnightRatio,
-    predSell: baseline * daytimeRatio,
+    predBuy: predict(windows.buyHours, ocLowPrice),
+    predSell: predict(windows.sellHours, ocHighPrice),
   };
 }
 
@@ -174,7 +194,7 @@ function extremeHours(curve) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     OC_MIN_DAYS, OC_BASELINE_DAYS,
-    ocMidPrice, hourlyProfile,
+    ocMidPrice, ocLowPrice, ocHighPrice, hourlyProfile,
     medianOf, windowPrices, recentBaseline, predictPrices,
     confidenceOf, predictedProfit, rankScore, analyzeItem,
     extremeHours,
