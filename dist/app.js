@@ -587,7 +587,7 @@ const state = {
   history: loadHistory(),
   filters: {
     search: "",
-    sort: "margin-desc",
+    sort: "recommended",
     minCost: null,        // gp; null = no lower bound
     maxCost: null,        // gp; null = no upper bound
     profitableOnly: false,
@@ -1231,6 +1231,40 @@ function renderCard(recipe, calc) {
   return card;
 }
 
+// "Recommended" sort — a balanced composite that rewards items which are
+// profitable AND liquid AND capital-efficient, not just one of those.
+// Each metric is rank-normalised to a 0–1 percentile across the visible
+// set (robust to whale outliers that would dominate a raw min-max scale),
+// then weight-blended. Stale items are demoted and losing/no-data flips
+// sink below everything so they can never top the list.
+const REC_SENTINEL = -1e15;  // stand-in for "no data" — keeps subtraction finite
+function scoreRecommended(items) {
+  const n = items.length;
+  if (!n) return;
+  const metrics = {
+    roi:   it => (it.calc.allPresent && it.calc.roi != null) ? it.calc.roi : REC_SENTINEL,
+    daily: it => (it.calc.allPresent && it.calc.margin != null && it.calc.maxFlips != null)
+                   ? it.calc.margin * it.calc.maxFlips : REC_SENTINEL,
+    vol:   it => it.calc.resultVol ?? 0,
+  };
+  const pct = {};
+  for (const key of Object.keys(metrics)) {
+    const ranked = [...items].sort((a, b) => metrics[key](a) - metrics[key](b));
+    const m = new Map();
+    ranked.forEach((it, i) => m.set(it, n > 1 ? i / (n - 1) : 1));
+    pct[key] = m;
+  }
+  for (const it of items) {
+    let s = 0.35 * pct.roi.get(it) + 0.40 * pct.daily.get(it) + 0.25 * pct.vol.get(it);
+    const stale = isItemStale(it.recipe.id) ||
+                  it.recipe.components.some(c => isItemStale(c.id));
+    if (stale) s *= 0.2;
+    // A losing flip or one with missing prices can never be "recommended".
+    if (!it.calc.allPresent || !(it.calc.margin > 0)) s = -1;
+    it._recScore = s;
+  }
+}
+
 function applyFilters(items) {
   const f = state.filters;
   const q = f.search.toLowerCase().trim();
@@ -1252,7 +1286,9 @@ function applyFilters(items) {
     if (f.favoritesOnly && !state.favorites.has(recipe.key)) return false;
     return true;
   });
+  if (f.sort === "recommended") scoreRecommended(out);
   const sortFns = {
+    "recommended": (a, b) => (b._recScore ?? -Infinity) - (a._recScore ?? -Infinity),
     "margin-desc": (a, b) => (b.calc.margin ?? -Infinity) - (a.calc.margin ?? -Infinity),
     "roi-desc":    (a, b) => (b.calc.roi    ?? -Infinity) - (a.calc.roi    ?? -Infinity),
     "cost-asc":    (a, b) => (a.calc.totalCost ?? Infinity) - (b.calc.totalCost ?? Infinity),
@@ -1261,7 +1297,7 @@ function applyFilters(items) {
     "daily-desc":  (a, b) => ((b.calc.margin ?? 0) * (b.calc.maxFlips ?? 0)) - ((a.calc.margin ?? 0) * (a.calc.maxFlips ?? 0)),
     "name":        (a, b) => a.recipe.name.localeCompare(b.recipe.name),
   };
-  out.sort(sortFns[f.sort] || sortFns["margin-desc"]);
+  out.sort(sortFns[f.sort] || sortFns["recommended"]);
   return out;
 }
 
