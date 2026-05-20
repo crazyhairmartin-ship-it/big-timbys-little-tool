@@ -68,34 +68,31 @@ async function runOvernightAnalysis(onProgress) {
     if (onProgress) onProgress(done, candidates.length);
   });
 
-  // Calibrate global windows from every fetched item's normalized curve.
-  const curves = [];
-  for (const series of seriesById.values()) {
-    curves.push(normalizeCurve(hourlyProfile(series)));
-  }
-  const windows = calibrateWindows(curves, OC_WINDOW_WIDTH);
-
-  // Analyse each item; drop nulls (thin history / no discount).
-  const items = [];
-  for (const [id, series] of seriesById) {
-    const a = analyzeItem(id, series, windows, geTax);
-    if (a) items.push(a);
-  }
-  items.sort((a, b) => b.score - a.score);
-
-  // Per-item-id predicted price map: { id: { overnight, daytime, confidence } }.
-  // Recipe margins (calcMargin with predMap) look up component overnight prices
-  // and product daytime prices from this.
+  // Per-item self-calibration: each item finds its OWN cheapest/dearest hour
+  // (extremeHours), then we predict its low/high price and record the hours.
+  // predMap is { id: { overnight, daytime, buyHour, sellHour, confidence } } —
+  // `overnight` = predicted cheapest, `daytime` = predicted dearest. Those two
+  // field names are kept so calcMargin's predMap path needs no change.
   const predMap = {};
-  for (const a of items) {
-    predMap[a.id] = { overnight: a.predBuy, daytime: a.predSell, confidence: a.confidence };
+  let analysed = 0;
+  for (const [id, series] of seriesById) {
+    const windows = extremeHours(hourlyProfile(series));
+    const a = analyzeItem(id, series, windows, geTax);
+    if (!a) continue;
+    predMap[id] = {
+      overnight: a.predBuy,
+      daytime: a.predSell,
+      confidence: a.confidence,
+      buyHour: windows.buyHours[0] ?? null,
+      sellHour: windows.sellHours[0] ?? null,
+    };
+    analysed += 1;
   }
 
   overnightData = {
     analysedAt: Date.now(),
-    windows,
-    items,
     predMap,
+    analysed,
     skipped: candidates.length - seriesById.size,
   };
   return overnightData;
@@ -115,7 +112,7 @@ function loadOvernightCache() {
     const raw = localStorage.getItem(OVERNIGHT_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.predMap || !parsed.windows) return null;
+    if (!parsed || !parsed.predMap || parsed.windows) return null;
     return parsed;
   } catch (_) {
     return null;
