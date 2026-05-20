@@ -133,4 +133,10 @@ window.Overnight = {
   loadOvernightCache, overnightCacheAgeMs,
   get data() { return overnightData; },
   get running() { return overnightRunning; },
+  renderOvernight() {
+    const grid = document.getElementById("grid");
+    grid.hidden = false;
+    document.getElementById("table-wrap").hidden = true;
+    grid.replaceChildren(el("div", { class: "loading", text: "Overnight mode — coming in Task 9" }));
+  },
 };

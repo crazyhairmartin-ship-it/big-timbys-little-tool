@@ -605,6 +605,7 @@ const state = {
   lastMargin: {},
   // Active view mode: "cards" or "table"
   view: localStorage.getItem("osrs-combo-view") || "cards",
+  mode: localStorage.getItem("osrs-combo-mode") || "realtime",
   smithing: parseInt(localStorage.getItem("osrs-combo-smithing") || "99", 10),
   // Independent strategies — each picks one side of the spread:
   //   supplies: "insta-buy" (pay high to acquire now) | "slow-buy" (offer at low, wait)
@@ -1348,6 +1349,7 @@ function applyFilters(items) {
 }
 
 function renderGrid() {
+  if (state.mode === "overnight" && window.Overnight) { window.Overnight.renderOvernight(); return; }
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
   const items = RECIPES.map(r => ({ recipe: r, calc: calcMargin(r) }));
@@ -2237,6 +2239,16 @@ async function init() {
   document.getElementById("view-table").addEventListener("click", () => setView("table"));
   // Apply persisted view on init
   setView(state.view);
+  const setMode = (m) => {
+    state.mode = m;
+    localStorage.setItem("osrs-combo-mode", m);
+    document.getElementById("mode-realtime").classList.toggle("active", m === "realtime");
+    document.getElementById("mode-overnight").classList.toggle("active", m === "overnight");
+    renderGrid();
+  };
+  document.getElementById("mode-realtime").addEventListener("click", () => setMode("realtime"));
+  document.getElementById("mode-overnight").addEventListener("click", () => setMode("overnight"));
+  setMode(state.mode);
   document.getElementById("search").addEventListener("input", (e) => {
     state.filters.search = e.target.value;
     renderGrid();

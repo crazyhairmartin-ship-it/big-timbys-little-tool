@@ -456,6 +456,29 @@ header {
   box-shadow: 0 0 0 1px var(--gold-dim);
 }
 
+.mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 12px;
+  padding: 3px;
+  background: var(--bg-2);
+  border-radius: 8px;
+}
+.mode-btn {
+  background: transparent;
+  color: var(--text-1);
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mode-btn.active {
+  background: var(--gold);
+  color: #1a1205;
+}
+
 /* ---------- Grid ---------- */
 .grid {
   display: grid;
