@@ -54,7 +54,7 @@ async function overnightFetchSeries(id) {
 }
 
 // Full analysis run: fetch each item's history, self-calibrate, predict.
-// `onProgress(done, total)` is called as fetches complete.
+// `onProgress({ done, total })` is called as fetches complete.
 async function runOvernightAnalysis(onProgress) {
   const candidates = overnightItemIds().filter(id => {
     const vol = state.volumes[id];
@@ -66,7 +66,7 @@ async function runOvernightAnalysis(onProgress) {
     const series = await overnightFetchSeries(id);
     if (series) seriesById.set(id, series);
     done += 1;
-    if (onProgress) onProgress(done, candidates.length);
+    if (onProgress) onProgress({ done, total: candidates.length });
   });
 
   // Per-item self-calibration: each item finds its OWN cheapest/dearest hour
