@@ -11,7 +11,7 @@ const OVERNIGHT_CACHE_KEY = "osrs-combo-overnight";
 const OVERNIGHT_CACHE_TTL_MS = 24 * 3600 * 1000;
 
 // In-memory analysis result; also mirrored to localStorage.
-let overnightData = null; // { analysedAt, windows, items: analysis[] , skipped:int }
+let overnightData = null; // { analysedAt, predMap, analysed, skipped } — see runOvernightAnalysis
 let overnightRunning = false;
 
 // Every distinct item id referenced by any recipe — products AND components.
@@ -52,7 +52,7 @@ async function overnightFetchSeries(id) {
   }
 }
 
-// Full analysis run: fetch, calibrate global windows, analyse each item.
+// Full analysis run: fetch each item's history, self-calibrate, predict.
 // `onProgress(done, total)` is called as fetches complete.
 async function runOvernightAnalysis(onProgress) {
   const candidates = overnightItemIds().filter(id => {
@@ -235,7 +235,7 @@ function overnightRecipeCard(recipe, calc) {
   return card;
 }
 
-// Header strip: windows, freshness, refresh, or a progress bar mid-analysis.
+// Header strip: freshness + item count + refresh, or a progress bar.
 function overnightHeader(progress) {
   const bar = el("div", { class: "ov-header" });
   if (progress) {
@@ -273,12 +273,16 @@ function overnightVisible() {
     const localHour = (utc) => new Date(Date.UTC(2000, 0, 1, utc)).getHours();
     const inRange = (h, lo, hi) => (lo <= hi ? (h >= lo && h <= hi) : (h >= lo || h <= hi));
     const pm = overnightData.predMap;
-    const sellH = localHour(pm[recipe.id].sellHour);
-    if (!inRange(sellH, f.sellHourStart, f.sellHourEnd)) continue;
+    const prod = pm[recipe.id];
+    if (!prod || prod.sellHour == null) continue;
+    if (!inRange(localHour(prod.sellHour), f.sellHourStart, f.sellHourEnd)) continue;
     let timeOk = true;
     for (const c of recipe.components) {
-      const bh = localHour(pm[c.id].buyHour);
-      if (!inRange(bh, f.buyHourStart, f.buyHourEnd)) { timeOk = false; break; }
+      const p = pm[c.id];
+      if (!p || p.buyHour == null || !inRange(localHour(p.buyHour), f.buyHourStart, f.buyHourEnd)) {
+        timeOk = false;
+        break;
+      }
     }
     if (!timeOk) continue;
     out.push({ recipe, calc });
