@@ -140,16 +140,15 @@ async function ensureOvernightAnalysis(onProgress, force = false) {
   }
 }
 
-// Format an hour list like [22,23,0,1,2,3] as "22:00-04:00 UTC".
-function overnightWindowLabel(hours) {
-  // hours are contiguous mod 24; find the true start (the hour whose
-  // predecessor is absent) so a wrapping window reads correctly.
-  const set = new Set(hours);
-  let s = hours[0];
-  for (const h of hours) if (!set.has((h + 23) % 24)) s = h;
-  const end = (s + hours.length) % 24;
-  const pad = h => String(h).padStart(2, "0") + ":00";
-  return `${pad(s)}-${pad(end)} UTC`;
+// Format a UTC hour-of-day (0-23) as a local-time label, e.g. "3 AM".
+// The analysis runs in UTC (GE prices follow the global UTC cycle); only
+// the displayed hour is converted to the viewer's local timezone.
+function overnightLocalHour(utcHour) {
+  if (utcHour == null) return "—";
+  const localH = new Date(Date.UTC(2000, 0, 1, utcHour)).getHours();
+  const ampm = localH < 12 ? "AM" : "PM";
+  const h12 = localH % 12 === 0 ? 12 : localH % 12;
+  return `${h12} ${ampm}`;
 }
 
 // The recipe's confidence = minimum confidence among product + all components.
@@ -224,11 +223,13 @@ function overnightRecipeCard(recipe, calc) {
     const value = price != null
       ? (c.qty > 1 ? c.qty + "× " + fmtGp(price) : fmtGp(price))
       : "—";
-    row(comp, { label: cName, value });
+    const buyHint = "buy " + overnightLocalHour(overnightData.predMap[c.id] && overnightData.predMap[c.id].buyHour);
+    row(comp, { label: cName, value, hint: buyHint });
   }
   row(comp, { cls: "tax", label: "GE tax", value: "-" + fmtGp(calc.geTax) });
   const sellLabel = calc.resultQty > 1 ? "Sell price ×" + calc.resultQty : "Sell price";
-  row(comp, { cls: "sell", label: sellLabel, value: fmtGp(calc.revenue) });
+  const sellHint = "sell " + overnightLocalHour(overnightData.predMap[recipe.id] && overnightData.predMap[recipe.id].sellHour);
+  row(comp, { cls: "sell", label: sellLabel, value: fmtGp(calc.revenue), hint: sellHint });
 
   card.append(head, heroMargin, stats, comp);
   return card;
@@ -244,11 +245,9 @@ function overnightHeader(progress) {
   }
   const d = overnightData;
   const ageMin = Math.round(window.Overnight.overnightCacheAgeMs() / 60000);
-  bar.appendChild(el("span", { class: "ov-windows",
-    text: `Buy ${overnightWindowLabel(d.windows.buyHours)} - Sell ${overnightWindowLabel(d.windows.sellHours)}` }));
   bar.appendChild(el("span", { class: "ov-meta",
-    text: `Analysed ${ageMin}m ago - ${d.items.length} items` +
-          (d.skipped ? ` - ${d.skipped} skipped` : "") }));
+    text: `Analysed ${ageMin}m ago · ${d.analysed} items` +
+          (d.skipped ? ` · ${d.skipped} skipped` : "") }));
   const refresh = el("button", { class: "ov-refresh", text: "⟳", attrs: { title: "Re-analyse" } });
   refresh.onclick = async () => {
     await window.Overnight.ensureOvernightAnalysis(p => paintOvernight(p), true);
