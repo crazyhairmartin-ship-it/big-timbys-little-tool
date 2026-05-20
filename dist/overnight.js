@@ -90,5 +90,47 @@ async function runOvernightAnalysis(onProgress) {
   return overnightData;
 }
 
-// Exposed entry points; app.js calls window.Overnight.*
-window.Overnight = { runOvernightAnalysis };
+// Persist the computed analysis (not raw series) to localStorage.
+function saveOvernightCache(data) {
+  try {
+    localStorage.setItem(OVERNIGHT_CACHE_KEY, JSON.stringify(data));
+  } catch (_) { /* quota / disabled — cache is best-effort */ }
+}
+
+// Load a cached analysis, or null if absent / unparseable.
+function loadOvernightCache() {
+  try {
+    const raw = localStorage.getItem(OVERNIGHT_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function overnightCacheAgeMs() {
+  return overnightData ? Date.now() - overnightData.analysedAt : Infinity;
+}
+
+// Ensure analysis is available and fresh. Uses cache when < TTL old;
+// otherwise runs a fresh analysis. `force` always re-runs.
+async function ensureOvernightAnalysis(onProgress, force = false) {
+  if (overnightRunning) return overnightData;
+  if (!overnightData) overnightData = loadOvernightCache();
+  const fresh = overnightData && Date.now() - overnightData.analysedAt < OVERNIGHT_CACHE_TTL_MS;
+  if (fresh && !force) return overnightData;
+  overnightRunning = true;
+  try {
+    const data = await runOvernightAnalysis(onProgress);
+    saveOvernightCache(data);
+    return data;
+  } finally {
+    overnightRunning = false;
+  }
+}
+
+window.Overnight = {
+  runOvernightAnalysis, ensureOvernightAnalysis,
+  loadOvernightCache, overnightCacheAgeMs,
+  get data() { return overnightData; },
+  get running() { return overnightRunning; },
+};
