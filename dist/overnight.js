@@ -14,13 +14,12 @@ const OVERNIGHT_CACHE_TTL_MS = 24 * 3600 * 1000;
 let overnightData = null; // { analysedAt, windows, items: analysis[] , skipped:int }
 let overnightRunning = false;
 
-// Every distinct item id referenced by any recipe (product + components).
+// Every distinct combination-item id the real-time tracker shows — the recipe
+// products. Components are intentionally NOT analysed: overnight flipping
+// targets the same combination items as the realtime view.
 function overnightItemIds() {
   const ids = new Set();
-  for (const r of RECIPES) {
-    ids.add(r.id);
-    for (const c of r.components) ids.add(c.id);
-  }
+  for (const r of RECIPES) ids.add(r.id);
   return [...ids];
 }
 
