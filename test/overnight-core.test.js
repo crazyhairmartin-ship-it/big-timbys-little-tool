@@ -68,3 +68,38 @@ test("calibrateWindows window can wrap past hour 23", () => {
   const w = core.calibrateWindows([curve], 6);
   assert.deepStrictEqual([...w.buyHours].sort((a, b) => a - b), [0, 1, 2, 3, 22, 23]);
 });
+
+// Helper: build a series spanning `days` days, one point per hour, where
+// the price depends only on the hour-of-day via priceForHour(hour).
+function buildSeries(days, priceForHour) {
+  const series = [];
+  const start = Date.UTC(2026, 0, 1, 0);
+  for (let d = 0; d < days; d++) {
+    for (let h = 0; h < 24; h++) {
+      const ts = Math.floor((start + (d * 24 + h) * 3600 * 1000) / 1000);
+      const p = priceForHour(h);
+      series.push({ timestamp: ts, avgHighPrice: p, avgLowPrice: p });
+    }
+  }
+  return series;
+}
+
+test("medianOf returns the middle value", () => {
+  assert.strictEqual(core.medianOf([3, 1, 2]), 2);
+  assert.strictEqual(core.medianOf([4, 1, 3, 2]), 2.5);
+});
+
+test("predictPrices anchors ratios to the recent baseline", () => {
+  // Hours 0-5 cost 80, hours 12-17 cost 120, everything else 100.
+  const series = buildSeries(14, h => {
+    if (h < 6) return 80;
+    if (h >= 12 && h < 18) return 120;
+    return 100;
+  });
+  const windows = { buyHours: [0, 1, 2, 3, 4, 5], sellHours: [12, 13, 14, 15, 16, 17] };
+  const p = core.predictPrices(series, windows);
+  // baseline = recent median of all hours. overnightRatio = 80/median.
+  assert.ok(p.predBuy < p.predSell, "buy should be below sell");
+  assert.ok(Math.abs(p.predBuy - 80) < 5, `predBuy ~80, got ${p.predBuy}`);
+  assert.ok(Math.abs(p.predSell - 120) < 5, `predSell ~120, got ${p.predSell}`);
+});

@@ -66,6 +66,61 @@ function calibrateWindows(normalizedCurves, width = OC_WINDOW_WIDTH) {
   return { buyHours: block(lowStart), sellHours: block(highStart), globalCurve };
 }
 
+// Median of a numeric array (non-mutating). Returns null if empty.
+function medianOf(values) {
+  if (!values.length) return null;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// midPrices of the points whose UTC hour is in `hours`.
+function windowPrices(series, hours) {
+  const set = new Set(hours);
+  const out = [];
+  for (const point of series) {
+    const price = ocMidPrice(point);
+    if (price == null) continue;
+    if (set.has(new Date(point.timestamp * 1000).getUTCHours())) out.push(price);
+  }
+  return out;
+}
+
+// Median midPrice of the points within the last `days` days of the series.
+function recentBaseline(series, days = OC_BASELINE_DAYS) {
+  if (!series.length) return null;
+  let maxTs = 0;
+  for (const p of series) if (p.timestamp > maxTs) maxTs = p.timestamp;
+  const cutoff = maxTs - days * 24 * 3600;
+  const recent = [];
+  for (const p of series) {
+    if (p.timestamp < cutoff) continue;
+    const price = ocMidPrice(p);
+    if (price != null) recent.push(price);
+  }
+  return medianOf(recent);
+}
+
+// Predicted overnight buy + daytime sell, ratios anchored to recent baseline.
+function predictPrices(series, windows) {
+  const baseline = recentBaseline(series);
+  const allPrices = [];
+  for (const p of series) {
+    const price = ocMidPrice(p);
+    if (price != null) allPrices.push(price);
+  }
+  const allMedian = medianOf(allPrices);
+  if (baseline == null || allMedian == null || allMedian === 0) {
+    return { predBuy: null, predSell: null };
+  }
+  const overnightRatio = medianOf(windowPrices(series, windows.buyHours)) / allMedian;
+  const daytimeRatio = medianOf(windowPrices(series, windows.sellHours)) / allMedian;
+  return {
+    predBuy: baseline * overnightRatio,
+    predSell: baseline * daytimeRatio,
+  };
+}
+
 // ---- functions added in later tasks ----
 
 // Node test harness can require() this; browsers skip the guard.
@@ -73,5 +128,6 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     OC_WINDOW_WIDTH, OC_MIN_DAYS, OC_BASELINE_DAYS, OC_CONFIDENCE_FLOOR,
     ocMidPrice, hourlyProfile, normalizeCurve, calibrateWindows,
+    medianOf, windowPrices, recentBaseline, predictPrices,
   };
 }
