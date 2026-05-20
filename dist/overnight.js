@@ -265,7 +265,7 @@ function renderOvernight() {
   window.Overnight.ensureOvernightAnalysis(p => {
     if (!overnightData) paintOvernight(p);
   }).then(() => {
-    if (state.mode === "overnight") paintOvernight();
+    if (state.mode === "overnight" && overnightData) paintOvernight();
   });
 }
 
