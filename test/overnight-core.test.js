@@ -174,3 +174,21 @@ test("analyzeItem returns null when no history lands in the sell window", () => 
   const windows = { buyHours: [0, 1, 2, 3, 4, 5], sellHours: [12, 13, 14, 15, 16, 17] };
   assert.strictEqual(core.analyzeItem(1, series, windows, () => 0), null);
 });
+
+test("extremeHours finds the cheapest and dearest hour", () => {
+  const curve = new Array(24).fill(100);
+  curve[5] = 60;    // cheapest
+  curve[18] = 140;  // dearest
+  const w = core.extremeHours(curve);
+  assert.deepStrictEqual(w.buyHours, [5]);
+  assert.deepStrictEqual(w.sellHours, [18]);
+});
+
+test("extremeHours skips null-valued hours", () => {
+  const curve = new Array(24).fill(null);
+  curve[3] = 50;
+  curve[9] = 200;
+  const w = core.extremeHours(curve);
+  assert.deepStrictEqual(w.buyHours, [3]);
+  assert.deepStrictEqual(w.sellHours, [9]);
+});

@@ -184,6 +184,24 @@ function analyzeItem(id, series, windows, taxFn) {
   };
 }
 
+// An item's own cheapest and dearest UTC hour, from its hour-of-day curve
+// (the 24-element array from hourlyProfile). Returned as single-hour arrays
+// so the result plugs straight into analyzeItem's `windows` parameter
+// ({ buyHours, sellHours }). Null-valued hours are skipped.
+function extremeHours(curve) {
+  let buyHour = null, sellHour = null, lo = Infinity, hi = -Infinity;
+  for (let h = 0; h < 24; h++) {
+    const v = curve[h];
+    if (v == null) continue;
+    if (v < lo) { lo = v; buyHour = h; }
+    if (v > hi) { hi = v; sellHour = h; }
+  }
+  return {
+    buyHours: buyHour == null ? [] : [buyHour],
+    sellHours: sellHour == null ? [] : [sellHour],
+  };
+}
+
 // ---- functions added in later tasks ----
 
 // Node test harness can require() this; browsers skip the guard.
@@ -193,5 +211,6 @@ if (typeof module !== "undefined" && module.exports) {
     ocMidPrice, hourlyProfile, normalizeCurve, calibrateWindows,
     medianOf, windowPrices, recentBaseline, predictPrices,
     confidenceOf, predictedProfit, rankScore, analyzeItem,
+    extremeHours,
   };
 }
