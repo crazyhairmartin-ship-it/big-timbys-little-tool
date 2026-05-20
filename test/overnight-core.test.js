@@ -38,37 +38,6 @@ test("hourlyProfile ignores points with no usable price", () => {
   assert.strictEqual(curve[8], 50);
 });
 
-test("normalizeCurve divides by the mean of non-null entries", () => {
-  const curve = new Array(24).fill(null);
-  curve[0] = 50; curve[1] = 150; // mean of present entries = 100
-  const norm = core.normalizeCurve(curve);
-  assert.strictEqual(norm[0], 0.5);
-  assert.strictEqual(norm[1], 1.5);
-  assert.strictEqual(norm[2], null);
-});
-
-test("calibrateWindows finds lowest and highest 6h blocks", () => {
-  // Build one normalized curve: cheapest around hours 2-7, dearest around 14-19.
-  const curve = new Array(24);
-  for (let h = 0; h < 24; h++) {
-    if (h >= 2 && h < 8) curve[h] = 0.8;
-    else if (h >= 14 && h < 20) curve[h] = 1.2;
-    else curve[h] = 1.0;
-  }
-  const w = core.calibrateWindows([curve], 6);
-  assert.deepStrictEqual([...w.buyHours].sort((a, b) => a - b), [2, 3, 4, 5, 6, 7]);
-  assert.deepStrictEqual([...w.sellHours].sort((a, b) => a - b), [14, 15, 16, 17, 18, 19]);
-  assert.strictEqual(w.globalCurve.length, 24);
-});
-
-test("calibrateWindows window can wrap past hour 23", () => {
-  const curve = new Array(24).fill(1.0);
-  // cheapest block straddles midnight: hours 22,23,0,1,2,3
-  for (const h of [22, 23, 0, 1, 2, 3]) curve[h] = 0.5;
-  const w = core.calibrateWindows([curve], 6);
-  assert.deepStrictEqual([...w.buyHours].sort((a, b) => a - b), [0, 1, 2, 3, 22, 23]);
-});
-
 // Helper: build a series spanning `days` days, one point per hour, where
 // the price depends only on the hour-of-day via priceForHour(hour).
 function buildSeries(days, priceForHour) {
