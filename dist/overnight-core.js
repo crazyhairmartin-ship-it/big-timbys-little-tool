@@ -8,8 +8,6 @@
 const OC_WINDOW_WIDTH = 6;     // hours in the buy / sell window
 const OC_MIN_DAYS = 10;        // min distinct days of history to analyse an item
 const OC_BASELINE_DAYS = 3;    // recent window the prediction is anchored to
-const OC_CONFIDENCE_FLOOR = 0.55; // below this, no genuine recurring pattern
-
 // Representative price for one timeseries point: mid of avg high/low.
 function ocMidPrice(point) {
   const h = point.avgHighPrice, l = point.avgLowPrice;
@@ -174,7 +172,7 @@ function ocDistinctDays(series) {
 function analyzeItem(id, series, windows, taxFn) {
   if (ocDistinctDays(series) < OC_MIN_DAYS) return null;
   const { predBuy, predSell } = predictPrices(series, windows);
-  if (predBuy == null || predSell == null || predBuy <= 0) return null;
+  if (predBuy == null || predSell == null || predBuy <= 0 || predSell <= 0) return null;
   const profit = predictedProfit(predBuy, predSell, taxFn);
   const profitPct = profit / predBuy;
   const confidence = confidenceOf(series, windows);
@@ -191,7 +189,7 @@ function analyzeItem(id, series, windows, taxFn) {
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    OC_WINDOW_WIDTH, OC_MIN_DAYS, OC_BASELINE_DAYS, OC_CONFIDENCE_FLOOR,
+    OC_WINDOW_WIDTH, OC_MIN_DAYS, OC_BASELINE_DAYS,
     ocMidPrice, hourlyProfile, normalizeCurve, calibrateWindows,
     medianOf, windowPrices, recentBaseline, predictPrices,
     confidenceOf, predictedProfit, rankScore, analyzeItem,

@@ -10,7 +10,7 @@ const OVERNIGHT_FETCH_CONCURRENCY = 5;
 const OVERNIGHT_CACHE_KEY = "osrs-combo-overnight";
 const OVERNIGHT_CACHE_TTL_MS = 24 * 3600 * 1000;
 
-// In-memory analysis result, mirrored to localStorage by Task 7.
+// In-memory analysis result; also mirrored to localStorage.
 let overnightData = null; // { analysedAt, windows, items: analysis[] , skipped:int }
 let overnightRunning = false;
 
@@ -145,7 +145,6 @@ async function ensureOvernightAnalysis(onProgress, force = false) {
 
 // Format an hour list like [22,23,0,1,2,3] as "22:00-04:00 UTC".
 function overnightWindowLabel(hours) {
-  const start = hours.reduce((a, b) => Math.min(a, b), 24);
   // hours are contiguous mod 24; find the true start (the hour whose
   // predecessor is absent) so a wrapping window reads correctly.
   const set = new Set(hours);

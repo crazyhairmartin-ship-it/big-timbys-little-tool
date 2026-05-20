@@ -1282,17 +1282,4 @@ footer {
   padding: 3px 9px;
   cursor: pointer;
 }
-.ov-spark {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 28px;
-  margin-top: 10px;
-}
-.ov-spark-bar {
-  flex: 1;
-  background: var(--line-2);
-  border-radius: 1px;
-}
-.ov-spark-bar.buy  { background: #4ade80; }
-.ov-spark-bar.sell { background: #f5c518; }
+

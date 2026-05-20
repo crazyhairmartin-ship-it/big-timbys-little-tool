@@ -160,3 +160,17 @@ test("analyzeItem produces a full analysis for a clean pattern", () => {
   assert.ok(a.score > 0);
   assert.strictEqual(a.curve.length, 24);
 });
+
+test("analyzeItem returns null when no history lands in the sell window", () => {
+  // 14 days of hourly points, but only hours 0-11 — nothing in sell hours 12-17.
+  const start = Date.UTC(2026, 0, 1, 0);
+  const series = [];
+  for (let d = 0; d < 14; d++) {
+    for (let h = 0; h < 12; h++) {
+      const ts = Math.floor((start + (d * 24 + h) * 3600 * 1000) / 1000);
+      series.push({ timestamp: ts, avgHighPrice: 100, avgLowPrice: 100 });
+    }
+  }
+  const windows = { buyHours: [0, 1, 2, 3, 4, 5], sellHours: [12, 13, 14, 15, 16, 17] };
+  assert.strictEqual(core.analyzeItem(1, series, windows, () => 0), null);
+});
