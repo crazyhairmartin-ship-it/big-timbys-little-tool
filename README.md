@@ -2,6 +2,8 @@
 
 OSRS combination item margin tracker. Live GE prices, GE tax included, trade-volume-aware bottleneck calculation, multi-tab price charts.
 
+**Live site:** <https://big-timbys-little-tool.vercel.app/> — no install, works in any modern browser. Mobile-friendly; installable as a PWA from the address bar.
+
 ---
 
 ## Install (prebuilt binaries)
@@ -50,7 +52,13 @@ Each tagged release builds installers for Windows, macOS, and Linux on GitHub Ac
 
 ## Run in browser (no install)
 
-Don't need a desktop app? Run the static site directly:
+Just open <https://big-timbys-little-tool.vercel.app/>.
+
+For a standalone window without an installer, visit that page in Chrome/Edge/Safari and click the **install** button in the address bar — it becomes a regular app on your dock/taskbar via the Progressive Web App spec.
+
+### Self-host
+
+If you'd rather run it locally:
 
 ```sh
 git clone https://github.com/crazyhairmartin-ship-it/big-timbys-little-tool.git
@@ -59,8 +67,6 @@ python3 -m http.server 8765 -d dist
 ```
 
 Open <http://localhost:8765>.
-
-Or install as a **Progressive Web App** for a standalone window without packaging anything: visit the served page in Chrome/Edge/Safari and click the install button in the address bar.
 
 ---
 
