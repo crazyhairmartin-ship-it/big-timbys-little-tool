@@ -936,8 +936,16 @@ function calcMargin(recipe, predMap) {
     componentCost += sp * c.qty;
   }
   if (recipe.extraCost) componentCost += recipe.extraCost;
+  // Supplies (runes/bars/wool): always priced live, even when predMap is set —
+  // they are cheap and price-stable, so predicting them only adds noise.
+  let suppliesCost = 0;
+  for (const s of recipe.supplies || []) {
+    const sp = supplyPrice(state.prices[s.id]);
+    if (!sp) { allPresent = false; break; }
+    suppliesCost += sp * s.qty;
+  }
   const rc = repairCost(recipe.repairBase, state.smithing);
-  const totalCost = componentCost + rc;
+  const totalCost = componentCost + suppliesCost + rc;
 
   const revenue = sellPricePerUnit !== null ? sellPricePerUnit * qty : 0;
   const taxPerUnit = sellPricePerUnit !== null ? geTax(sellPricePerUnit) : 0;
@@ -983,7 +991,7 @@ function calcMargin(recipe, predMap) {
   return {
     sellPrice: sellPricePerUnit, sellTime, oldestTime,
     revenue, geTax: totalTax, geTaxPerUnit: taxPerUnit,
-    componentCost, repairCost: rc, totalCost,
+    componentCost, suppliesCost, repairCost: rc, totalCost,
     margin, roi, allPresent,
     maxFlips, resultVol, compVols, resultQty: qty,
     compLimits, limitFlipsPer4h, limitFlipsPerDay,
@@ -1005,6 +1013,11 @@ function historicalMargin(recipe) {
     const sp = supplyPrice(src[c.id]);
     if (sp === null) return null;
     cost += sp * c.qty;
+  }
+  for (const s of recipe.supplies || []) {
+    const sp = supplyPrice(src[s.id]);
+    if (sp === null) return null;
+    cost += sp * s.qty;
   }
   cost += repairCost(recipe.repairBase, state.smithing);
   return sell * qty - geTax(sell) * qty - cost;
