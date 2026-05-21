@@ -340,22 +340,20 @@ function overnightHeader(progress) {
 }
 
 // Recipes with a complete, profitable predicted margin, after sidebar filters.
+// Shares the real-time grid's filter predicate and sort, then adds the
+// Experimental-only buy/sell-time filter.
 function overnightVisible() {
   const f = state.filters;
-  const q = f.search.toLowerCase().trim();
+  const pm = overnightData.predMap;
+  const localHour = (utc) => new Date(Date.UTC(2000, 0, 1, utc)).getHours();
+  const inRange = (h, lo, hi) => (lo <= hi ? (h >= lo && h <= hi) : (h >= lo || h <= hi));
   const out = [];
   for (const recipe of RECIPES) {
-    const calc = calcMargin(recipe, overnightData.predMap);
+    const calc = calcMargin(recipe, pm);
     if (!calc.allPresent || !(calc.margin > 0)) continue;
-    if (f.maxSlots !== null && recipe.components.length > f.maxSlots) continue;
-    if (q && !recipe.name.toLowerCase().includes(q)) continue;
-    if (f.minCost !== null && calc.totalCost < f.minCost) continue;
-    if (f.maxCost !== null && calc.totalCost > f.maxCost) continue;
+    if (!passesSidebarFilters(recipe, calc)) continue;
     // Experimental time filter: every component's buy hour must fall in the
     // buy range, and the product's sell hour in the sell range (local time).
-    const localHour = (utc) => new Date(Date.UTC(2000, 0, 1, utc)).getHours();
-    const inRange = (h, lo, hi) => (lo <= hi ? (h >= lo && h <= hi) : (h >= lo || h <= hi));
-    const pm = overnightData.predMap;
     const prod = pm[recipe.id];
     if (!prod || prod.sellHour == null) continue;
     if (!inRange(localHour(prod.sellHour), f.sellHourStart, f.sellHourEnd)) continue;
@@ -370,8 +368,7 @@ function overnightVisible() {
     if (!timeOk) continue;
     out.push({ recipe, calc });
   }
-  out.sort((a, b) => b.calc.margin - a.calc.margin);
-  return out;
+  return sortRecipeList(out);
 }
 
 // Paint the grid for Overnight mode. With `progress`, shows the progress bar.

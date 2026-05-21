@@ -1326,29 +1326,34 @@ function scoreRecommended(items) {
   }
 }
 
-function applyFilters(items) {
+// Shared sidebar-filter predicate — true if a { recipe, calc } pair passes
+// every include/exclude sidebar filter. Used by both the real-time grid and
+// the Experimental grid so the two views filter identically.
+function passesSidebarFilters(recipe, calc) {
   const f = state.filters;
   const q = f.search.toLowerCase().trim();
-  const nowSec = Date.now() / 1000;
-  const staleSec = STALE_MS / 1000;
-  let out = items.filter(({ recipe, calc }) => {
-    // OR logic: include if recipe has ANY of the active tags
-    if (f.activeCats.size && !recipe._tags.some(t => f.activeCats.has(t))) return false;
-    if (f.maxSlots !== null && recipe.components.length > f.maxSlots) return false;
-    if (q && !recipe.name.toLowerCase().includes(q)) return false;
-    if (f.profitableOnly && !(calc.margin > 0)) return false;
-    if (f.minCost !== null && calc.totalCost < f.minCost) return false;
-    if (f.maxCost !== null && calc.totalCost > f.maxCost) return false;
-    if (f.hideStaleProducts && isItemStale(recipe.id)) return false;
-    if (f.hideStaleComponents && recipe.components.some(c => isItemStale(c.id))) return false;
-    if (f.hideLowVolume) {
-      const productVolPerHr = perHour(calc.resultVol);
-      if (productVolPerHr == null || productVolPerHr < 1) return false;
-    }
-    if (f.favoritesOnly && !state.favorites.has(recipe.key)) return false;
-    return true;
-  });
-  if (f.sort === "recommended") scoreRecommended(out);
+  // OR logic: include if recipe has ANY of the active tags
+  if (f.activeCats.size && !recipe._tags.some(t => f.activeCats.has(t))) return false;
+  if (f.maxSlots !== null && recipe.components.length > f.maxSlots) return false;
+  if (q && !recipe.name.toLowerCase().includes(q)) return false;
+  if (f.profitableOnly && !(calc.margin > 0)) return false;
+  if (f.minCost !== null && calc.totalCost < f.minCost) return false;
+  if (f.maxCost !== null && calc.totalCost > f.maxCost) return false;
+  if (f.hideStaleProducts && isItemStale(recipe.id)) return false;
+  if (f.hideStaleComponents && recipe.components.some(c => isItemStale(c.id))) return false;
+  if (f.hideLowVolume) {
+    const productVolPerHr = perHour(calc.resultVol);
+    if (productVolPerHr == null || productVolPerHr < 1) return false;
+  }
+  if (f.favoritesOnly && !state.favorites.has(recipe.key)) return false;
+  return true;
+}
+
+// Sort a { recipe, calc } list in place by the active Sort-by option. Shared
+// by the real-time and Experimental grids.
+function sortRecipeList(items) {
+  const f = state.filters;
+  if (f.sort === "recommended") scoreRecommended(items);
   const sortFns = {
     "recommended": (a, b) => (b._recScore ?? -Infinity) - (a._recScore ?? -Infinity),
     "margin-desc": (a, b) => (b.calc.margin ?? -Infinity) - (a.calc.margin ?? -Infinity),
@@ -1359,8 +1364,12 @@ function applyFilters(items) {
     "daily-desc":  (a, b) => ((b.calc.margin ?? 0) * (b.calc.maxFlips ?? 0)) - ((a.calc.margin ?? 0) * (a.calc.maxFlips ?? 0)),
     "name":        (a, b) => a.recipe.name.localeCompare(b.recipe.name),
   };
-  out.sort(sortFns[f.sort] || sortFns["recommended"]);
-  return out;
+  items.sort(sortFns[f.sort] || sortFns["recommended"]);
+  return items;
+}
+
+function applyFilters(items) {
+  return sortRecipeList(items.filter(({ recipe, calc }) => passesSidebarFilters(recipe, calc)));
 }
 
 function renderGrid() {
@@ -2449,6 +2458,16 @@ async function init() {
     const collapsed = layoutEl.classList.toggle("sidebar-collapsed");
     localStorage.setItem("osrs-combo-sidebar", collapsed ? "collapsed" : "expanded");
     sidebarToggle.title = collapsed ? "Expand filters" : "Collapse filters";
+  });
+
+  // Mobile menu toggle — collapses the header controls + sidebar into a
+  // dropdown so the card grid is the first thing visible on a phone.
+  const menuToggle = document.getElementById("menu-toggle");
+  const menuToggleIcon = menuToggle.querySelector(".menu-toggle-icon");
+  menuToggle.addEventListener("click", () => {
+    const open = document.body.classList.toggle("filters-open");
+    menuToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    menuToggleIcon.textContent = open ? "✕" : "☰";
   });
 
   // Browsers restore <input>/<select>/checkbox values on reload, but the

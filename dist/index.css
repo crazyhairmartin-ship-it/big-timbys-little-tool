@@ -74,7 +74,27 @@ header {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
+
+/* Mobile-only button that collapses the header controls + sidebar into a
+   dropdown. Hidden on desktop; revealed by the max-width media query. */
+.menu-toggle {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-2);
+  color: var(--text-1);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.menu-toggle:hover { background: var(--bg-3); color: var(--text-0); }
+.menu-toggle-icon { font-size: 15px; line-height: 1; }
 
 .smithing, .strategy {
   display: flex;
@@ -709,6 +729,7 @@ header {
   gap: 10px;
   position: relative;
   z-index: 1;
+  padding-right: 70px;   /* reserve room for the absolutely-positioned .card-badges */
 }
 
 .card-icon {
@@ -1254,7 +1275,23 @@ footer {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 880px) {
-  header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+    position: static;   /* a tall sticky bar would dominate a phone screen */
+  }
+  .menu-toggle { display: inline-flex; }
+  .header-controls { width: 100%; }
+  .strategy, .smithing { flex: 1 1 100%; justify-content: space-between; }
+  .strategy select { flex: 1; min-width: 0; }
+  /* Header controls + sidebar collapse into a dropdown behind .menu-toggle. */
+  .header-controls,
+  .sidebar { display: none; }
+  .sidebar-toggle { display: none; }   /* the desktop rail collapse — N/A on mobile */
+  body.filters-open .header-controls { display: flex; }
+  body.filters-open .sidebar { display: flex; }
   .layout {
     grid-template-columns: 1fr;
     min-height: 0;
@@ -1267,6 +1304,14 @@ footer {
     padding: 12px 16px 18px;
   }
   .grid { padding: 16px; }
+  /* Touch has no hover to reveal the favorite star — keep it visible, and
+     give it a finger-sized tap target. */
+  .card-star {
+    opacity: 1;
+    padding: 9px 12px;
+    margin-top: 0;
+    align-self: center;
+  }
 }
 
 @media (max-width: 480px) {

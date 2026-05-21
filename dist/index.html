@@ -29,7 +29,12 @@
     <h1>Big Timby's Little Tool</h1>
     <span class="tagline">Live profit on every tradeable combination item · GE tax included</span>
   </div>
-  <div class="header-controls">
+  <button id="menu-toggle" class="menu-toggle" type="button"
+          aria-expanded="false" aria-controls="header-controls">
+    <span class="menu-toggle-icon">☰</span>
+    <span class="menu-toggle-label">Filters &amp; settings</span>
+  </button>
+  <div class="header-controls" id="header-controls">
     <label class="strategy">
       Supplies
       <select id="supply-strategy">
