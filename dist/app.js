@@ -1275,6 +1275,12 @@ function renderCard(recipe, calc) {
     if (lim != null) ttBits.push(`GE buy limit: ${lim.toLocaleString()} per 4h`);
     if (ttBits.length) r.title = `${m?.name || `#${c.id}`}\n${ttBits.join("\n")}`;
   }
+  if (recipe.supplies && recipe.supplies.length) {
+    const supplyRow = row(comp, { label: "Supplies", value: fmtGp(calc.suppliesCost) });
+    supplyRow.title = recipe.supplies
+      .map(s => `${s.qty}× ${state.mapping[s.id]?.name || "#" + s.id}`)
+      .join(" · ");
+  }
   if (recipe.extraCost) row(comp, { label: "Runes/extras", value: fmtGp(recipe.extraCost) });
   if (recipe.repairBase) row(comp, { cls: "repair", label: `Repair @ ${state.smithing}`, value: fmtGp(calc.repairCost) });
   row(comp, { cls: "tax", label: "GE tax", value: `-${fmtGp(calc.geTax)}` });
@@ -1792,6 +1798,7 @@ function renderRecipeStats(recipe) {
     ...(SKILL_REQS[recipe.key] ? [detailRow("Skill to craft", SKILL_REQS[recipe.key], { cls: "v-skill" })] : []),
     detailRow(sellLbl, fmtGp(calc.revenue), { cls: sellSideClass }),
     detailRow(supplyLbl, fmtGp(calc.componentCost), { cls: "v-supply" }),
+    ...(calc.suppliesCost ? [detailRow("Supplies", fmtGp(calc.suppliesCost), { cls: "v-supply" })] : []),
     ...(calc.repairCost ? [detailRow(`Repair @ ${state.smithing} smithing`, fmtGp(calc.repairCost), { cls: "v-gold" })] : []),
     detailRow("Total cost", fmtGp(calc.totalCost), { strong: true, cls: "v-cost" }),
     detailRow("GE tax (2% capped 5M)", `-${fmtGp(calc.geTax)}`, { cls: "v-tax" }),
