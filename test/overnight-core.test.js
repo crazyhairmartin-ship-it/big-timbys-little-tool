@@ -266,3 +266,31 @@ test("predictPrices honors the baselineDays argument", () => {
   assert.ok(aShort.predBuy > aLong.predBuy,
     `analyzeItem must forward baselineDays: ${aShort.predBuy} vs ${aLong.predBuy}`);
 });
+
+test("backtestParams scores a perfectly repeating series with near-zero error", () => {
+  // 20 days; every day low 100 at hour 2, high 130 at hour 14, 115 otherwise.
+  const series = [];
+  const start = Date.UTC(2026, 0, 1, 0) / 1000;
+  for (let d = 0; d < 20; d++) {
+    for (let h = 0; h < 24; h++) {
+      const price = h === 2 ? 100 : h === 14 ? 130 : 115;
+      series.push({ timestamp: start + (d * 24 + h) * 3600, avgHighPrice: price, avgLowPrice: price });
+    }
+  }
+  const res = core.backtestParams(series, { baselineDays: 3, trendDiscount: 0 }, () => 0);
+  assert.ok(res.samples > 0, `expected scored test days, got ${res.samples}`);
+  assert.ok(res.error != null && res.error < 0.05, `expected near-zero error, got ${res.error}`);
+});
+
+test("backtestParams returns no samples when history is below OC_MIN_DAYS", () => {
+  const series = [];
+  const start = Date.UTC(2026, 0, 1, 0) / 1000;
+  for (let d = 0; d < 5; d++) {                      // 5 days < OC_MIN_DAYS (10)
+    for (let h = 0; h < 24; h++) {
+      series.push({ timestamp: start + (d * 24 + h) * 3600, avgHighPrice: 115, avgLowPrice: 115 });
+    }
+  }
+  const res = core.backtestParams(series, { baselineDays: 3, trendDiscount: 0 }, () => 0);
+  assert.strictEqual(res.samples, 0);
+  assert.strictEqual(res.error, null);
+});

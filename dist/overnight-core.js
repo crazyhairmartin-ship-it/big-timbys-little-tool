@@ -243,6 +243,52 @@ function mergeSeries(recorded, live) {
   return [...byTs.values()].sort((a, b) => a.timestamp - b.timestamp);
 }
 
+// Walk-forward backtest of one item's series under a parameter set
+// { baselineDays, trendDiscount }. For each day that has at least OC_MIN_DAYS
+// of history before it, predicts that day's buy/sell spread using only the
+// prior days, then compares it to the day's actual prices at the predicted
+// hours. Returns { error, samples }: error is the mean relative gap between
+// predicted and realized spread (null when nothing was scorable).
+function backtestParams(series, params, taxFn) {
+  const byDay = new Map();                       // dayKey -> points[]
+  for (const p of series) {
+    const key = ocDayKey(p.timestamp);
+    let arr = byDay.get(key);
+    if (!arr) { arr = []; byDay.set(key, arr); }
+    arr.push(p);
+  }
+  const days = [...byDay.keys()].sort();         // YYYY-MM-DD sorts chronologically
+  const prior = [];
+  let errSum = 0, samples = 0;
+  for (let i = 0; i < days.length; i++) {
+    if (i >= OC_MIN_DAYS) {
+      const windows = extremeHours(hourlyProfile(prior));
+      const buyHour = windows.buyHours[0], sellHour = windows.sellHours[0];
+      if (buyHour != null && sellHour != null) {
+        const { predBuy, predSell } = predictPrices(prior, windows, params.baselineDays);
+        if (predBuy != null && predSell != null && predBuy > 0) {
+          const trend = priceTrend(prior);
+          const predSellAdj = predSell * (1 + params.trendDiscount * Math.min(0, trend));
+          const predictedSpread = predSellAdj - taxFn(predSellAdj) - predBuy;
+          let actualBuy = null, actualSell = null;
+          for (const p of byDay.get(days[i])) {
+            const h = new Date(p.timestamp * 1000).getUTCHours();
+            if (h === buyHour) actualBuy = ocLowPrice(p);
+            if (h === sellHour) actualSell = ocHighPrice(p);
+          }
+          if (actualBuy != null && actualSell != null && actualBuy > 0) {
+            const realizedSpread = actualSell - taxFn(actualSell) - actualBuy;
+            errSum += Math.abs(predictedSpread - realizedSpread) / predBuy;
+            samples += 1;
+          }
+        }
+      }
+    }
+    prior.push(...byDay.get(days[i]));
+  }
+  return { error: samples > 0 ? errSum / samples : null, samples };
+}
+
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
@@ -250,6 +296,6 @@ if (typeof module !== "undefined" && module.exports) {
     ocMidPrice, ocLowPrice, ocHighPrice, hourlyProfile,
     medianOf, windowPrices, recentBaseline, predictPrices,
     confidenceOf, predictedProfit, rankScore, analyzeItem,
-    extremeHours, priceTrend, dayFileToPoints, mergeSeries,
+    extremeHours, priceTrend, dayFileToPoints, mergeSeries, backtestParams,
   };
 }
