@@ -69,6 +69,7 @@ const RECIPES = [
 
   { key:"ancient-wyvern-shield", id:21634, name:"Ancient wyvern shield", cat:"Misc", components:[{id:2890,qty:1},{id:21637,qty:1}] },
   { key:"amulet-of-fury", id:6585, name:"Amulet of fury", cat:"Misc", components:[{id:6581,qty:1}], supplies:[{id:564,qty:1},{id:554,qty:20},{id:557,qty:20}] },
+  { key:"amulet-of-fury-craft", id:6585, name:"Amulet of fury (full craft)", cat:"Misc", components:[{id:6573,qty:1}], supplies:[{id:2357,qty:1},{id:1759,qty:1},{id:564,qty:1},{id:554,qty:20},{id:557,qty:20}] },
   { key:"bryophytas-staff-uncharged", id:22368, name:"Bryophyta's staff (uncharged)", cat:"Misc", components:[{id:1391,qty:1},{id:22372,qty:1}] },
   { key:"crystal-key", id:989, name:"Crystal key", cat:"Misc", components:[{id:987,qty:1},{id:985,qty:1}] },
   { key:"dragonfire-shield", id:11284, name:"Dragonfire shield", cat:"Misc", components:[{id:1540,qty:1},{id:11286,qty:1}] },
@@ -84,6 +85,8 @@ const RECIPES = [
   { key:"onyx-necklace", id:6577, name:"Onyx necklace", cat:"Onyx", components:[{id:2357,qty:1},{id:6573,qty:1}] },
   { key:"onyx-ring", id:6575, name:"Onyx ring", cat:"Onyx", components:[{id:6573,qty:1},{id:2357,qty:1}] },
   { key:"ring-of-stone", id:6583, name:"Ring of stone", cat:"Onyx", components:[{id:6575,qty:1}], supplies:[{id:564,qty:1},{id:554,qty:20},{id:557,qty:20}] },
+  { key:"ring-of-stone-craft", id:6583, name:"Ring of stone (full craft)", cat:"Onyx", components:[{id:6573,qty:1}], supplies:[{id:2357,qty:1},{id:564,qty:1},{id:554,qty:20},{id:557,qty:20}] },
+  { key:"berserker-necklace-craft", id:11128, name:"Berserker necklace (full craft)", cat:"Onyx", components:[{id:6573,qty:1}], supplies:[{id:2357,qty:1},{id:564,qty:1},{id:554,qty:20},{id:557,qty:20}] },
 
   { key:"heavy-ballista", id:19481, name:"Heavy ballista", cat:"Ranged", components:[{id:19607,qty:1},{id:19610,qty:1}] },
   { key:"incomplete-heavy-ballista", id:19598, name:"Incomplete heavy ballista", cat:"Ranged", components:[{id:19589,qty:1},{id:19592,qty:1}] },
@@ -164,6 +167,10 @@ const RECIPES = [
   { key:"zenyte-bracelet", id:19532, name:"Zenyte bracelet", cat:"Zenyte", components:[{id:2357,qty:1},{id:19493,qty:1}] },
   { key:"zenyte-necklace", id:19535, name:"Zenyte necklace", cat:"Zenyte", components:[{id:2357,qty:1},{id:19493,qty:1}] },
   { key:"zenyte-ring", id:19538, name:"Zenyte ring", cat:"Zenyte", components:[{id:2357,qty:1},{id:19493,qty:1}] },
+  { key:"ring-of-suffering-craft", id:19550, name:"Ring of suffering (full craft)", cat:"Zenyte", components:[{id:6573,qty:1},{id:19529,qty:1}], supplies:[{id:2357,qty:1},{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
+  { key:"necklace-of-anguish-craft", id:19547, name:"Necklace of anguish (full craft)", cat:"Zenyte", components:[{id:6573,qty:1},{id:19529,qty:1}], supplies:[{id:2357,qty:1},{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
+  { key:"tormented-bracelet-craft", id:19544, name:"Tormented bracelet (full craft)", cat:"Zenyte", components:[{id:6573,qty:1},{id:19529,qty:1}], supplies:[{id:2357,qty:1},{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
+  { key:"amulet-of-torture-craft", id:19553, name:"Amulet of torture (full craft)", cat:"Zenyte", components:[{id:6573,qty:1},{id:19529,qty:1}], supplies:[{id:2357,qty:1},{id:1759,qty:1},{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
 
   // --- GE Item Sets (bundle ↔ pieces, exchangeable at the Grand Exchange clerk) ---
   // Each bundle is a single tradeable item; flipping is buy bundle + sell pieces
@@ -419,6 +426,13 @@ const SKILL_REQS = {
   "zenyte-bracelet":             "95 Crafting",
   "zenyte-necklace":             "92 Crafting",
   "zenyte-ring":                 "89 Crafting",
+  "ring-of-suffering-craft":     "89 Crafting + 93 Magic",
+  "necklace-of-anguish-craft":   "92 Crafting + 93 Magic",
+  "tormented-bracelet-craft":    "95 Crafting + 93 Magic",
+  "amulet-of-torture-craft":     "98 Crafting + 93 Magic",
+  "amulet-of-fury-craft":        "90 Crafting + 87 Magic",
+  "ring-of-stone-craft":         "67 Crafting + 87 Magic",
+  "berserker-necklace-craft":    "82 Crafting + 87 Magic",
 };
 
 /* ---------------- Tag taxonomy ----------------
