@@ -363,6 +363,11 @@ const RECIPES = [
   { key:"large-dragon-keel-parts", id:32038, name:"Large dragon keel parts — via keel parts", cat:"Sailing", components:[{id:32017,qty:2}] },
   { key:"large-dragon-keel-parts-sheets", id:32038, name:"Large dragon keel parts — via metal sheets", cat:"Sailing", components:[{id:31996,qty:4}] },
   { key:"merchants-paint", id:32110, name:"Merchant's paint", cat:"Sailing", components:[{id:32090,qty:1},{id:32093,qty:1},{id:32087,qty:1},{id:32099,qty:1},{id:32096,qty:1}] },
+
+  // --- Oathplate armour: smithed from crushed infernal shale + oathplate shards ---
+  { key:"oathplate-helm", id:30750, name:"Oathplate helm", cat:"Oathplate", components:[{id:30848,qty:2520},{id:30765,qty:450}] },
+  { key:"oathplate-chest", id:30753, name:"Oathplate chest", cat:"Oathplate", components:[{id:30848,qty:2520},{id:30765,qty:450}] },
+  { key:"oathplate-legs", id:30756, name:"Oathplate legs", cat:"Oathplate", components:[{id:30848,qty:2520},{id:30765,qty:450}] },
 ];
 
 /* ---------------- Skill requirements ----------------
@@ -446,6 +451,9 @@ const SKILL_REQS = {
   "dragon-keel-parts":           "94 Smithing",
   "large-dragon-keel-parts":     "94 Smithing",
   "large-dragon-keel-parts-sheets": "94 Smithing",
+  "oathplate-helm":              "83 Smithing",
+  "oathplate-chest":             "83 Smithing",
+  "oathplate-legs":              "83 Smithing",
 };
 
 /* ---------------- Tag taxonomy ----------------
@@ -555,6 +563,7 @@ function tagsFor(r) {
   if (cat === "Dragon")         tags.add("Dragon");
   if (cat === "Toxic")          tags.add("Zulrah");
   if (cat === "Sailing")        tags.add("Sailing");
+  if (cat === "Oathplate")      tags.add("Oathplate");
   // Dragon keel parts are dragon-metal items — tag them Dragon as well as Sailing.
   if (cat === "Sailing" && /dragon keel/.test(n)) tags.add("Dragon");
   // Zulrah-related items (formerly "Toxic")
@@ -576,7 +585,7 @@ function tagsFor(r) {
   const TAG_RENAME = { "Godswords": "God Wars", "Decombine": "Breakdown" };
   const TAG_ALLOWED = new Set([
     "God Wars", "Nex", "Slayer", "Barrows", "Moons of Peril", "Masori",
-    "Dragon", "Zulrah", "Wilderness", "Sailing", "Shield", "Jewelry",
+    "Dragon", "Zulrah", "Wilderness", "Sailing", "Oathplate", "Shield", "Jewelry",
     "Repair", "Breakdown", "Item Set", "Other",
   ]);
   const out = new Set();
@@ -604,7 +613,7 @@ const TAG_ORDER = [
   "God Wars", "Nex", "Slayer",
   "Barrows", "Moons of Peril", "Masori",
   "Dragon", "Zulrah", "Wilderness",
-  "Sailing", "Shield", "Jewelry",
+  "Sailing", "Oathplate", "Shield", "Jewelry",
   "Repair", "Breakdown", "Item Set", "Other",
 ];
 const TAGS = TAG_ORDER.filter(t => RECIPES.some(r => r._tags.includes(t)));
