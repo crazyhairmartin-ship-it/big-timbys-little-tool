@@ -238,3 +238,27 @@ test("mergeSeries handles empty / missing inputs", () => {
   assert.deepStrictEqual(core.mergeSeries(null, null), []);
   assert.strictEqual(core.mergeSeries([{ timestamp: 1, avgHighPrice: 1, avgLowPrice: 1 }], null).length, 1);
 });
+
+test("predictPrices honors the baselineDays argument", () => {
+  // 14 days rising 100 -> 230 (+10/day, flat within each day). A short
+  // baseline window anchors to recent (higher) prices; a long one averages
+  // in older (lower) prices.
+  const series = [];
+  const start = Date.UTC(2026, 0, 1, 0) / 1000;
+  for (let d = 0; d < 14; d++) {
+    for (let h = 0; h < 24; h++) {
+      const price = 100 + d * 10;
+      series.push({ timestamp: start + (d * 24 + h) * 3600, avgHighPrice: price, avgLowPrice: price });
+    }
+  }
+  const windows = { buyHours: [2], sellHours: [14] };
+  const short = core.predictPrices(series, windows, 2);
+  const long  = core.predictPrices(series, windows, 10);
+  assert.ok(short.predBuy > long.predBuy,
+    `short baseline anchors higher on a rising series: ${short.predBuy} vs ${long.predBuy}`);
+  // Default argument reproduces the explicit OC_BASELINE_DAYS call.
+  assert.deepStrictEqual(core.predictPrices(series, windows),
+                         core.predictPrices(series, windows, core.OC_BASELINE_DAYS));
+  // analyzeItem accepts and forwards the new 5th argument.
+  assert.ok(core.analyzeItem("x", series, windows, () => 0, 2) != null);
+});

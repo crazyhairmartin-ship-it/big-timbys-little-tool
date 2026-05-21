@@ -85,9 +85,9 @@ function recentBaseline(series, days = OC_BASELINE_DAYS, priceFn = ocMidPrice) {
 // and get filled at the low); sell side uses avgHighPrice (you list to sell).
 // Each is a ratio — the chosen hours' median vs the item's overall median —
 // anchored to the recent baseline, so a trending item still predicts correctly.
-function predictPrices(series, windows) {
+function predictPrices(series, windows, baselineDays = OC_BASELINE_DAYS) {
   const predict = (hours, priceFn) => {
-    const baseline = recentBaseline(series, OC_BASELINE_DAYS, priceFn);
+    const baseline = recentBaseline(series, baselineDays, priceFn);
     const all = [];
     for (const p of series) {
       const x = priceFn(p);
@@ -155,9 +155,9 @@ function ocDistinctDays(series) {
 
 // Full per-item analysis. Returns null when history is too thin to trust.
 // taxFn(sellPrice) -> gp of GE tax on that sale.
-function analyzeItem(id, series, windows, taxFn) {
+function analyzeItem(id, series, windows, taxFn, baselineDays = OC_BASELINE_DAYS) {
   if (ocDistinctDays(series) < OC_MIN_DAYS) return null;
-  const { predBuy, predSell } = predictPrices(series, windows);
+  const { predBuy, predSell } = predictPrices(series, windows, baselineDays);
   if (predBuy == null || predSell == null || predBuy <= 0 || predSell <= 0) return null;
   const profit = predictedProfit(predBuy, predSell, taxFn);
   const profitPct = profit / predBuy;
