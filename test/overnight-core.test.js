@@ -294,3 +294,24 @@ test("backtestParams returns no samples when history is below OC_MIN_DAYS", () =
   assert.strictEqual(res.samples, 0);
   assert.strictEqual(res.error, null);
 });
+
+test("backtestParams exercises the trendDiscount path on a falling series", () => {
+  // 20 days falling ~5/day, with an intraday dip at hour 2 and peak at hour 14.
+  // A non-zero trendDiscount must shift the predicted sell on this downtrend,
+  // so the backtest score differs from the trendDiscount: 0 run.
+  const series = [];
+  const start = Date.UTC(2026, 0, 1, 0) / 1000;
+  for (let d = 0; d < 20; d++) {
+    const base = 400 - d * 5;
+    for (let h = 0; h < 24; h++) {
+      const price = h === 2 ? base - 20 : h === 14 ? base + 20 : base;
+      series.push({ timestamp: start + (d * 24 + h) * 3600, avgHighPrice: price, avgLowPrice: price });
+    }
+  }
+  const noTax = () => 0;
+  const r0 = core.backtestParams(series, { baselineDays: 3, trendDiscount: 0 }, noTax);
+  const r1 = core.backtestParams(series, { baselineDays: 3, trendDiscount: 1 }, noTax);
+  assert.ok(r0.samples > 0 && r1.samples > 0, "both runs should score days");
+  assert.notStrictEqual(r0.error, r1.error,
+    `trendDiscount must change the score on a trending series: ${r0.error} vs ${r1.error}`);
+});
