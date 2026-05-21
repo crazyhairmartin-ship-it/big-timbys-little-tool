@@ -37,6 +37,7 @@ const RECIPES = [
   // and cross-checked against the OSRS Wiki /mapping endpoint.
   // ====================================================================
   { key:"dragon-crossbow", id:21902, name:"Dragon crossbow", cat:"Dragon", components:[{id:21921,qty:1},{id:9438,qty:1}] },
+  { key:"dragon-crossbow-craft", id:21902, name:"Dragon crossbow (full craft)", cat:"Dragon", components:[{id:21918,qty:1}], supplies:[{id:1513,qty:1},{id:9438,qty:1}] },
   { key:"dragon-crossbow-u", id:21921, name:"Dragon crossbow (u)", cat:"Dragon", components:[{id:21952,qty:1},{id:21918,qty:1}] },
   { key:"dragon-hunter-lance", id:22978, name:"Dragon hunter lance", cat:"Dragon", components:[{id:22966,qty:1},{id:11889,qty:1}] },
   { key:"dragon-kiteshield", id:21895, name:"Dragon kiteshield", cat:"Dragon", components:[{id:1187,qty:1},{id:22097,qty:1},{id:22100,qty:1}] },
@@ -355,6 +356,13 @@ const RECIPES = [
   { key:"emh",  id:29010, name:"Eclipse moon helm",       cat:"Moons", components:[{id:29055,qty:1}], repairBase:1_500_000 },
   { key:"emc",  id:29004, name:"Eclipse moon chestplate", cat:"Moons", components:[{id:29049,qty:1}], repairBase:1_500_000 },
   { key:"emt",  id:29007, name:"Eclipse moon tassets",    cat:"Moons", components:[{id:29052,qty:1}], repairBase:1_500_000 },
+
+  // --- Sailing: ship parts & cosmetics ---
+  { key:"aquanite-hopper", id:32879, name:"Aquanite hopper", cat:"Sailing", components:[{id:32876,qty:1},{id:2359,qty:1}] },
+  { key:"dragon-keel-parts", id:32017, name:"Dragon keel parts", cat:"Sailing", components:[{id:31996,qty:2}] },
+  { key:"large-dragon-keel-parts", id:32038, name:"Large dragon keel parts — via keel parts", cat:"Sailing", components:[{id:32017,qty:2}] },
+  { key:"large-dragon-keel-parts-sheets", id:32038, name:"Large dragon keel parts — via metal sheets", cat:"Sailing", components:[{id:31996,qty:4}] },
+  { key:"merchants-paint", id:32110, name:"Merchant's paint", cat:"Sailing", components:[{id:32090,qty:1},{id:32093,qty:1},{id:32087,qty:1},{id:32099,qty:1},{id:32096,qty:1}] },
 ];
 
 /* ---------------- Skill requirements ----------------
@@ -365,6 +373,7 @@ const RECIPES = [
 ---------------------------------------------------- */
 const SKILL_REQS = {
   "dragon-crossbow":             "78 Fletching",
+  "dragon-crossbow-craft":       "78 Fletching",
   "dragon-crossbow-u":           "78 Fletching",
   "dragon-kiteshield":           "75 Smithing",
   "dragon-platebody":            "90 Smithing",
@@ -433,6 +442,10 @@ const SKILL_REQS = {
   "amulet-of-fury-craft":        "90 Crafting + 87 Magic",
   "ring-of-stone-craft":         "67 Crafting + 87 Magic",
   "berserker-necklace-craft":    "82 Crafting + 87 Magic",
+  "aquanite-hopper":             "60 Smithing",
+  "dragon-keel-parts":           "94 Smithing",
+  "large-dragon-keel-parts":     "94 Smithing",
+  "large-dragon-keel-parts-sheets": "94 Smithing",
 };
 
 /* ---------------- Tag taxonomy ----------------
@@ -487,6 +500,7 @@ function tagsFor(r) {
     if (/fury/.test(n))         tags.add("Jewelry");
     if (/wrath tiara/.test(n))  { tags.add("Jewelry"); tags.add("Magic"); }
     if (/bryophyta/.test(n))    { tags.add("Weapon"); tags.add("Magic"); }
+    if (/malediction|odium/.test(n)) tags.add("Wilderness");  // wards built from Wilderness (revenant) shards
   }
   if (cat === "Top-tier") {
     if (/kodai/.test(n))         { tags.add("Weapon"); tags.add("Magic"); }
@@ -532,7 +546,6 @@ function tagsFor(r) {
 
   // --- Theme / source tags (kept alongside the broad slot/class tags) ---
   if (cat === "Godswords")     tags.add("Godswords");
-  if (cat === "Spirit Shields") tags.add("Spirit Shields");
   if (cat === "Masori")         tags.add("Masori");
   if (cat === "Torva")          tags.add("Nex");
   if (cat === "Barrows")        tags.add("Barrows");
@@ -541,8 +554,9 @@ function tagsFor(r) {
   if (cat === "Onyx")           tags.add("Onyx");
   if (cat === "Dragon")         tags.add("Dragon");
   if (cat === "Toxic")          tags.add("Zulrah");
-  // Spirit shield decombines logically belong to Spirit Shields too
-  if (/sigil ←|spirit shield/.test(n)) tags.add("Spirit Shields");
+  if (cat === "Sailing")        tags.add("Sailing");
+  // Dragon keel parts are dragon-metal items — tag them Dragon as well as Sailing.
+  if (cat === "Sailing" && /dragon keel/.test(n)) tags.add("Dragon");
   // Zulrah-related items (formerly "Toxic")
   if (/zulrah/.test(n) || /toxic|serpentine/.test(n)) tags.add("Zulrah");
 
@@ -562,7 +576,7 @@ function tagsFor(r) {
   const TAG_RENAME = { "Godswords": "God Wars", "Decombine": "Breakdown" };
   const TAG_ALLOWED = new Set([
     "God Wars", "Nex", "Slayer", "Barrows", "Moons of Peril", "Masori",
-    "Dragon", "Zulrah", "Wilderness", "Spirit Shields", "Shield", "Jewelry",
+    "Dragon", "Zulrah", "Wilderness", "Sailing", "Shield", "Jewelry",
     "Repair", "Breakdown", "Item Set", "Other",
   ]);
   const out = new Set();
@@ -575,7 +589,7 @@ function tagsFor(r) {
   if (r.components.some(c => c.id === 11791)) godwars = true;
   if (godwars) out.add("God Wars");
   // Slayer: boot upgrades from slayer bosses, plus the hydra-claw lance.
-  if (cat === "Upgrade boots" || r.key === "dragon-hunter-lance") out.add("Slayer");
+  if (cat === "Upgrade boots" || r.key === "dragon-hunter-lance" || r.key === "aquanite-hopper") out.add("Slayer");
   // The Dragon hunter lance is a God Wars / Slayer weapon, not a Dragon-themed item.
   if (r.key === "dragon-hunter-lance") out.delete("Dragon");
   out.delete("Other");
@@ -590,7 +604,7 @@ const TAG_ORDER = [
   "God Wars", "Nex", "Slayer",
   "Barrows", "Moons of Peril", "Masori",
   "Dragon", "Zulrah", "Wilderness",
-  "Spirit Shields", "Shield", "Jewelry",
+  "Sailing", "Shield", "Jewelry",
   "Repair", "Breakdown", "Item Set", "Other",
 ];
 const TAGS = TAG_ORDER.filter(t => RECIPES.some(r => r._tags.includes(t)));
@@ -616,7 +630,7 @@ const state = {
     hideStaleComponents: false,
     hideLowVolume: false,
     favoritesOnly: false,
-    activeCats: new Set(),
+    activeCats: new Set(TAGS),  // every tag on by default — deselect a chip to hide that type
     buyHourStart: 0, buyHourEnd: 23,
     sellHourStart: 0, sellHourEnd: 23,
     maxSlots: null,       // max distinct components per craft; null = no limit
@@ -1054,12 +1068,14 @@ function renderCategories() {
   const active = state.filters.activeCats;
 
   const grid = el("div", { class: "cat-grid" });
-  const clearBtn = el("button", { class: "cat-clear", text: "Clear tags" });
+  const selectAllBtn = el("button", { class: "cat-btn", text: "Select all" });
+  const clearBtn = el("button", { class: "cat-btn", text: "Clear" });
 
   const refresh = () => {
     for (const chip of grid.children) {
       chip.classList.toggle("active", active.has(chip.dataset.tag));
     }
+    selectAllBtn.hidden = active.size === CATEGORIES.length;
     clearBtn.hidden = active.size === 0;
   };
 
@@ -1078,10 +1094,11 @@ function renderCategories() {
     grid.appendChild(chip);
   }
 
-  clearBtn.hidden = active.size === 0;
+  selectAllBtn.onclick = () => { for (const c of CATEGORIES) active.add(c); refresh(); renderGrid(); };
   clearBtn.onclick = () => { active.clear(); refresh(); renderGrid(); };
 
-  container.append(grid, clearBtn);
+  container.append(grid, el("div", { class: "cat-actions" }, selectAllBtn, clearBtn));
+  refresh();
 }
 
 function sparkline(series) {
@@ -1365,8 +1382,9 @@ function scoreRecommended(items) {
 function passesSidebarFilters(recipe, calc) {
   const f = state.filters;
   const q = f.search.toLowerCase().trim();
-  // OR logic: include if recipe has ANY of the active tags
-  if (f.activeCats.size && !recipe._tags.some(t => f.activeCats.has(t))) return false;
+  // Tags are all selected by default; a recipe shows while ANY of its tags
+  // is still selected. Deselecting every tag hides everything.
+  if (!recipe._tags.some(t => f.activeCats.has(t))) return false;
   if (f.maxSlots !== null && recipe.components.length > f.maxSlots) return false;
   if (q && !recipe.name.toLowerCase().includes(q)) return false;
   if (f.profitableOnly && !(calc.margin > 0)) return false;
@@ -2413,7 +2431,7 @@ async function init() {
     for (const r of RECIPES) {
       const c = calcMargin(r);
       if (!c.allPresent) continue;
-      if (f.activeCats.size && !r._tags.some(t => f.activeCats.has(t))) continue;
+      if (!r._tags.some(t => f.activeCats.has(t))) continue;
       if (f.maxSlots !== null && r.components.length > f.maxSlots) continue;
       if (q && !r.name.toLowerCase().includes(q)) continue;
       if (f.profitableOnly && !(c.margin > 0)) continue;

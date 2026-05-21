@@ -446,9 +446,9 @@ header {
   color: #1a1205;
   border-color: var(--gold);
 }
-.cat-clear {
-  margin-top: 8px;
-  width: 100%;
+.cat-actions { display: flex; gap: 6px; margin-top: 8px; }
+.cat-btn {
+  flex: 1;
   padding: 5px;
   font: inherit;
   font-size: 11px;
@@ -458,7 +458,7 @@ header {
   border-radius: 6px;
   cursor: pointer;
 }
-.cat-clear:hover { color: var(--text-0); }
+.cat-btn:hover { color: var(--text-0); }
 
 /* ---------- Main + view toggle ---------- */
 .main { display: flex; flex-direction: column; min-width: 0; }
