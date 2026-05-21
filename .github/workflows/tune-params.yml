@@ -1,0 +1,52 @@
+name: Tune prediction parameters
+
+# Weekly self-tuning: backtests the Experimental prediction model over a grid
+# of parameter values and publishes the best set as tuned-params.json on the
+# `price-history` branch. dist/overnight.js reads that file at analysis time.
+#
+# Security note: no untrusted event input is used in any run: step — only
+# `date`, git, node, and the committed script.
+
+on:
+  schedule:
+    - cron: "30 4 * * 0"   # weekly, Sunday 04:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: record-prices  # shared with the recorder — never commit to price-history together
+
+jobs:
+  tune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (default branch — script, recipe data, overnight-core)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run the backtest grid-search
+        run: node scripts/tune-params.mjs "$RUNNER_TEMP/tuned-params.json"
+
+      - name: Publish tuned-params.json to the price-history branch
+        run: |
+          if [ ! -f "$RUNNER_TEMP/tuned-params.json" ]; then
+            echo "no result written (history too thin) — nothing to publish"
+            exit 0
+          fi
+          git config user.name "price-recorder"
+          git config user.email "noreply@github.com"
+          if git show-ref --verify --quiet refs/remotes/origin/price-history; then
+            git checkout price-history
+          else
+            echo "price-history branch does not exist yet — run the recorder first"
+            exit 1
+          fi
+          cp "$RUNNER_TEMP/tuned-params.json" ./tuned-params.json
+          git add tuned-params.json
+          if git commit -m "Tune prediction parameters ($(date -u +'%Y-%m-%d'))"; then
+            git push origin price-history
+          else
+            echo "nothing to commit"
+          fi
