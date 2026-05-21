@@ -941,7 +941,7 @@ function calcMargin(recipe, predMap) {
   let suppliesCost = 0;
   for (const s of recipe.supplies || []) {
     const sp = supplyPrice(state.prices[s.id]);
-    if (!sp) { allPresent = false; break; }
+    if (!sp) { allPresent = false; suppliesCost = 0; break; }
     suppliesCost += sp * s.qty;
   }
   const rc = repairCost(recipe.repairBase, state.smithing);
