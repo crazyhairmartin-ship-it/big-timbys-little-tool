@@ -18,6 +18,11 @@ const OVERNIGHT_STORE_BASE =
   "https://raw.githubusercontent.com/crazyhairmartin-ship-it/big-timbys-little-tool/price-history/prices/";
 const OVERNIGHT_STORE_DAYS = 90;    // how far back to probe (matches recorder retention)
 
+// Self-tuned model parameters, published to the price-history branch root by
+// the weekly tune-params workflow. Absent/unreadable -> the app uses defaults.
+const OVERNIGHT_TUNED_PARAMS_URL =
+  "https://raw.githubusercontent.com/crazyhairmartin-ship-it/big-timbys-little-tool/price-history/tuned-params.json";
+
 // In-memory analysis result; also mirrored to localStorage.
 let overnightData = null; // { analysedAt, predMap, analysed, skipped } — see runOvernightAnalysis
 let overnightRunning = false;
@@ -55,6 +60,23 @@ async function overnightFetchSeries(id) {
   try {
     const series = await fetchTimeseries(id, "1h");
     return Array.isArray(series) && series.length ? series : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Fetch the self-tuned parameters. Returns { baselineDays, trendDiscount } or
+// null on any failure (missing file, network error, malformed or out-of-range
+// values) — the caller then falls back to the built-in defaults.
+async function overnightFetchTunedParams() {
+  try {
+    const r = await fetch(OVERNIGHT_TUNED_PARAMS_URL);
+    if (!r.ok) return null;
+    const p = await r.json();
+    const bd = p && p.baselineDays, td = p && p.trendDiscount;
+    if (typeof bd !== "number" || bd < 1 || bd > 60) return null;
+    if (typeof td !== "number" || td < 0 || td > 1) return null;
+    return { baselineDays: bd, trendDiscount: td };
   } catch (_) {
     return null;
   }
@@ -115,7 +137,9 @@ async function runOvernightAnalysis(onProgress) {
     return vol != null && vol >= OVERNIGHT_MIN_VOLUME;
   });
   if (onProgress) onProgress({ done: 0, total: candidates.length });
-  const store = await overnightFetchStore();
+  const [tuned, store] = await Promise.all([overnightFetchTunedParams(), overnightFetchStore()]);
+  const baselineDays = tuned ? tuned.baselineDays : OC_BASELINE_DAYS;
+  const trendDiscount = tuned ? tuned.trendDiscount : OVERNIGHT_TREND_DISCOUNT;
   const seriesById = new Map();
   let done = 0;
   await overnightThrottle(candidates, OVERNIGHT_FETCH_CONCURRENCY, async (id) => {
@@ -135,12 +159,12 @@ async function runOvernightAnalysis(onProgress) {
   let analysed = 0;
   for (const [id, series] of seriesById) {
     const windows = extremeHours(hourlyProfile(series));
-    const a = analyzeItem(id, series, windows, geTax);
+    const a = analyzeItem(id, series, windows, geTax, baselineDays);
     if (!a) continue;
     const trend = priceTrend(series);
     predMap[id] = {
       overnight: a.predBuy,
-      daytime: a.predSell * (1 + OVERNIGHT_TREND_DISCOUNT * Math.min(0, trend)),
+      daytime: a.predSell * (1 + trendDiscount * Math.min(0, trend)),
       confidence: a.confidence,
       buyHour: windows.buyHours[0] ?? null,
       sellHour: windows.sellHours[0] ?? null,
