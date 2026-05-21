@@ -308,6 +308,12 @@ function overnightRecipeCard(recipe, calc) {
     const buyHint = "buy " + overnightLocalHour(overnightData.predMap[c.id] && overnightData.predMap[c.id].buyHour);
     row(comp, { label: cName, value, hint: buyHint });
   }
+  if (recipe.supplies && recipe.supplies.length) {
+    const supplyRow = row(comp, { label: "Supplies", value: fmtGp(calc.suppliesCost) });
+    supplyRow.title = recipe.supplies
+      .map(s => `${s.qty}× ${state.mapping[s.id]?.name || "#" + s.id}`)
+      .join(" · ");
+  }
   row(comp, { cls: "tax", label: "GE tax", value: "-" + fmtGp(calc.geTax) });
   const sellLabel = calc.resultQty > 1 ? "Sell price ×" + calc.resultQty : "Sell price";
   const sellHint = "sell " + overnightLocalHour(overnightData.predMap[recipe.id] && overnightData.predMap[recipe.id].sellHour);
