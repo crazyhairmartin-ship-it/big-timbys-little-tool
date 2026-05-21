@@ -259,6 +259,10 @@ test("predictPrices honors the baselineDays argument", () => {
   // Default argument reproduces the explicit OC_BASELINE_DAYS call.
   assert.deepStrictEqual(core.predictPrices(series, windows),
                          core.predictPrices(series, windows, core.OC_BASELINE_DAYS));
-  // analyzeItem accepts and forwards the new 5th argument.
-  assert.ok(core.analyzeItem("x", series, windows, () => 0, 2) != null);
+  // analyzeItem forwards the 5th argument through to predictPrices — a short
+  // vs long baseline must yield a different predicted buy price.
+  const aShort = core.analyzeItem("x", series, windows, () => 0, 2);
+  const aLong  = core.analyzeItem("x", series, windows, () => 0, 10);
+  assert.ok(aShort.predBuy > aLong.predBuy,
+    `analyzeItem must forward baselineDays: ${aShort.predBuy} vs ${aLong.predBuy}`);
 });
