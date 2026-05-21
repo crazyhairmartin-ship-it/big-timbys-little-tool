@@ -1094,14 +1094,57 @@ function renderCategories() {
       text: cat,
       attrs: { "data-tag": cat },
     });
-    chip.onclick = () => {
-      if (active.has(cat)) active.delete(cat);
-      else active.add(cat);
-      refresh();
-      renderGrid();
-    };
+    chip.title = `Click: show only ${cat}  ·  Double-click: hide ${cat}`;
     grid.appendChild(chip);
   }
+
+  // Single click isolates a tag; double-click hides it — or, when that tag is
+  // the only one shown, reveals all tags again. Detection is manual rather
+  // than via the native dblclick event: isolating a tag re-renders the grid
+  // and the chip can shift a few pixels, so the two clicks of a double need
+  // not land on the same element. The chip is identified from the FIRST click.
+  let lastTag = null, lastTime = 0, snapshot = null, resetTimer = null;
+  const GESTURE_MS = 400;
+
+  const isolate = (cat) => {
+    active.clear();
+    active.add(cat);
+    refresh();
+    renderGrid();
+  };
+  const hideOrReveal = (cat, base) => {
+    active.clear();
+    if (base.size === 1 && base.has(cat)) {
+      for (const c of CATEGORIES) active.add(c);   // only that tag was shown → reveal all
+    } else {
+      for (const t of base) active.add(t);
+      active.delete(cat);
+    }
+    refresh();
+    renderGrid();
+  };
+
+  grid.addEventListener("click", (e) => {
+    const chip = e.target.closest(".cat-chip");
+    const tag = chip ? chip.dataset.tag : null;
+    const now = Date.now();
+    // A second click within the window — on the same chip, or one that missed
+    // the shifted chip and landed on grid padding — completes a double-click.
+    if (lastTag !== null && now - lastTime < GESTURE_MS && (tag === lastTag || tag === null)) {
+      clearTimeout(resetTimer);
+      hideOrReveal(lastTag, snapshot || new Set(active));
+      lastTag = null;
+      snapshot = null;
+      return;
+    }
+    if (tag === null) return;   // a click on empty grid space — ignore
+    lastTag = tag;
+    lastTime = now;
+    snapshot = new Set(active);
+    isolate(tag);               // apply immediately — a following double-click rolls it back
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(() => { lastTag = null; snapshot = null; }, GESTURE_MS);
+  });
 
   selectAllBtn.onclick = () => { for (const c of CATEGORIES) active.add(c); refresh(); renderGrid(); };
   clearBtn.onclick = () => { active.clear(); refresh(); renderGrid(); };

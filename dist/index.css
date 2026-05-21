@@ -293,7 +293,10 @@ header {
   align-items: stretch;
   gap: 6px;
 }
-.cost-range > label { display: flex; gap: 6px; align-items: baseline; }
+/* Stack the three parts on their own lines — heading, value range, count —
+   so the block is a constant 3 lines tall. Inline wrapping used to change
+   its height and shift every filter control (histogram, tag grid) below. */
+.cost-range > label { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
 #cost-range-readout {
   color: var(--text-0);
   font-size: 12px;
@@ -301,6 +304,7 @@ header {
   text-transform: none;
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .cost-range-count {
@@ -309,7 +313,7 @@ header {
   text-transform: none;
   letter-spacing: 0;
   font-weight: 500;
-  margin-left: 4px;
+  white-space: nowrap;
 }
 
 /* Histogram of item count per cost bucket — sits above the slider */
