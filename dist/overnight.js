@@ -74,7 +74,7 @@ async function overnightFetchTunedParams() {
     if (!r.ok) return null;
     const p = await r.json();
     const bd = p && p.baselineDays, td = p && p.trendDiscount;
-    if (typeof bd !== "number" || bd < 1 || bd > 60) return null;
+    if (typeof bd !== "number" || !Number.isInteger(bd) || bd < 1 || bd > 60) return null;
     if (typeof td !== "number" || td < 0 || td > 1) return null;
     return { baselineDays: bd, trendDiscount: td };
   } catch (_) {
