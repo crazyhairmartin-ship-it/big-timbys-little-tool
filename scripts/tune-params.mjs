@@ -58,6 +58,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const appSrc = readFileSync(join(here, "../dist/app.js"), "utf8");
 const recipesLiteral = appSrc.match(/const RECIPES = \[[\s\S]*?\n\];/)[0];
 const ids = [...new Set([...recipesLiteral.matchAll(/\bid:(\d+)/g)].map(m => Number(m[1])))];
+if (!ids.length) {
+  console.error("tune: no item ids extracted from dist/app.js — aborting");
+  process.exit(1);
+}
 
 // Recorded price-history store, fetched the same way the app fetches it.
 const storeById = new Map();
@@ -72,6 +76,8 @@ if (Array.isArray(index)) {
       arr.push(point);
     }
   });
+} else {
+  console.warn("tune: price-history store index unavailable — tuning on live /timeseries only");
 }
 
 // Per-item history: live /timeseries merged with the recorded store.
