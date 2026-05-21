@@ -1798,7 +1798,7 @@ function renderRecipeStats(recipe) {
     ...(SKILL_REQS[recipe.key] ? [detailRow("Skill to craft", SKILL_REQS[recipe.key], { cls: "v-skill" })] : []),
     detailRow(sellLbl, fmtGp(calc.revenue), { cls: sellSideClass }),
     detailRow(supplyLbl, fmtGp(calc.componentCost), { cls: "v-supply" }),
-    ...(calc.suppliesCost ? [detailRow("Supplies", fmtGp(calc.suppliesCost), { cls: "v-supply" })] : []),
+    ...(recipe.supplies?.length ? [detailRow("Supplies", fmtGp(calc.suppliesCost), { cls: "v-supply" })] : []),
     ...(calc.repairCost ? [detailRow(`Repair @ ${state.smithing} smithing`, fmtGp(calc.repairCost), { cls: "v-gold" })] : []),
     detailRow("Total cost", fmtGp(calc.totalCost), { strong: true, cls: "v-cost" }),
     detailRow("GE tax (2% capped 5M)", `-${fmtGp(calc.geTax)}`, { cls: "v-tax" }),
