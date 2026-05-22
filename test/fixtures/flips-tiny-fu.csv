@@ -1,0 +1,10 @@
+# Displaying trades for selected time interval: All
+name,date,quantity,price,state
+Bandos hilt,2026-05-22 10:00 AM,1,17800000,BOUGHT
+Godsword blade,2026-05-22 10:01 AM,1,14200000,BOUGHT
+Bandos godsword,2026-05-22 11:00 AM,1,33000000,SOLD
+# Total profit: 0
+
+Magic sapling,2026-05-21 09:00 AM,125,93359,CANCELLED_BUY
+Magic sapling,2026-05-21 10:00 AM,125,93576,SOLD
+# Total profit: 27125
