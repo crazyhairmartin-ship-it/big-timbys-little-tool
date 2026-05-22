@@ -107,3 +107,23 @@ test("parseFlippingUtilities computes tax on sells, zero on buys", () => {
   assert.strictEqual(events[1].tax, 0);
   assert.strictEqual(events[2].tax, 356000);
 });
+
+test("detectFormat recognises Flipping Utilities by leading comment", () => {
+  assert.strictEqual(core.detectFormat(fixture("flips-tiny-fu.csv")), "fu");
+});
+
+test("detectFormat recognises Copilot by header line", () => {
+  assert.strictEqual(core.detectFormat(fixture("flips-tiny-copilot.csv")), "copilot");
+});
+
+test("detectFormat returns null on unknown content", () => {
+  assert.strictEqual(core.detectFormat("hello,world\n1,2\n"), null);
+  assert.strictEqual(core.detectFormat(""), null);
+});
+
+test("detectFormat skips leading blank lines and BOMs", () => {
+  assert.strictEqual(
+    core.detectFormat("﻿\n\nTimestamp,Account,Side,Item,Quantity,Paid/Received,Tax,Price ea.,Part of Flip\n"),
+    "copilot"
+  );
+});

@@ -93,7 +93,21 @@ function parseFlippingUtilities(text, accountName) {
   return events;
 }
 
+function detectFormat(text) {
+  // Strip BOM, find the first non-blank line.
+  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
+  let first = "";
+  for (const l of lines) {
+    if (l.trim()) { first = l; break; }
+  }
+  if (!first) return null;
+  if (first.startsWith("#")) return "fu";
+  if (first.startsWith("Timestamp,Account,Side,Item")) return "copilot";
+  if (first === "name,date,quantity,price,state") return "fu"; // header-only FU file
+  return null;
+}
+
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat };
 }
