@@ -774,7 +774,9 @@ function staleChip(lastTs) {
 
 // Render a small inline trend chip. Used both in the card head (recipe-level)
 // and inline in component breakdown rows (component-level).
-function trendChip(trend) {
+// buyerView inverts the chip colour: on a component row a falling price is
+// good (green) and a rising price is bad (red) — the opposite of the product.
+function trendChip(trend, buyerView = false) {
   const arrow = ({
     "spike":         "▲▲",
     "crash":         "▼▼",
@@ -783,7 +785,7 @@ function trendChip(trend) {
   })[trend.kind];
   const sign = trend.pct >= 0 ? "+" : "";
   const chip = el("span", {
-    class: "trend-chip trend-" + trend.kind,
+    class: "trend-chip trend-" + trend.kind + (buyerView ? " trend-buy" : ""),
     text: `${arrow} ${sign}${trend.pct.toFixed(1)}%`,
   });
   chip.title = `5m avg ${sign}${trend.pct.toFixed(2)}% vs 1h avg`;
@@ -1343,7 +1345,7 @@ function renderCard(recipe, calc) {
     const compStale = isItemStale(c.id);
     const lastTs    = lastTradedSec(c.id);
     const nameChips = [];
-    if (compTrend) nameChips.push(trendChip(compTrend));
+    if (compTrend) nameChips.push(trendChip(compTrend, true));
     if (compStale) nameChips.push(staleChip(lastTs));
     const r = row(comp, {
       cls: compStale ? "comp-stale" : "",
