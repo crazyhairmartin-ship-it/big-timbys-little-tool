@@ -46,3 +46,64 @@ test("parseCopilot handles trailing newline and CRLF line endings", () => {
   const events = core.parseCopilot(csv);
   assert.strictEqual(events.length, 1);
 });
+
+test("parseFlippingUtilities maps all FU state values to (side, status)", () => {
+  const csv = [
+    "name,date,quantity,price,state",
+    "Coal,2026-05-22 10:00 AM,100,10,BOUGHT",
+    "Coal,2026-05-22 10:01 AM,100,12,SOLD",
+    "Coal,2026-05-22 10:02 AM,50,9,CANCELLED_BUY",
+    "Coal,2026-05-22 10:03 AM,50,13,CANCELLED_SELL",
+    "Coal,2026-05-22 10:04 AM,75,9,BUYING",
+    "Coal,2026-05-22 10:05 AM,75,13,SELLING",
+  ].join("\n");
+  const events = core.parseFlippingUtilities(csv, "TestAccount");
+  assert.strictEqual(events.length, 6);
+  assert.deepStrictEqual(events.map((e) => [e.side, e.status]), [
+    ["BUY", "complete"],
+    ["SELL", "complete"],
+    ["BUY", "cancelled"],
+    ["SELL", "cancelled"],
+    ["BUY", "pending"],
+    ["SELL", "pending"],
+  ]);
+  for (const e of events) {
+    assert.strictEqual(e.account, "TestAccount");
+    assert.strictEqual(e.source, "fu");
+  }
+});
+
+test("parseFlippingUtilities drops comment lines and blank lines", () => {
+  const events = core.parseFlippingUtilities(
+    fixture("flips-tiny-fu.csv"),
+    "Test"
+  );
+  assert.strictEqual(events.length, 5); // 3 from first block + 2 from second
+});
+
+test("parseFlippingUtilities parses 12-hour AM/PM dates as local time", () => {
+  const events = core.parseFlippingUtilities(
+    "name,date,quantity,price,state\nCoal,2026-05-22 12:00 PM,1,10,BOUGHT\n",
+    "Test"
+  );
+  const d = new Date(events[0].ts);
+  assert.strictEqual(d.getFullYear(), 2026);
+  assert.strictEqual(d.getMonth(), 4); // May = 4
+  assert.strictEqual(d.getDate(), 22);
+  assert.strictEqual(d.getHours(), 12);
+  assert.strictEqual(d.getMinutes(), 0);
+});
+
+test("parseFlippingUtilities computes tax on sells, zero on buys", () => {
+  // geTax: 2% of price * qty, capped at 5M per unit, exempt under 100gp.
+  const csv = [
+    "name,date,quantity,price,state",
+    "Coal,2026-05-22 10:00 AM,100,10,BOUGHT", // buy → 0
+    "Coal,2026-05-22 10:01 AM,100,12,SOLD",   // 12 < 100, exempt → 0
+    "Bandos hilt,2026-05-22 10:02 AM,1,17800000,SOLD", // 2% = 356000
+  ].join("\n");
+  const events = core.parseFlippingUtilities(csv, "Test");
+  assert.strictEqual(events[0].tax, 0);
+  assert.strictEqual(events[1].tax, 0);
+  assert.strictEqual(events[2].tax, 356000);
+});
