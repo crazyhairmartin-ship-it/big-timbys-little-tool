@@ -736,15 +736,14 @@ header {
   cursor: help;
   white-space: nowrap;
 }
-/* Per-component dip indicator, shown inline next to a dipping component name. */
-.dip-tag {
-  margin-left: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  color: #4ade80;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+/* A component currently dipping below its usual price — its row is highlighted
+   green, with an explanatory tooltip set in overnightRecipeCard. */
+.components .row.comp-dip {
+  background: rgba(74, 222, 128, 0.12);
+  border-radius: 4px;
+  cursor: help;
 }
+.components .row.comp-dip .name { color: #4ade80; }
 
 .card-cat-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 

@@ -374,7 +374,7 @@ function overnightRecipeCard(recipe, calc) {
 
   // Component breakdown
   const comp = el("div", { class: "components" });
-  const showDipTags = !!(recipeDip && recipeDip.flagged);
+  const showDips = !!(recipeDip && recipeDip.flagged);
   for (const c of recipe.components) {
     const cName = state.mapping[c.id]?.name || "#" + c.id;
     const price = overnightData.predMap[c.id]?.overnight;
@@ -383,10 +383,12 @@ function overnightRecipeCard(recipe, calc) {
       : "—";
     const buyHint = "buy " + overnightLocalHour(overnightData.predMap[c.id] && overnightData.predMap[c.id].buyHour);
     const dip = (overnightData.dipMap || {})[c.id];
-    const dipTag = (showDipTags && dip && dip.z <= OVERNIGHT_DIP_COMPONENT_Z)
-      ? el("span", { class: "dip-tag", text: "↓ " + Math.max(1, Math.round(dip.pctBelow * 100)) + "% low" })
-      : null;
-    row(comp, { label: cName, value, hint: buyHint, nameExtras: dipTag ? [dipTag] : [] });
+    const dipping = showDips && dip && dip.z <= OVERNIGHT_DIP_COMPONENT_Z;
+    const compRow = row(comp, { label: cName, value, hint: buyHint, cls: dipping ? "comp-dip" : "" });
+    if (dipping) {
+      const pct = Math.max(1, Math.round(dip.pctBelow * 100));
+      compRow.title = `${cName} is about ${pct}% below its usual price — cheaper than usual to buy right now.`;
+    }
   }
   if (recipe.supplies && recipe.supplies.length) {
     const supplyRow = row(comp, { label: "Supplies", value: fmtGp(calc.suppliesCost) });
