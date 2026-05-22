@@ -1420,10 +1420,20 @@ function scoreRecommended(items) {
                   it.recipe.components.some(c => isItemStale(c.id));
     if (stale) s *= 0.2;
     // A losing flip or one with missing prices can never be "recommended".
-    if (!it.calc.allPresent || !(it.calc.margin > 0)) s = -1;
-    // The blended score is 0–1, so a +1 bump floats every ≥50k-margin flip
-    // above every sub-50k one while the score still orders within each tier.
-    else if (it.calc.margin >= REC_MARGIN_PRIORITY) s += 1;
+    if (!it.calc.allPresent || !(it.calc.margin > 0)) {
+      s = -1;
+    } else {
+      // The blended score is 0–1, so a +1 bump floats every ≥50k-margin flip
+      // above every sub-50k one while the score still orders within each tier.
+      if (it.calc.margin >= REC_MARGIN_PRIORITY) s += 1;
+      // Component-dip bonus: a flagged buying opportunity is nudged up,
+      // proportional to dip strength and capped at +0.5. _dipAgg is set only
+      // on Experimental grid items (see overnightVisible), so the real-time
+      // Recommended ranking is unchanged.
+      if (it._dipAgg && it._dipAgg.flagged) {
+        s += Math.min(-it._dipAgg.aggZ, 2) * 0.25;
+      }
+    }
     it._recScore = s;
   }
 }
