@@ -7,6 +7,7 @@
 // Tunable constants.
 const OC_MIN_DAYS = 10;        // min distinct days of history to analyse an item
 const OC_BASELINE_DAYS = 3;    // recent window the prediction is anchored to
+const OC_DIP_MIN_DAYS = 5;     // min distinct days before a price-dip signal is trusted
 // Representative price for one timeseries point: mid of avg high/low.
 function ocMidPrice(point) {
   const h = point.avgHighPrice, l = point.avgLowPrice;
@@ -207,6 +208,38 @@ function priceTrend(series) {
   return (r - o) / o;
 }
 
+// Volatility-aware "is this unusually cheap right now" score for one item's
+// series. priceFn extracts the comparison price from a point (ocLowPrice for
+// the buy side). Returns { z, pctBelow, samples }:
+//   z        - the latest price's z-score vs the series mean (negative = below)
+//   pctBelow - (mean - latest) / mean, the human-readable "% below usual"
+//   samples  - count of priced points used
+// Returns null when the series spans fewer than OC_DIP_MIN_DAYS distinct days,
+// has a zero mean, or has zero variance (a flat series carries no dip signal).
+function priceDip(series, priceFn = ocLowPrice) {
+  const priced = [];
+  for (const p of series) {
+    const x = priceFn(p);
+    if (x != null) priced.push({ ts: p.timestamp, x });
+  }
+  if (!priced.length) return null;
+  const days = new Set();
+  for (const p of priced) days.add(ocDayKey(p.ts));
+  if (days.size < OC_DIP_MIN_DAYS) return null;
+  const n = priced.length;
+  const mean = priced.reduce((sum, p) => sum + p.x, 0) / n;
+  if (mean === 0) return null;
+  const variance = priced.reduce((sum, p) => sum + (p.x - mean) ** 2, 0) / n;
+  if (variance === 0) return null;
+  let current = priced[0];
+  for (const p of priced) if (p.ts > current.ts) current = p;
+  return {
+    z: (current.x - mean) / Math.sqrt(variance),
+    pctBelow: (mean - current.x) / mean,
+    samples: n,
+  };
+}
+
 // Convert one recorder day-file — { date:"YYYY-MM-DD", hours:{ H:{ id:[hi,lo] } } }
 // — into a flat list of { id, point } entries. Each `point` matches the wiki
 // /timeseries shape ({ timestamp, avgHighPrice, avgLowPrice }) with the
@@ -297,5 +330,6 @@ if (typeof module !== "undefined" && module.exports) {
     medianOf, windowPrices, recentBaseline, predictPrices,
     confidenceOf, predictedProfit, rankScore, analyzeItem,
     extremeHours, priceTrend, dayFileToPoints, mergeSeries, backtestParams,
+    priceDip, OC_DIP_MIN_DAYS,
   };
 }

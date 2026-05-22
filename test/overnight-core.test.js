@@ -315,3 +315,33 @@ test("backtestParams exercises the trendDiscount path on a falling series", () =
   assert.notStrictEqual(r0.error, r1.error,
     `trendDiscount must change the score on a trending series: ${r0.error} vs ${r1.error}`);
 });
+
+test("priceDip scores the latest price against the series mean", () => {
+  const day = (d) => Math.floor(Date.UTC(2026, 0, 1 + d) / 1000);
+  // Five distinct days; prices 120,110,100,90,80 -> mean 100, the latest
+  // (day 5) is 80. Population stddev = sqrt(1000/5) = sqrt(200).
+  const series = [120, 110, 100, 90, 80].map((p, d) => ({
+    timestamp: day(d), avgHighPrice: p, avgLowPrice: p,
+  }));
+  const dip = core.priceDip(series, core.ocLowPrice);
+  assert.ok(Math.abs(dip.z - (-20 / Math.sqrt(200))) < 1e-9);
+  assert.ok(Math.abs(dip.pctBelow - 0.2) < 1e-9);
+  assert.strictEqual(dip.samples, 5);
+});
+
+test("priceDip returns null for a flat series (no volatility)", () => {
+  const day = (d) => Math.floor(Date.UTC(2026, 0, 1 + d) / 1000);
+  const series = [0, 1, 2, 3, 4, 5].map((d) => ({
+    timestamp: day(d), avgHighPrice: 50, avgLowPrice: 50,
+  }));
+  assert.strictEqual(core.priceDip(series, core.ocLowPrice), null);
+});
+
+test("priceDip returns null when history spans too few days", () => {
+  const day = (d) => Math.floor(Date.UTC(2026, 0, 1 + d) / 1000);
+  // Four distinct days < OC_DIP_MIN_DAYS (5).
+  const series = [100, 90, 110, 80].map((p, d) => ({
+    timestamp: day(d), avgHighPrice: p, avgLowPrice: p,
+  }));
+  assert.strictEqual(core.priceDip(series, core.ocLowPrice), null);
+});
