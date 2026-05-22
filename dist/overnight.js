@@ -10,6 +10,9 @@ const OVERNIGHT_FETCH_CONCURRENCY = 5;
 const OVERNIGHT_CACHE_KEY = "osrs-combo-overnight";
 const OVERNIGHT_CACHE_TTL_MS = 24 * 3600 * 1000;
 const OVERNIGHT_TREND_DISCOUNT = 0.5;  // fraction of a downtrend applied as a sell-price haircut
+// Component-dip "buying opportunity" thresholds (volatility-aware z-scores).
+const OVERNIGHT_DIP_COMPONENT_Z = -1.0;  // a component is "dipping" at or below this z
+const OVERNIGHT_DIP_RECIPE_Z = -0.7;     // a recipe is flagged at or below this cost-weighted z
 // Recorded price-history store: per-day files committed to the `price-history`
 // branch by the hourly recorder, served raw from GitHub. Read alongside the
 // live wiki /timeseries so the analysis can see history past the wiki's
@@ -156,8 +159,11 @@ async function runOvernightAnalysis(onProgress) {
   // `overnight` = predicted cheapest, `daytime` = predicted dearest. Those two
   // field names are kept so calcMargin's predMap path needs no change.
   const predMap = {};
+  const dipMap = {};
   let analysed = 0;
   for (const [id, series] of seriesById) {
+    const dip = priceDip(series, ocLowPrice);
+    if (dip) dipMap[id] = dip;
     const windows = extremeHours(hourlyProfile(series));
     const a = analyzeItem(id, series, windows, geTax, baselineDays);
     if (!a) continue;
@@ -176,6 +182,7 @@ async function runOvernightAnalysis(onProgress) {
   overnightData = {
     analysedAt: Date.now(),
     predMap,
+    dipMap,
     analysed,
     skipped: candidates.length - seriesById.size,
   };
@@ -268,6 +275,37 @@ function overnightTrendChip(t) {
   return chip;
 }
 
+// Aggregate a recipe's per-component price dips into one recipe-level signal,
+// cost-weighted by each component's predicted buy cost (price x qty). A
+// component with no dip entry (too little history) contributes its weight at
+// z = 0. Returns { flagged, aggZ, pctBelow }, or null when no component has a
+// usable dip signal or a predicted price is missing. Reads overnightData, so
+// it tolerates a stale cache that predates dipMap via the `|| {}` fallback.
+function overnightRecipeDip(recipe) {
+  const predMap = overnightData.predMap;
+  const dipMap = overnightData.dipMap || {};
+  let weightSum = 0, zSum = 0, pctSum = 0, haveSignal = false;
+  for (const c of recipe.components) {
+    const pred = predMap[c.id];
+    if (!pred || pred.overnight == null || pred.overnight <= 0) return null;
+    const weight = pred.overnight * c.qty;
+    weightSum += weight;
+    const dip = dipMap[c.id];
+    if (dip) {
+      haveSignal = true;
+      zSum += weight * dip.z;
+      pctSum += weight * dip.pctBelow;
+    }
+  }
+  if (!haveSignal || weightSum <= 0) return null;
+  const aggZ = zSum / weightSum;
+  return {
+    flagged: aggZ <= OVERNIGHT_DIP_RECIPE_Z,
+    aggZ,
+    pctBelow: pctSum / weightSum,
+  };
+}
+
 // One Overnight recipe card, mirroring the realtime renderCard DOM structure.
 function overnightRecipeCard(recipe, calc) {
   const card = el("article", { class: "card ov-card " + (calc.margin > 0 ? "profit" : "loss") });
@@ -288,6 +326,14 @@ function overnightRecipeCard(recipe, calc) {
   }
   const trendChipEl = overnightTrendChip(overnightData.predMap[recipe.id] && overnightData.predMap[recipe.id].trend);
   if (trendChipEl) catRow.appendChild(trendChipEl);
+  const recipeDip = overnightRecipeDip(recipe);
+  if (recipeDip && recipeDip.flagged) {
+    const pct = Math.max(1, Math.round(recipeDip.pctBelow * 100));
+    const dipBadge = el("span", { class: "dip-chip", text: "parts " + pct + "% below usual" });
+    dipBadge.title = "Components are unusually cheap to buy right now — about "
+      + pct + "% below their recorded average.";
+    catRow.appendChild(dipBadge);
+  }
   const nameDiv = el("div", { class: "card-name", text: recipe.name });
   const titleBox = el("div", { class: "card-title" }, nameDiv, catRow);
   const head = el("div", { class: "card-head" }, iconBox, titleBox);
@@ -323,6 +369,7 @@ function overnightRecipeCard(recipe, calc) {
 
   // Component breakdown
   const comp = el("div", { class: "components" });
+  const showDipTags = !!(recipeDip && recipeDip.flagged);
   for (const c of recipe.components) {
     const cName = state.mapping[c.id]?.name || "#" + c.id;
     const price = overnightData.predMap[c.id]?.overnight;
@@ -330,7 +377,11 @@ function overnightRecipeCard(recipe, calc) {
       ? (c.qty > 1 ? c.qty + "× " + fmtGp(price) : fmtGp(price))
       : "—";
     const buyHint = "buy " + overnightLocalHour(overnightData.predMap[c.id] && overnightData.predMap[c.id].buyHour);
-    row(comp, { label: cName, value, hint: buyHint });
+    const dip = (overnightData.dipMap || {})[c.id];
+    const dipTag = (showDipTags && dip && dip.z <= OVERNIGHT_DIP_COMPONENT_Z)
+      ? el("span", { class: "dip-tag", text: "↓ " + Math.max(1, Math.round(dip.pctBelow * 100)) + "% low" })
+      : null;
+    row(comp, { label: cName, value, hint: buyHint, nameExtras: dipTag ? [dipTag] : [] });
   }
   if (recipe.supplies && recipe.supplies.length) {
     const supplyRow = row(comp, { label: "Supplies", value: fmtGp(calc.suppliesCost) });
@@ -396,7 +447,9 @@ function overnightVisible() {
       }
     }
     if (!timeOk) continue;
-    out.push({ recipe, calc });
+    const item = { recipe, calc };
+    item._dipAgg = overnightRecipeDip(recipe);
+    out.push(item);
   }
   return sortRecipeList(out);
 }

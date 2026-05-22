@@ -719,6 +719,32 @@ header {
   cursor: help;
   white-space: nowrap;
 }
+/* Component-dip "buying opportunity" badge — components are unusually cheap to
+   buy right now. Green: a dip on the buy side is a positive signal. Mirrors
+   the .skill-chip shape. */
+.dip-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.14);
+  border: 1px solid rgba(74, 222, 128, 0.5);
+  cursor: help;
+  white-space: nowrap;
+}
+/* Per-component dip indicator, shown inline next to a dipping component name. */
+.dip-tag {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #4ade80;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 .card-cat-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 
