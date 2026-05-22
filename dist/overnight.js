@@ -328,10 +328,15 @@ function overnightRecipeCard(recipe, calc) {
   if (trendChipEl) catRow.appendChild(trendChipEl);
   const recipeDip = overnightRecipeDip(recipe);
   if (recipeDip && recipeDip.flagged) {
-    const pct = Math.max(1, Math.round(recipeDip.pctBelow * 100));
-    const dipBadge = el("span", { class: "dip-chip", text: "parts " + pct + "% below usual" });
-    dipBadge.title = "Components are unusually cheap to buy right now — about "
-      + pct + "% below their recorded average.";
+    // pctBelow is a cost-weighted blend and can net out non-positive even on a
+    // flagged recipe; only show a percentage when it is genuinely positive.
+    const pct = Math.round(recipeDip.pctBelow * 100);
+    const dipBadge = el("span", { class: "dip-chip",
+      text: pct > 0 ? "parts " + pct + "% below usual" : "parts unusually cheap" });
+    dipBadge.title = pct > 0
+      ? "Components are unusually cheap to buy right now — about " + pct
+        + "% below their recorded average."
+      : "Components are unusually cheap to buy right now versus their recorded history.";
     catRow.appendChild(dipBadge);
   }
   const nameDiv = el("div", { class: "card-name", text: recipe.name });
@@ -448,6 +453,8 @@ function overnightVisible() {
     }
     if (!timeOk) continue;
     const item = { recipe, calc };
+    // _dipAgg feeds the Recommended sort's component-dip bonus (scoreRecommended);
+    // overnightRecipeCard recomputes its own copy for rendering.
     item._dipAgg = overnightRecipeDip(recipe);
     out.push(item);
   }
