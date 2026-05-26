@@ -107,6 +107,73 @@ function detectFormat(text) {
   return null;
 }
 
+// Fuzzy-dedupe across sources: the same real-world trade may appear in both an
+// FU export (local time, computed tax) and a Copilot export (UTC, real GE tax).
+// Match on the stable fields and a wide ts tolerance.
+const FUZZY_DEDUPE_WINDOW_MS = 24 * 3600 * 1000;
+
+function fuzzyEventKey(e) {
+  return `${e.account}|${e.side}|${e.itemId ?? ""}|${e.qty}|${e.price}`;
+}
+
+// Merge two events that represent the same underlying trade. Copilot wins on
+// timestamp + tax (more accurate); FU wins on status (it's the only source that
+// records cancellations and in-flight orders). The result is marked source
+// "merged" so we can tell at a glance.
+function mergeEventPair(a, b) {
+  const copilot = a.source === "copilot" ? a : b.source === "copilot" ? b : null;
+  const fu = a.source === "fu" ? a : b.source === "fu" ? b : null;
+  const out = { ...(copilot || a) };
+  if (copilot) {
+    out.ts = copilot.ts;
+    out.tax = copilot.tax;
+  }
+  if (fu && fu.status && fu.status !== "complete") out.status = fu.status;
+  out.source = (copilot && fu) ? "merged" : out.source;
+  // Preserve the original DB id if either input had one — we'll update in place.
+  out.id = a.id ?? b.id;
+  return out;
+}
+
+// Given an existing event list and an incoming event list, return:
+//   - merged: events to keep (existing replaced where matched)
+//   - inserts: events to add as new
+//   - dedupedCount: how many incoming rows were matched to existing rows
+function fuzzyDedupeMerge(existing, incoming, windowMs) {
+  const window = windowMs ?? FUZZY_DEDUPE_WINDOW_MS;
+  const byKey = new Map();
+  for (const e of existing) {
+    const k = fuzzyEventKey(e);
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(e);
+  }
+  const used = new Set();
+  const updates = []; // { existingId, mergedEvent }
+  const inserts = [];
+  for (const inc of incoming) {
+    const k = fuzzyEventKey(inc);
+    const candidates = byKey.get(k) || [];
+    let bestIdx = -1;
+    let bestDelta = Infinity;
+    for (let i = 0; i < candidates.length; i++) {
+      if (used.has(candidates[i].id)) continue;
+      const delta = Math.abs(candidates[i].ts - inc.ts);
+      if (delta <= window && delta < bestDelta) {
+        bestDelta = delta;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx >= 0) {
+      const ex = candidates[bestIdx];
+      used.add(ex.id);
+      updates.push({ existingId: ex.id, mergedEvent: mergeEventPair(ex, inc) });
+    } else {
+      inserts.push(inc);
+    }
+  }
+  return { updates, inserts, dedupedCount: updates.length };
+}
+
 function buildNameIndex(mapping) {
   const idx = new Map();
   for (const id in mapping) {
@@ -500,5 +567,5 @@ function filterConversionsByRange(conversions, start, end) {
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange, selfExtrapolateLot, shouldDropConversion };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange, selfExtrapolateLot, shouldDropConversion, fuzzyEventKey, mergeEventPair, fuzzyDedupeMerge };
 }

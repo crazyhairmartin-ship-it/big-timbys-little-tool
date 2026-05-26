@@ -1587,3 +1587,8 @@ footer {
 /* Hide the chart-modal's static legend when the History tab repopulates the modal. */
 #chart-modal:has(.modal-controls.history-modal) .modal-legend { display: none; }
 #chart-modal:has(.modal-controls.history-modal) .chart-wrap { display: none; }
+
+.history-upload-error.notice {
+  color: var(--green, #4ade80);
+  font-weight: 500;
+}

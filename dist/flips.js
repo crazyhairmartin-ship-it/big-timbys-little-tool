@@ -60,19 +60,30 @@ const flipsDb = (() => {
           if (cursor) { store.delete(cursor.primaryKey); cursor.continue(); }
           else insertAll();
         };
+        tx.oncomplete = () => resolve({ inserts: events.length, dedupedCount: 0 });
       } else if (mode === "merge" && account) {
-        const existing = new Set();
+        // Fuzzy dedupe: same {account, side, itemId, qty, price} within a 24h
+        // window is treated as the same real-world trade. The merge function
+        // picks the most-trusted fields from each source.
+        const existing = [];
         const idx = store.index("byAccountTs");
         const range = IDBKeyRange.bound([account, -Infinity], [account, Infinity]);
         idx.openCursor(range).onsuccess = (ev) => {
           const cursor = ev.target.result;
-          if (cursor) { existing.add(dedupeKey(cursor.value)); cursor.continue(); }
-          else for (const e of events) if (!existing.has(dedupeKey(e))) store.add(e);
+          if (cursor) { existing.push(cursor.value); cursor.continue(); }
+          else {
+            const { updates, inserts } = fuzzyDedupeMerge(existing, events);
+            for (const u of updates) store.put(u.mergedEvent);
+            for (const e of inserts) store.add(e);
+            // Resolve uses these counts via the outer promise wrapper below.
+            tx._mergeStats = { inserts: inserts.length, dedupedCount: updates.length };
+          }
         };
+        tx.oncomplete = () => resolve(tx._mergeStats || { inserts: 0, dedupedCount: 0 });
       } else {
         insertAll();
+        tx.oncomplete = () => resolve({ inserts: events.length, dedupedCount: 0 });
       }
-      tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
   }
@@ -306,9 +317,10 @@ async function runUpload(file, { mode = "replace", fuAccountOverride } = {}) {
   if (writeAccounts.length === 0) throw new Error("No account name could be derived.");
   const activeAccount = writeAccounts[0];
 
+  const perAccountStats = {};
   for (const a of writeAccounts) {
     const subset = resolved.filter((e) => e.account === a);
-    await flipsDb.putEvents(subset, { mode, account: a });
+    perAccountStats[a] = await flipsDb.putEvents(subset, { mode, account: a });
   }
 
   const indexes = ensureRecipeIndexes();
@@ -352,7 +364,7 @@ async function runUpload(file, { mode = "replace", fuAccountOverride } = {}) {
   localStorage.setItem("osrs-combo-history-account", activeAccount);
   state.flipsHistory.analysisCache = await flipsDb.getAnalysis(activeAccount);
 
-  return { account: activeAccount, accounts: writeAccounts, parsed: events.length, misses };
+  return { account: activeAccount, accounts: writeAccounts, parsed: events.length, misses, stats: perAccountStats };
 }
 
 function promptAccountName(suggested) {
@@ -379,7 +391,7 @@ function promptAccountName(suggested) {
 
 async function handleUpload(file, mode) {
   const errEl = document.getElementById("history-upload-error");
-  errEl.hidden = true; errEl.textContent = "";
+  errEl.hidden = true; errEl.textContent = ""; errEl.classList.remove("notice");
   try {
     const text = await file.text();
     const fmt = detectFormat(text);
@@ -390,8 +402,15 @@ async function handleUpload(file, mode) {
       fuAccountOverride = await promptAccountName(suggested);
       if (fuAccountOverride == null) return;
     }
-    await runUpload(file, { mode, fuAccountOverride });
+    const result = await runUpload(file, { mode, fuAccountOverride });
     renderHistory();
+    if (mode === "merge" && result?.stats) {
+      const totalInserts = Object.values(result.stats).reduce((s, st) => s + (st.inserts || 0), 0);
+      const totalDeduped = Object.values(result.stats).reduce((s, st) => s + (st.dedupedCount || 0), 0);
+      errEl.classList.add("notice");
+      errEl.textContent = `Merged ${totalInserts.toLocaleString()} new event${totalInserts === 1 ? "" : "s"}; ${totalDeduped.toLocaleString()} matched existing trade${totalDeduped === 1 ? "" : "s"} and were combined.`;
+      errEl.hidden = false;
+    }
   } catch (e) {
     errEl.textContent = e.message || String(e);
     errEl.hidden = false;
