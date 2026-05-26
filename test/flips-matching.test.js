@@ -241,3 +241,41 @@ test("nested recipe with mixed shard inventory falls back to wiki for missing sh
   assert.strictEqual(c.estimated, true);
   assert.strictEqual(c.totalCost, 4_000_000 + 4_500_000 + 5_500_000 + 17_800_000);
 });
+
+test("matchEvents emits one conversion per recipe-product sell", () => {
+  const events = [
+    { id: 1, ts: 1, itemId: 11820, itemName: "Godsword shard 1", side: "BUY", qty: 1, price: 4_000_000, tax: 0, status: "complete" },
+    { id: 2, ts: 2, itemId: 11818, itemName: "Godsword shard 2", side: "BUY", qty: 1, price: 4_500_000, tax: 0, status: "complete" },
+    { id: 3, ts: 3, itemId: 11822, itemName: "Godsword shard 3", side: "BUY", qty: 1, price: 5_700_000, tax: 0, status: "complete" },
+    { id: 4, ts: 4, itemId: 11812, itemName: "Bandos hilt",      side: "BUY", qty: 1, price: 17_800_000, tax: 0, status: "complete" },
+    { id: 5, ts: 100, itemId: 11804, itemName: "Bandos godsword", side: "SELL", qty: 1, price: 33_000_000, tax: 660_000, status: "complete" },
+  ];
+  const indexes = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  const wikiPrice = () => { throw new Error("wiki should not be needed"); };
+  const conversions = core.matchEvents(events, RECIPES_FIXTURE, indexes, wikiPrice, MAPPING);
+  assert.strictEqual(conversions.length, 1);
+  assert.strictEqual(conversions[0].recipeKey, "bandos-godsword");
+  assert.strictEqual(conversions[0].profit, 33_000_000 - 660_000 - (4_000_000 + 4_500_000 + 5_700_000 + 17_800_000));
+});
+
+test("matchEvents skips sells of non-recipe items", () => {
+  const events = [
+    { id: 1, ts: 1, itemId: 995, itemName: "Coins", side: "BUY", qty: 1, price: 1, tax: 0, status: "complete" },
+    { id: 2, ts: 2, itemId: 995, itemName: "Coins", side: "SELL", qty: 1, price: 1, tax: 0, status: "complete" },
+  ];
+  const indexes = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  const conversions = core.matchEvents(events, RECIPES_FIXTURE, indexes, () => 0, MAPPING);
+  assert.strictEqual(conversions.length, 0);
+});
+
+test("matchEvents handles out-of-order input by sorting first", () => {
+  const events = [
+    { id: 5, ts: 100, itemId: 11804, side: "SELL", qty: 1, price: 33_000_000, tax: 660_000, status: "complete" },
+    { id: 1, ts: 1, itemId: 11798, side: "BUY", qty: 1, price: 14_200_000, tax: 0, status: "complete" },
+    { id: 4, ts: 4, itemId: 11812, side: "BUY", qty: 1, price: 17_800_000, tax: 0, status: "complete" },
+  ];
+  const indexes = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  const conversions = core.matchEvents(events, RECIPES_FIXTURE, indexes, () => 0, MAPPING);
+  assert.strictEqual(conversions.length, 1);
+  assert.strictEqual(conversions[0].profit, 33_000_000 - 660_000 - 14_200_000 - 17_800_000);
+});

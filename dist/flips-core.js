@@ -289,7 +289,39 @@ function buildRecipeIndexes(recipes) {
   return { byProduct, byComponent };
 }
 
+function matchEvents(events, recipes, indexes, wikiPriceAt, mapping) {
+  const inventory = new Map();
+  const conversions = [];
+  const sorted = events.slice().sort((a, b) => a.ts - b.ts || (a.id ?? 0) - (b.id ?? 0));
+
+  for (const e of sorted) {
+    if (!e.itemId || !Number.isFinite(e.qty) || e.qty <= 0) continue;
+    if (e.side === "BUY") {
+      if (!inventory.has(e.itemId)) inventory.set(e.itemId, []);
+      inventory.get(e.itemId).push({
+        qty: e.qty,
+        unitPrice: e.price,
+        ts: e.ts,
+        sourceRowId: e.id,
+        status: e.status,
+      });
+      continue;
+    }
+    if (e.side === "SELL") {
+      const candidates = indexes.byProduct.get(e.itemId);
+      if (!candidates || candidates.length === 0) {
+        if (inventory.has(e.itemId)) popFromFIFO(inventory.get(e.itemId), e.qty);
+        continue;
+      }
+      const recipe = selectBestRecipe(candidates, inventory, e.qty);
+      const conv = attemptConversion(e, recipe, inventory, indexes, wikiPriceAt, mapping);
+      conversions.push(conv);
+    }
+  }
+  return conversions;
+}
+
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents };
 }
