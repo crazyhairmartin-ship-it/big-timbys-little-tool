@@ -321,7 +321,60 @@ function matchEvents(events, recipes, indexes, wikiPriceAt, mapping) {
   return conversions;
 }
 
+function summarizeRecipes(conversions, recipes) {
+  const byKey = new Map();
+  for (const r of recipes) byKey.set(r.key, r);
+
+  const grouped = new Map();
+  for (const c of conversions) {
+    let g = grouped.get(c.recipeKey);
+    if (!g) { g = []; grouped.set(c.recipeKey, g); }
+    g.push(c);
+  }
+
+  const out = [];
+  for (const [recipeKey, list] of grouped) {
+    const recipe = byKey.get(recipeKey);
+    const totalProfit = list.reduce((s, c) => s + c.profit, 0);
+    const totalRevenue = list.reduce((s, c) => s + c.revenue, 0);
+    const totalCost = list.reduce((s, c) => s + c.totalCost, 0);
+    const totalTax = list.reduce((s, c) => s + (c.tax || 0), 0);
+    const wins = list.filter((c) => c.profit > 0).length;
+    const ests = list.filter((c) => c.estimated).length;
+    const totalProductQty = list.reduce((s, c) => s + (c.productQty || 1), 0);
+    const tss = list.map((c) => c.ts);
+    out.push({
+      recipeKey,
+      productId: recipe?.id ?? list[0].productId,
+      productName: recipe?.name ?? list[0].productName,
+      category: recipe?.cat ?? "",
+      conversions: list.length,
+      totalProfit,
+      totalRevenue,
+      totalCost,
+      totalTax,
+      avgProfit: totalProfit / list.length,
+      avgROI: totalCost > 0 ? totalProfit / totalCost : 0,
+      avgTimeToFlip: list.reduce((s, c) => s + c.timeToFlip, 0) / list.length,
+      winRate: wins / list.length,
+      estimatedShare: ests / list.length,
+      totalProductQty,
+      firstTs: Math.min(...tss),
+      lastTs: Math.max(...tss),
+    });
+  }
+  out.sort((a, b) => b.totalProfit - a.totalProfit);
+  return out;
+}
+
+function filterConversionsByRange(conversions, start, end) {
+  return conversions.filter((c) =>
+    (start == null || c.ts >= start) &&
+    (end == null || c.ts < end)
+  );
+}
+
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange };
 }
