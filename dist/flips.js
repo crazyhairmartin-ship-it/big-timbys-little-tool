@@ -72,11 +72,11 @@ const flipsDb = (() => {
           const cursor = ev.target.result;
           if (cursor) { existing.push(cursor.value); cursor.continue(); }
           else {
-            const { updates, inserts } = fuzzyDedupeMerge(existing, events);
+            const { updates, inserts, deletes } = fuzzyDedupeMerge(existing, events);
+            for (const id of deletes || []) store.delete(id);
             for (const u of updates) store.put(u.mergedEvent);
             for (const e of inserts) store.add(e);
-            // Resolve uses these counts via the outer promise wrapper below.
-            tx._mergeStats = { inserts: inserts.length, dedupedCount: updates.length };
+            tx._mergeStats = { inserts: inserts.length, dedupedCount: updates.length, deletes: (deletes || []).length };
           }
         };
         tx.oncomplete = () => resolve(tx._mergeStats || { inserts: 0, dedupedCount: 0 });

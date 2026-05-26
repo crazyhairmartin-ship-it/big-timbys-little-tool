@@ -94,3 +94,57 @@ test("fuzzyDedupeMerge picks the closest existing event when multiple candidates
   assert.strictEqual(updates.length, 1);
   assert.strictEqual(updates[0].existingId, 10);
 });
+
+test("fuzzyDedupeMerge suppresses an FU aggregate row when Copilot has the per-fill rows", () => {
+  // Regression for the Ahrim's robetop 672-day flip: user sold 2 robetops as
+  // one listing that filled in 2 chunks. FU recorded qty=2 at 12:37; Copilot
+  // recorded two qty=1 fills at 12:34:56 and 12:37:15. Without this fix the
+  // dedup keeps all three rows and the algorithm consumes 4 broken pieces
+  // (1 fresh + 1 ancient + 2 from elsewhere).
+  const fuAggregate = {
+    id: 100, account: "Big Timby", source: "fu", status: "complete",
+    ts: Date.parse("2026-05-14T16:37:00Z"),
+    itemId: 4712, itemName: "Ahrim's robetop", side: "SELL",
+    qty: 2, price: 2_004_914, tax: 80_198,
+  };
+  const copilotFill1 = {
+    id: 200, account: "Big Timby", source: "copilot", status: "complete",
+    ts: Date.parse("2026-05-14T16:34:56Z"),
+    itemId: 4712, itemName: "Ahrim's robetop", side: "SELL",
+    qty: 1, price: 2_004_914, tax: 40_099,
+  };
+  const copilotFill2 = {
+    id: 201, account: "Big Timby", source: "copilot", status: "complete",
+    ts: Date.parse("2026-05-14T16:37:15Z"),
+    itemId: 4712, itemName: "Ahrim's robetop", side: "SELL",
+    qty: 1, price: 2_004_914, tax: 40_099,
+  };
+  const { updates, inserts, deletes } = core.fuzzyDedupeMerge(
+    [fuAggregate],
+    [copilotFill1, copilotFill2]
+  );
+  // FU is suppressed (deleted from DB), both Copilot rows are inserted.
+  assert.deepStrictEqual(deletes, [100]);
+  assert.strictEqual(inserts.length, 2);
+  assert.strictEqual(updates.length, 0);
+});
+
+test("fuzzyDedupeMerge does NOT suppress an FU row when only a single Copilot row is nearby", () => {
+  // 1 Copilot qty=2 vs 1 FU qty=2 — these are the same trade reported by
+  // both sources. The normal key-based dedup should merge them; the
+  // FU-aggregate path must not interfere.
+  const fu = {
+    id: 1, account: "A", source: "fu", status: "complete",
+    ts: Date.parse("2026-05-14T16:37:00Z"),
+    itemId: 4712, itemName: "X", side: "SELL", qty: 2, price: 1000, tax: 40,
+  };
+  const cop = {
+    id: 2, account: "A", source: "copilot", status: "complete",
+    ts: Date.parse("2026-05-14T16:37:30Z"),
+    itemId: 4712, itemName: "X", side: "SELL", qty: 2, price: 1000, tax: 40,
+  };
+  const { updates, inserts, deletes } = core.fuzzyDedupeMerge([fu], [cop]);
+  assert.deepStrictEqual(deletes, []);
+  assert.strictEqual(updates.length, 1);
+  assert.strictEqual(inserts.length, 0);
+});
