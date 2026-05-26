@@ -196,13 +196,19 @@ test("attemptConversion uses wiki fallback when inventory is short", () => {
 });
 
 test("attemptConversion with zero matching inventory falls back fully", () => {
+  // With nested-recipe recursion enabled, a missing blade is synthesized from
+  // three wiki-priced shards rather than falling back to the blade's own wiki price.
   const inventory = new Map();
   const sellEvent = { id: "s", ts: 100, itemId: 11804, itemName: "Bandos godsword", qty: 1, price: 33000000, tax: 660000 };
   const indexes = core.buildRecipeIndexes(RECIPES_FIXTURE);
-  const wikiPrice = (id) => id === 11798 ? 14000000 : 17500000;
+  const wikiPrice = (id) => {
+    if (id === 11820 || id === 11818 || id === 11822) return 5_000_000; // shards
+    if (id === 11812) return 17_500_000;                                  // hilt
+    return 0;
+  };
   const c = core.attemptConversion(sellEvent, RECIPES_FIXTURE[1], inventory, indexes, wikiPrice, MAPPING);
   assert.strictEqual(c.estimated, true);
-  assert.strictEqual(c.totalCost, 14000000 + 17500000);
+  assert.strictEqual(c.totalCost, 5_000_000 * 3 + 17_500_000);
 });
 
 test("nested recipe: shards in inventory back out a self-assembled blade", () => {
