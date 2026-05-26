@@ -308,13 +308,26 @@ function matchEvents(events, recipes, indexes, wikiPriceAt, mapping) {
       continue;
     }
     if (e.side === "SELL") {
-      const candidates = indexes.byProduct.get(e.itemId);
-      if (!candidates || candidates.length === 0) {
-        if (inventory.has(e.itemId)) popFromFIFO(inventory.get(e.itemId), e.qty);
-        continue;
+      // First, consume any inventory of the sold item itself — that portion is
+      // a "pure flip" of the assembled product (bought + resold without crafting).
+      // Only the leftover quantity, if any, gets attributed to a recipe conversion.
+      let remainingQty = e.qty;
+      if (inventory.has(e.itemId)) {
+        const directLots = popFromFIFO(inventory.get(e.itemId), remainingQty);
+        const consumed = directLots.reduce((s, l) => s + l.qty, 0);
+        remainingQty -= consumed;
       }
-      const recipe = selectBestRecipe(candidates, inventory, e.qty);
-      const conv = attemptConversion(e, recipe, inventory, indexes, wikiPriceAt, mapping);
+      if (remainingQty <= 0) continue;
+
+      const candidates = indexes.byProduct.get(e.itemId);
+      if (!candidates || candidates.length === 0) continue; // non-recipe pure flip; no conversion emitted
+
+      // Attribute only the un-flipped portion to a recipe conversion.
+      const recipe = selectBestRecipe(candidates, inventory, remainingQty);
+      const conv = attemptConversion(
+        { ...e, qty: remainingQty },
+        recipe, inventory, indexes, wikiPriceAt, mapping
+      );
       conversions.push(conv);
     }
   }
