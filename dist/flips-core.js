@@ -132,6 +132,25 @@ function resolveItemNames(events, nameIndex) {
   return { resolved, misses };
 }
 
+function popFromFIFO(queue, need) {
+  if (!queue || need <= 0) return [];
+  const out = [];
+  let remaining = need;
+  while (remaining > 0 && queue.length > 0) {
+    const head = queue[0];
+    if (head.qty <= remaining) {
+      out.push(head);
+      remaining -= head.qty;
+      queue.shift();
+    } else {
+      out.push({ ...head, qty: remaining });
+      head.qty -= remaining;
+      remaining = 0;
+    }
+  }
+  return out;
+}
+
 function buildRecipeIndexes(recipes) {
   const byProduct = new Map();
   const byComponent = new Map();
@@ -148,5 +167,5 @@ function buildRecipeIndexes(recipes) {
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO };
 }

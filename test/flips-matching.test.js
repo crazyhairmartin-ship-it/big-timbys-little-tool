@@ -86,3 +86,34 @@ test("buildRecipeIndexes returns undefined for unknown ids", () => {
   assert.strictEqual(idx.byProduct.get(999), undefined);
   assert.strictEqual(idx.byComponent.get(999), undefined);
 });
+
+test("popFromFIFO consumes lots in oldest-first order", () => {
+  const queue = [
+    { qty: 3, unitPrice: 100, ts: 1, sourceRowId: "a", status: "complete" },
+    { qty: 5, unitPrice: 110, ts: 2, sourceRowId: "b", status: "complete" },
+  ];
+  const popped = core.popFromFIFO(queue, 4);
+  assert.deepStrictEqual(popped.map((l) => [l.qty, l.unitPrice, l.sourceRowId]), [
+    [3, 100, "a"], [1, 110, "b"],
+  ]);
+  assert.strictEqual(queue.length, 1);
+  assert.strictEqual(queue[0].qty, 4);
+});
+
+test("popFromFIFO returns what it can if inventory is short", () => {
+  const queue = [{ qty: 2, unitPrice: 100, ts: 1, sourceRowId: "a", status: "complete" }];
+  const popped = core.popFromFIFO(queue, 5);
+  assert.strictEqual(popped.length, 1);
+  assert.strictEqual(popped[0].qty, 2);
+  assert.strictEqual(queue.length, 0);
+});
+
+test("popFromFIFO is a no-op on an empty queue", () => {
+  const popped = core.popFromFIFO([], 5);
+  assert.deepStrictEqual(popped, []);
+});
+
+test("popFromFIFO handles missing queue (undefined)", () => {
+  const popped = core.popFromFIFO(undefined, 5);
+  assert.deepStrictEqual(popped, []);
+});
