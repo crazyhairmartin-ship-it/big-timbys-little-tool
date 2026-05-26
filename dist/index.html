@@ -131,6 +131,7 @@
     <div class="mode-toggle">
       <button id="mode-realtime" class="mode-btn active" data-mode="realtime">Real-time</button>
       <button id="mode-overnight" class="mode-btn" data-mode="overnight">Experimental</button>
+      <button id="mode-history" class="mode-btn" data-mode="history">History</button>
     </div>
     <div class="view-toggle">
       <button id="view-cards" class="vt-btn active" data-view="cards">Cards</button>
@@ -140,6 +141,16 @@
       <div class="loading">Fetching live GE prices…</div>
     </div>
     <div id="table-wrap" class="table-wrap" hidden></div>
+    <div id="history-empty" class="history-empty" hidden>
+      <div class="history-drop-zone">
+        <h2>Drop your trade-history CSV here to get started</h2>
+        <p>Supports exports from <strong>Flipping Utilities</strong> (RuneLite) and <strong>Copilot</strong>.</p>
+        <button id="history-pick-file" class="btn-primary" type="button">Choose file</button>
+        <p id="history-upload-error" class="history-upload-error" hidden></p>
+      </div>
+    </div>
+    <div id="history-drag-overlay" class="history-drag-overlay" hidden>Drop CSV to upload</div>
+    <input type="file" id="history-file-input" accept=".csv,text/csv" hidden>
   </main>
 </div>
 
@@ -182,5 +193,7 @@
 <script src="overnight-core.js"></script>
 <script src="app.js"></script>
 <script src="overnight.js"></script>
+<script src="flips-core.js"></script>
+<script src="flips.js"></script>
 </body>
 </html>
