@@ -4,6 +4,35 @@
    functions land in global scope for dist/flips.js to call.
 ---------------------------------------------------------- */
 
+// Copilot sometimes emits multiple rows for what is really one GE listing —
+// either literal duplicates or rapid partial fills logged as separate rows.
+// Counting them as separate events double-counts inventory consumption (e.g.,
+// a single 8-item sale appears as 4+4, draining 4 extra broken Barrows pieces
+// from inventory and reaching back into ancient lots for time-to-flip).
+// Aggregate near-consecutive rows that share account/side/item/price into one.
+const COPILOT_PARTIAL_FILL_WINDOW_MS = 60 * 1000;
+function aggregateCopilotPartialFills(events) {
+  events.sort((a, b) => a.ts - b.ts);
+  const out = [];
+  for (const e of events) {
+    const last = out.length > 0 ? out[out.length - 1] : null;
+    if (
+      last &&
+      last.side === e.side &&
+      last.itemName === e.itemName &&
+      last.price === e.price &&
+      last.account === e.account &&
+      e.ts - last.ts <= COPILOT_PARTIAL_FILL_WINDOW_MS
+    ) {
+      last.qty += e.qty;
+      last.tax += e.tax;
+      continue;
+    }
+    out.push({ ...e });
+  }
+  return out;
+}
+
 function parseCopilot(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
   if (lines.length < 2) return [];
@@ -34,7 +63,7 @@ function parseCopilot(text) {
       source: "copilot",
     });
   }
-  return events;
+  return aggregateCopilotPartialFills(events);
 }
 
 const FU_STATE_MAP = {
@@ -504,6 +533,19 @@ function shouldDropConversion(conv) {
     if (cb.wikiFallbackQty > 0 && cb.gp === 0) return true;
   }
 
+  // For repair-style recipes (Barrows / Moons), the repair fee can outrank
+  // the broken item by gp at low smithing levels — but a wiki-fallback or
+  // extrapolated broken item still means the user almost certainly didn't
+  // craft (they pure-flipped a repaired item from pre-history inventory).
+  // Drop these to avoid emitting phantom crafts with bogus cost basis.
+  const hasRepair = conv.costBasis.some((cb) => cb.repairCost);
+  if (hasRepair) {
+    for (const cb of conv.costBasis) {
+      if (cb.repairCost) continue;
+      if (cb.wikiFallbackQty > 0 || cb.extrapolatedQty > 0) return true;
+    }
+  }
+
   let primary = conv.costBasis[0];
   for (const cb of conv.costBasis) {
     if (cb.gp > primary.gp) primary = cb;
@@ -741,6 +783,14 @@ function matchEvents(events, recipes, indexes, wikiPriceAt, mapping, options) {
       // Phase 3: craft any remaining qty (default path crafts here; preferCraft
       // path falls through here only if Phase 1 was capped by component supply).
       const recipe = selectBestRecipe(candidates, inventory, remainingQty);
+      // Decombines convert 1 source item into N outputs (e.g. 1 blowpipe →
+      // 20,000 scales). A real decombine consumes WHOLE source units — a sell
+      // of 1,139 scales attempting to consume 0.057 of a blowpipe is almost
+      // certainly just plain output-item flipping, not a decombine. Drop.
+      if (recipe.cat === "Decombines") {
+        const resultQty = recipe.resultQty ?? 1;
+        if (remainingQty % resultQty !== 0) continue;
+      }
       const conv = attemptConversion(
         { ...e, qty: remainingQty },
         recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, options

@@ -1599,6 +1599,30 @@ footer {
   color: var(--muted, #9aa0a6);
 }
 .cost-breakdown-lots .lot-estimated { color: #d4a04f; font-style: italic; }
+.conv-hide-btn {
+  background: none;
+  border: none;
+  color: var(--muted, #9aa0a6);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.conv-hide-btn:hover { color: #f87171; }
+.conv-hidden-hint {
+  font-size: 0.78rem;
+  color: var(--muted, #9aa0a6);
+  margin-bottom: 6px;
+}
+.conv-hidden-hint .linklike {
+  background: none;
+  border: none;
+  color: #93c5fd;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+  padding: 0;
+}
 .comp-table {
   width: 100%;
   border-collapse: collapse;
