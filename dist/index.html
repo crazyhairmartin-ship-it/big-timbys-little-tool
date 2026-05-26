@@ -125,6 +125,28 @@
         <select id="sell-hour-end"></select>
       </div>
     </div>
+    <div class="filter-group history-sidebar-block">
+      <label for="history-range">Time range</label>
+      <select id="history-range">
+        <option value="all">All</option>
+        <option value="year">Last year</option>
+        <option value="3mo">Last 3 months</option>
+        <option value="month">Last month</option>
+        <option value="week">Last week</option>
+      </select>
+    </div>
+    <div class="filter-group history-sidebar-block" id="history-account-block" hidden>
+      <label for="history-account-select">Account</label>
+      <select id="history-account-select"></select>
+    </div>
+    <div class="history-sidebar-block history-loaded-data" id="history-loaded-data" hidden>
+      <div class="summary" id="history-loaded-summary"></div>
+      <div class="controls">
+        <button type="button" id="history-replace">Replace</button>
+        <button type="button" id="history-merge">Merge</button>
+        <button type="button" id="history-clear">Clear</button>
+      </div>
+    </div>
   </aside>
 
   <main id="main" class="main">

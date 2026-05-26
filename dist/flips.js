@@ -379,8 +379,72 @@ function onModeEnter() {
       const file = Array.from(ev.dataTransfer?.files || []).find((f) => /\.csv$/i.test(f.name));
       if (file) await handleUpload(file, "replace");
     });
+
+    // Sidebar controls
+    document.getElementById("history-range").value = state.flipsHistory.range;
+    document.getElementById("history-range").addEventListener("change", (ev) => {
+      state.flipsHistory.range = ev.target.value;
+      localStorage.setItem("osrs-combo-history-range", state.flipsHistory.range);
+      renderHistory();
+    });
+    document.getElementById("history-account-select").addEventListener("change", async (ev) => {
+      state.flipsHistory.activeAccount = ev.target.value;
+      localStorage.setItem("osrs-combo-history-account", state.flipsHistory.activeAccount);
+      state.flipsHistory.analysisCache = await flipsDb.getAnalysis(state.flipsHistory.activeAccount);
+      renderHistory();
+    });
+    document.getElementById("history-replace").addEventListener("click", () => {
+      const input = document.getElementById("history-file-input");
+      input.dataset.mode = "replace";
+      input.click();
+    });
+    document.getElementById("history-merge").addEventListener("click", () => {
+      const input = document.getElementById("history-file-input");
+      input.dataset.mode = "merge";
+      input.click();
+    });
+    document.getElementById("history-clear").addEventListener("click", async () => {
+      if (!state.flipsHistory.activeAccount) return;
+      if (!confirm(`Clear all stored data for ${state.flipsHistory.activeAccount}? This cannot be undone.`)) return;
+      await flipsDb.clearAccount(state.flipsHistory.activeAccount);
+      state.flipsHistory.activeAccount = null;
+      state.flipsHistory.analysisCache = null;
+      localStorage.removeItem("osrs-combo-history-account");
+      await refreshAccountsAndRender();
+    });
   }
   refreshAccountsAndRender();
+}
+
+function syncSidebarPanels() {
+  const accountBlock = document.getElementById("history-account-block");
+  const accountSel = document.getElementById("history-account-select");
+  const loaded = document.getElementById("history-loaded-data");
+  const summary = document.getElementById("history-loaded-summary");
+  const accounts = state.flipsHistory.accounts;
+  accountBlock.hidden = accounts.length <= 1;
+  accountSel.replaceChildren();
+  for (const a of accounts) {
+    const opt = document.createElement("option");
+    opt.value = a; opt.textContent = a;
+    if (a === state.flipsHistory.activeAccount) opt.selected = true;
+    accountSel.appendChild(opt);
+  }
+  if (!state.flipsHistory.activeAccount) { loaded.hidden = true; return; }
+  loaded.hidden = false;
+  const cache = state.flipsHistory.analysisCache;
+  summary.replaceChildren();
+  const acctSpan = document.createElement("div");
+  acctSpan.textContent = state.flipsHistory.activeAccount;
+  summary.appendChild(acctSpan);
+  if (cache && cache.conversions?.length) {
+    const tss = cache.conversions.map((c) => c.ts);
+    const minTs = new Date(Math.min(...tss)).toLocaleDateString();
+    const maxTs = new Date(Math.max(...tss)).toLocaleDateString();
+    const meta = document.createElement("div");
+    meta.textContent = `${cache.conversions.length.toLocaleString()} conversions · ${minTs} → ${maxTs}`;
+    summary.appendChild(meta);
+  }
 }
 
 async function refreshAccountsAndRender() {
@@ -404,6 +468,8 @@ function renderHistory() {
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
   const empty = document.getElementById("history-empty");
+  syncSidebarPanels();
+
   if (!state.flipsHistory.activeAccount) {
     grid.replaceChildren();
     grid.hidden = true;
