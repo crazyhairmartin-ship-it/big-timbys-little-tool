@@ -94,18 +94,21 @@ test("parseFlippingUtilities parses 12-hour AM/PM dates as local time", () => {
   assert.strictEqual(d.getMinutes(), 0);
 });
 
-test("parseFlippingUtilities computes tax on sells, zero on buys", () => {
-  // geTax: 2% of price * qty, capped at 5M per unit, exempt under 100gp.
+test("parseFlippingUtilities grosses up SELL prices and computes per-unit-capped tax", () => {
+  // FU records the NET sell per-unit (post-tax). Buys are listed-price; sells
+  // under 100 gp are exempt. 17,444,000 net @ 2% post-cutover ⇔ 17,800,000
+  // gross, tax 356,000.
   const csv = [
     "name,date,quantity,price,state",
     "Coal,2026-05-22 10:00 AM,100,10,BOUGHT", // buy → 0
     "Coal,2026-05-22 10:01 AM,100,12,SOLD",   // 12 < 100, exempt → 0
-    "Bandos hilt,2026-05-22 10:02 AM,1,17800000,SOLD", // 2% = 356000
+    "Bandos hilt,2026-05-22 10:02 AM,1,17444000,SOLD",
   ].join("\n");
   const events = core.parseFlippingUtilities(csv, "Test");
   assert.strictEqual(events[0].tax, 0);
   assert.strictEqual(events[1].tax, 0);
-  assert.strictEqual(events[2].tax, 356000);
+  assert.strictEqual(events[2].price, 17_800_000);
+  assert.strictEqual(events[2].tax, 356_000);
 });
 
 test("detectFormat recognises Flipping Utilities by leading comment", () => {
