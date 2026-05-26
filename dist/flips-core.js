@@ -193,14 +193,11 @@ function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wik
   const subRecipe = selectBestRecipe(subRecipes, inventory, needQty);
   const synthSell = { id: null, ts, itemId, itemName: fcItemName(mapping, itemId), qty: needQty, price: 0, tax: 0 };
   const nested = _attemptConversionInner(synthSell, subRecipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth + 1);
-  // A synth lot is "fully tracked" only when every sub-component landed on a
-  // real FIFO lot or another fully-tracked synth. If any sub-component had to
-  // self-extrapolate or wiki-fall-back, the synth itself is speculative.
-  const fullyTracked = nested.costBasis.every((cb) => {
-    if (cb.wikiFallbackQty > 0 || cb.extrapolatedQty > 0) return false;
-    if (cb.selfAssembledQty > 0 && !cb.synthFullyTracked) return false;
-    return true;
-  });
+  // A synth lot is "primary-chain-tracked" when, recursively, the most-
+  // expensive component at every layer of the nested chain came from real
+  // FIFO lots. Cheap sub-components are allowed to self-extrapolate — only
+  // the expensive part of each layer needs to be real per user intent.
+  const primaryChainTracked = isPrimaryChainTracked(nested);
   const nestedEarliestTs = ts - (nested.timeToFlip || 0);
   return {
     qty: needQty,
@@ -212,9 +209,21 @@ function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wik
     fallback: false,
     estimated: nested.estimated,
     synthesized: true,
-    fullyTracked,
+    primaryChainTracked,
     nestedConv: nested,
   };
+}
+
+function isPrimaryChainTracked(conv) {
+  if (!conv.costBasis.length) return false;
+  let primary = conv.costBasis[0];
+  for (const cb of conv.costBasis) {
+    if (cb.gp > primary.gp) primary = cb;
+  }
+  if (primary.wikiFallbackQty > 0) return false;
+  if (primary.extrapolatedQty > 0) return false;
+  if (primary.selfAssembledQty > 0) return primary.synthPrimaryChainTracked === true;
+  return true;
 }
 
 function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth) {
@@ -245,12 +254,12 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
 
     // Step 2: if the component is itself a recipe product, try synthesizing from its components.
     let synthEstimated = false;
-    let synthFullyTracked = false;
+    let synthPrimaryChainTracked = false;
     if (shortfall > 0 && indexes.byProduct.has(component.id)) {
       const synth = synthesizeFromNestedRecipe(component.id, shortfall, sellEvent.ts, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth);
       lots.push(synth);
       synthesizedQty = synth.qty;
-      synthFullyTracked = !!synth.fullyTracked;
+      synthPrimaryChainTracked = !!synth.primaryChainTracked;
       if (synth.estimated) { estimated = true; synthEstimated = true; }
       shortfall -= synth.qty;
     }
@@ -281,7 +290,7 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
       wikiFallbackQty: lots.filter((l) => l.fallback).reduce((s, l) => s + l.qty, 0),
       selfAssembledQty: synthesizedQty,
       synthEstimated, // synth lot itself relied on wiki deeper in chain
-      synthFullyTracked, // synth lot is backed entirely by real FIFO lots
+      synthPrimaryChainTracked, // synth's primary (recursively) lands on real FIFO
       extrapolatedQty,
       estimatedQty: lots.filter((l) => l.fallback).reduce((s, l) => s + l.qty, 0), // kept for back-compat with renderers
       lotStatuses: lots.filter((l) => l.sourceRowId != null).map((l) => l.status),
@@ -338,9 +347,10 @@ function shouldDropConversion(conv) {
   }
   if (primary.wikiFallbackQty > 0) return true;
   if (primary.extrapolatedQty > 0) return true;
-  // Synth is trusted only when the nested chain is entirely backed by real
-  // FIFO lots — no wiki, no extrap, no circular synth-from-decombine.
-  if (primary.selfAssembledQty > 0 && !primary.synthFullyTracked) return true;
+  // Synth is trusted when the recursive primary chain lands on real FIFO at
+  // every layer. Cheap sub-components are allowed to self-extrap — only the
+  // expensive piece of each layer has to be real (per user intent).
+  if (primary.selfAssembledQty > 0 && !primary.synthPrimaryChainTracked) return true;
   return false;
 }
 
