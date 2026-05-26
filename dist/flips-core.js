@@ -193,9 +193,14 @@ function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wik
   const subRecipe = selectBestRecipe(subRecipes, inventory, needQty);
   const synthSell = { id: null, ts, itemId, itemName: fcItemName(mapping, itemId), qty: needQty, price: 0, tax: 0 };
   const nested = _attemptConversionInner(synthSell, subRecipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth + 1);
-  // Propagate the earliest real buy timestamp out of the nested conversion so
-  // the parent's time-to-flip reflects "I bought these gems back in March" and
-  // not "all my synth lots are timeless".
+  // A synth lot is "fully tracked" only when every sub-component landed on a
+  // real FIFO lot or another fully-tracked synth. If any sub-component had to
+  // self-extrapolate or wiki-fall-back, the synth itself is speculative.
+  const fullyTracked = nested.costBasis.every((cb) => {
+    if (cb.wikiFallbackQty > 0 || cb.extrapolatedQty > 0) return false;
+    if (cb.selfAssembledQty > 0 && !cb.synthFullyTracked) return false;
+    return true;
+  });
   const nestedEarliestTs = ts - (nested.timeToFlip || 0);
   return {
     qty: needQty,
@@ -207,6 +212,7 @@ function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wik
     fallback: false,
     estimated: nested.estimated,
     synthesized: true,
+    fullyTracked,
     nestedConv: nested,
   };
 }
@@ -238,11 +244,14 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
     }
 
     // Step 2: if the component is itself a recipe product, try synthesizing from its components.
+    let synthEstimated = false;
+    let synthFullyTracked = false;
     if (shortfall > 0 && indexes.byProduct.has(component.id)) {
       const synth = synthesizeFromNestedRecipe(component.id, shortfall, sellEvent.ts, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth);
       lots.push(synth);
       synthesizedQty = synth.qty;
-      if (synth.estimated) estimated = true;
+      synthFullyTracked = !!synth.fullyTracked;
+      if (synth.estimated) { estimated = true; synthEstimated = true; }
       shortfall -= synth.qty;
     }
 
@@ -271,6 +280,8 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
       lots: lots.map((l) => l.sourceRowId).filter((x) => x != null),
       wikiFallbackQty: lots.filter((l) => l.fallback).reduce((s, l) => s + l.qty, 0),
       selfAssembledQty: synthesizedQty,
+      synthEstimated, // synth lot itself relied on wiki deeper in chain
+      synthFullyTracked, // synth lot is backed entirely by real FIFO lots
       extrapolatedQty,
       estimatedQty: lots.filter((l) => l.fallback).reduce((s, l) => s + l.qty, 0), // kept for back-compat with renderers
       lotStatuses: lots.filter((l) => l.sourceRowId != null).map((l) => l.status),
@@ -325,7 +336,12 @@ function shouldDropConversion(conv) {
   for (const cb of conv.costBasis) {
     if (cb.gp > primary.gp) primary = cb;
   }
-  return primary.wikiFallbackQty > 0 || primary.extrapolatedQty > 0;
+  if (primary.wikiFallbackQty > 0) return true;
+  if (primary.extrapolatedQty > 0) return true;
+  // Synth is trusted only when the nested chain is entirely backed by real
+  // FIFO lots — no wiki, no extrap, no circular synth-from-decombine.
+  if (primary.selfAssembledQty > 0 && !primary.synthFullyTracked) return true;
+  return false;
 }
 
 function selectBestRecipe(recipes, inventory, productQty) {
