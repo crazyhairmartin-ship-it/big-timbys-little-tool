@@ -1487,3 +1487,41 @@ footer {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   margin-bottom: 12px;
 }
+
+#history-account-modal {
+  border: none;
+  border-radius: 12px;
+  padding: 0;
+  max-width: 420px;
+  background: var(--panel, #1c1c1f);
+  color: inherit;
+}
+#history-account-modal .modal-header { padding: 16px 20px; }
+#history-account-modal .modal-body  { padding: 0 20px 20px; }
+#history-account-modal input {
+  width: 100%;
+  padding: 8px 10px;
+  margin: 8px 0 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: inherit;
+}
+.account-modal-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.account-modal-buttons button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.account-modal-buttons button.btn-primary {
+  background: var(--accent, #f5c518);
+  color: #1a1a1d;
+  border-color: var(--accent, #f5c518);
+}

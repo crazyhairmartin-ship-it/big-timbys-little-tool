@@ -168,10 +168,230 @@ function ensureRecipeIndexes() {
   return recipeIndexes;
 }
 
+/* ---- Wiki price-history fetcher (cached per item+day) ---- */
+const wikiPriceCache = new Map();
+
+function dayKey(ts) {
+  const d = new Date(ts);
+  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+}
+
+async function fetchWikiPriceForDay(itemId, ts) {
+  const key = `${itemId}|${dayKey(ts)}`;
+  if (wikiPriceCache.has(key)) return wikiPriceCache.get(key);
+  let price = 0;
+  try {
+    const data = await api(`/timeseries?timestep=24h&id=${itemId}`);
+    const points = data.data || [];
+    const tsSec = Math.floor(ts / 1000);
+    let best = null;
+    for (const p of points) {
+      if (p.timestamp <= tsSec && (!best || p.timestamp > best.timestamp)) best = p;
+    }
+    if (best) {
+      const mid = ((best.avgHighPrice || 0) + (best.avgLowPrice || 0)) / 2;
+      price = Math.round(mid) || best.avgHighPrice || best.avgLowPrice || 0;
+    }
+  } catch (_) {
+    price = 0;
+  }
+  wikiPriceCache.set(key, price);
+  return price;
+}
+
+async function prefetchWikiPrices(needs) {
+  const distinct = new Set();
+  for (const n of needs) distinct.add(`${n.itemId}|${dayKey(n.ts)}|${n.ts}`);
+  const queue = [...distinct].map((s) => {
+    const parts = s.split("|");
+    return { itemId: Number(parts[0]), ts: Number(parts[2]) };
+  });
+  const CONCURRENCY = 5;
+  let i = 0;
+  async function worker() {
+    while (i < queue.length) {
+      const idx = i++;
+      const { itemId, ts } = queue[idx];
+      await fetchWikiPriceForDay(itemId, ts);
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+}
+
+function wikiPriceSync(itemId, ts) {
+  return wikiPriceCache.get(`${itemId}|${dayKey(ts)}`) || 0;
+}
+
+/* ---- Upload pipeline ---- */
+function deriveAccountFromFilename(filename) {
+  return filename.replace(/\.csv$/i, "").trim() || "Account";
+}
+
+async function runUpload(file, { mode = "replace", fuAccountOverride } = {}) {
+  ensureRecipeIndexes();
+  const text = await file.text();
+  const format = detectFormat(text);
+  if (!format) throw new Error("Unrecognised CSV format. Supported: Flipping Utilities, Copilot.");
+
+  const fuAccount = format === "fu"
+    ? (fuAccountOverride || deriveAccountFromFilename(file.name))
+    : null;
+
+  let events = format === "fu"
+    ? parseFlippingUtilities(text, fuAccount)
+    : parseCopilot(text);
+
+  if (events.length === 0) throw new Error("No usable rows parsed from this file.");
+
+  const nameIndex = buildNameIndex(state.mapping);
+  const { resolved, misses } = resolveItemNames(events, nameIndex);
+
+  const writeAccounts = format === "copilot"
+    ? [...new Set(resolved.map((e) => e.account))]
+    : [fuAccount];
+  if (writeAccounts.length === 0) throw new Error("No account name could be derived.");
+  const activeAccount = writeAccounts[0];
+
+  for (const a of writeAccounts) {
+    const subset = resolved.filter((e) => e.account === a);
+    await flipsDb.putEvents(subset, { mode, account: a });
+  }
+
+  const indexes = ensureRecipeIndexes();
+  const needs = [];
+  for (const e of resolved) {
+    if (e.side === "SELL" && e.itemId && indexes.byProduct.has(e.itemId)) {
+      for (const r of indexes.byProduct.get(e.itemId)) {
+        for (const c of r.components) needs.push({ itemId: c.id, ts: e.ts });
+      }
+    }
+  }
+  await prefetchWikiPrices(needs);
+
+  for (const a of writeAccounts) {
+    const all = await flipsDb.getEvents(a);
+    const conversions = matchEvents(all, RECIPES, indexes, wikiPriceSync, state.mapping);
+    const recipeSummaries = summarizeRecipes(conversions, RECIPES);
+    await flipsDb.putAnalysis({
+      account: a,
+      schemaVersion: HISTORY_SCHEMA_VERSION,
+      computedAt: Date.now(),
+      conversions,
+      recipeSummaries,
+      skippedRows: misses,
+    });
+  }
+
+  state.flipsHistory.accounts = await flipsDb.listAccounts();
+  state.flipsHistory.activeAccount = activeAccount;
+  localStorage.setItem("osrs-combo-history-account", activeAccount);
+  state.flipsHistory.analysisCache = await flipsDb.getAnalysis(activeAccount);
+
+  return { account: activeAccount, accounts: writeAccounts, parsed: events.length, misses };
+}
+
+function promptAccountName(suggested) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("history-account-modal");
+    const input = document.getElementById("history-account-input");
+    input.value = suggested;
+    const confirm = document.getElementById("history-account-confirm");
+    const cancel = document.getElementById("history-account-cancel");
+    function done(value) {
+      confirm.removeEventListener("click", onConfirm);
+      cancel.removeEventListener("click", onCancel);
+      dialog.close();
+      resolve(value);
+    }
+    function onConfirm() { done(input.value.trim() || suggested); }
+    function onCancel() { done(null); }
+    confirm.addEventListener("click", onConfirm);
+    cancel.addEventListener("click", onCancel);
+    dialog.showModal();
+    setTimeout(() => input.select(), 30);
+  });
+}
+
+async function handleUpload(file, mode) {
+  const errEl = document.getElementById("history-upload-error");
+  errEl.hidden = true; errEl.textContent = "";
+  try {
+    const text = await file.text();
+    const fmt = detectFormat(text);
+    if (!fmt) throw new Error("Unrecognised CSV format. Supported: Flipping Utilities, Copilot.");
+    let fuAccountOverride;
+    if (fmt === "fu") {
+      const suggested = deriveAccountFromFilename(file.name);
+      fuAccountOverride = await promptAccountName(suggested);
+      if (fuAccountOverride == null) return;
+    }
+    await runUpload(file, { mode, fuAccountOverride });
+    renderHistory();
+  } catch (e) {
+    errEl.textContent = e.message || String(e);
+    errEl.hidden = false;
+  }
+}
+
 let historyWired = false;
 
 function onModeEnter() {
   ensureRecipeIndexes();
+  if (!historyWired) {
+    historyWired = true;
+    document.getElementById("history-pick-file").addEventListener("click", () => {
+      document.getElementById("history-file-input").click();
+    });
+    document.getElementById("history-file-input").addEventListener("change", async (ev) => {
+      const file = ev.target.files?.[0];
+      const mode = ev.target.dataset.mode || "replace";
+      ev.target.dataset.mode = "";
+      if (!file) return;
+      ev.target.value = "";
+      await handleUpload(file, mode);
+    });
+
+    // Drag-and-drop on <main>
+    const main = document.getElementById("main");
+    const overlay = document.getElementById("history-drag-overlay");
+    let dragDepth = 0;
+    main.addEventListener("dragenter", (ev) => {
+      if (state.mode !== "history") return;
+      if (!Array.from(ev.dataTransfer?.items || []).some((it) => it.kind === "file")) return;
+      ev.preventDefault();
+      dragDepth++;
+      overlay.hidden = false;
+    });
+    main.addEventListener("dragover", (ev) => {
+      if (state.mode !== "history") return;
+      ev.preventDefault();
+    });
+    main.addEventListener("dragleave", () => {
+      if (state.mode !== "history") return;
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) overlay.hidden = true;
+    });
+    main.addEventListener("drop", async (ev) => {
+      if (state.mode !== "history") return;
+      ev.preventDefault();
+      dragDepth = 0;
+      overlay.hidden = true;
+      const file = Array.from(ev.dataTransfer?.files || []).find((f) => /\.csv$/i.test(f.name));
+      if (file) await handleUpload(file, "replace");
+    });
+  }
+  refreshAccountsAndRender();
+}
+
+async function refreshAccountsAndRender() {
+  state.flipsHistory.accounts = await flipsDb.listAccounts();
+  if (!state.flipsHistory.activeAccount && state.flipsHistory.accounts.length > 0) {
+    state.flipsHistory.activeAccount = state.flipsHistory.accounts[0];
+  }
+  if (state.flipsHistory.activeAccount) {
+    state.flipsHistory.analysisCache = await flipsDb.getAnalysis(state.flipsHistory.activeAccount);
+  }
+  renderHistory();
 }
 
 function onModeExit() {
@@ -180,8 +400,22 @@ function onModeExit() {
 }
 
 function renderHistory() {
+  ensureRecipeIndexes();
   const grid = document.getElementById("grid");
-  grid.textContent = "History tab — coming together…";
+  const tableWrap = document.getElementById("table-wrap");
+  const empty = document.getElementById("history-empty");
+  if (!state.flipsHistory.activeAccount) {
+    grid.replaceChildren();
+    grid.hidden = true;
+    tableWrap.hidden = true;
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  grid.hidden = false;
+  tableWrap.hidden = true;
+  const n = state.flipsHistory.analysisCache?.conversions?.length ?? 0;
+  grid.textContent = `Loaded ${n} conversions. (Leaderboard renders in Task 25.)`;
 }
 
-window.History = { renderHistory, onModeEnter, onModeExit };
+window.History = { renderHistory, onModeEnter, onModeExit, handleUpload, runUpload };
