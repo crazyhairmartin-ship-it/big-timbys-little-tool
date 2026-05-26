@@ -193,11 +193,16 @@ function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wik
   const subRecipe = selectBestRecipe(subRecipes, inventory, needQty);
   const synthSell = { id: null, ts, itemId, itemName: fcItemName(mapping, itemId), qty: needQty, price: 0, tax: 0 };
   const nested = _attemptConversionInner(synthSell, subRecipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth + 1);
+  // Propagate the earliest real buy timestamp out of the nested conversion so
+  // the parent's time-to-flip reflects "I bought these gems back in March" and
+  // not "all my synth lots are timeless".
+  const nestedEarliestTs = ts - (nested.timeToFlip || 0);
   return {
     qty: needQty,
     unitPrice: nested.totalCost / needQty,
-    ts,
+    ts: nestedEarliestTs < ts ? nestedEarliestTs : ts,
     sourceRowId: null,
+    nestedEarliestTs,
     status: "complete",
     fallback: false,
     estimated: nested.estimated,
@@ -250,7 +255,13 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
 
     const gp = lots.reduce((s, l) => s + l.qty * l.unitPrice, 0);
     for (const l of lots) {
-      if (l.sourceRowId != null && l.ts < earliestTs) earliestTs = l.ts;
+      // Real FIFO lots contribute their own ts. Synthesized lots contribute
+      // the earliest ts of the real buys that underpin them (propagated up
+      // from the nested conversion). Self-extrapolation lots and wiki
+      // fallbacks have no time signal — they don't move earliestTs.
+      const candidate = l.sourceRowId != null ? l.ts
+        : (l.synthesized ? l.nestedEarliestTs : null);
+      if (candidate != null && candidate < earliestTs) earliestTs = candidate;
     }
     costBasis.push({
       itemId: component.id,
