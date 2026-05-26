@@ -142,3 +142,65 @@ test("selectBestRecipe returns first recipe when no inventory at all", () => {
   const r = core.selectBestRecipe([RECIPES_FIXTURE[0], RECIPES_FIXTURE[1]], inventory, 1);
   assert.strictEqual(r.key, "armadyl-godsword");
 });
+
+test("attemptConversion computes profit from FIFO lots", () => {
+  const inventory = new Map();
+  inventory.set(11798, [{ qty: 1, unitPrice: 14200000, ts: 1, sourceRowId: "blade", status: "complete" }]);
+  inventory.set(11812, [{ qty: 1, unitPrice: 17800000, ts: 2, sourceRowId: "hilt",  status: "complete" }]);
+  const sellEvent = {
+    id: "sell", ts: 100, itemId: 11804, itemName: "Bandos godsword",
+    qty: 1, price: 33000000, tax: 660000,
+  };
+  const recipe = RECIPES_FIXTURE[1];
+  const indexes = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  const wikiPrice = () => { throw new Error("wiki should not be consulted"); };
+
+  const c = core.attemptConversion(sellEvent, recipe, inventory, indexes, wikiPrice, MAPPING);
+
+  assert.strictEqual(c.recipeKey, "bandos-godsword");
+  assert.strictEqual(c.revenue, 33000000);
+  assert.strictEqual(c.tax, 660000);
+  assert.strictEqual(c.totalCost, 14200000 + 17800000);
+  assert.strictEqual(c.profit, 33000000 - 660000 - (14200000 + 17800000));
+  assert.strictEqual(c.estimated, false);
+  assert.strictEqual(c.costBasis.length, 2);
+  assert.strictEqual(c.timeToFlip, 100 - 1);
+});
+
+test("attemptConversion consumes inventory FIFO", () => {
+  const inventory = new Map();
+  inventory.set(11798, [{ qty: 2, unitPrice: 14000000, ts: 1, sourceRowId: "blade", status: "complete" }]);
+  inventory.set(11812, [{ qty: 2, unitPrice: 17800000, ts: 2, sourceRowId: "hilt",  status: "complete" }]);
+  const sellEvent = { id: "s", ts: 100, itemId: 11804, itemName: "Bandos godsword", qty: 1, price: 33000000, tax: 660000 };
+  const indexes = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  core.attemptConversion(sellEvent, RECIPES_FIXTURE[1], inventory, indexes, () => 0, MAPPING);
+  assert.strictEqual(inventory.get(11798)[0].qty, 1);
+  assert.strictEqual(inventory.get(11812)[0].qty, 1);
+});
+
+test("attemptConversion uses wiki fallback when inventory is short", () => {
+  const inventory = new Map();
+  inventory.set(11798, [{ qty: 1, unitPrice: 14000000, ts: 1, sourceRowId: "blade", status: "complete" }]);
+  const sellEvent = { id: "s", ts: 100, itemId: 11804, itemName: "Bandos godsword", qty: 1, price: 33000000, tax: 660000 };
+  const indexes = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  const wikiPrice = (id, ts) => {
+    assert.strictEqual(id, 11812);
+    assert.strictEqual(ts, 100);
+    return 17500000;
+  };
+  const c = core.attemptConversion(sellEvent, RECIPES_FIXTURE[1], inventory, indexes, wikiPrice, MAPPING);
+  assert.strictEqual(c.estimated, true);
+  assert.strictEqual(c.totalCost, 14000000 + 17500000);
+  const hiltCost = c.costBasis.find((cb) => cb.itemId === 11812);
+  assert.strictEqual(hiltCost.estimatedQty, 1);
+});
+
+test("attemptConversion with zero matching inventory falls back fully", () => {
+  const inventory = new Map();
+  const sellEvent = { id: "s", ts: 100, itemId: 11804, itemName: "Bandos godsword", qty: 1, price: 33000000, tax: 660000 };
+  const indexes = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  const wikiPrice = (id) => id === 11798 ? 14000000 : 17500000;
+  const c = core.attemptConversion(sellEvent, RECIPES_FIXTURE[1], inventory, indexes, wikiPrice, MAPPING);
+  assert.strictEqual(c.estimated, true);
+  assert.strictEqual(c.totalCost, 14000000 + 17500000);
+});

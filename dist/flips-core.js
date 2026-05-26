@@ -151,6 +151,64 @@ function popFromFIFO(queue, need) {
   return out;
 }
 
+function fcItemName(mapping, id) {
+  return mapping[id]?.name || `#${id}`;
+}
+
+function attemptConversion(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping) {
+  const productQty = sellEvent.qty / (recipe.resultQty ?? 1);
+  const costBasis = [];
+  let estimated = false;
+  let earliestTs = sellEvent.ts;
+
+  for (const component of recipe.components) {
+    const needed = component.qty * productQty;
+    if (!inventory.has(component.id)) inventory.set(component.id, []);
+    const queue = inventory.get(component.id);
+    const lots = popFromFIFO(queue, needed);
+    const coveredQty = lots.reduce((s, l) => s + l.qty, 0);
+    const shortfall = needed - coveredQty;
+
+    if (shortfall > 0) {
+      const fbPrice = wikiPriceAt(component.id, sellEvent.ts);
+      lots.push({ qty: shortfall, unitPrice: fbPrice, ts: sellEvent.ts, sourceRowId: null, status: "complete", fallback: true });
+      estimated = true;
+    }
+
+    const gp = lots.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+    for (const l of lots) {
+      if (l.sourceRowId != null && l.ts < earliestTs) earliestTs = l.ts;
+    }
+    costBasis.push({
+      itemId: component.id,
+      itemName: fcItemName(mapping, component.id),
+      qty: needed,
+      gp,
+      lots: lots.map((l) => l.sourceRowId).filter((x) => x != null),
+      estimatedQty: lots.filter((l) => l.fallback).reduce((s, l) => s + l.qty, 0),
+      selfAssembledQty: 0,
+      lotStatuses: lots.filter((l) => l.sourceRowId != null).map((l) => l.status),
+    });
+  }
+
+  const totalCost = costBasis.reduce((s, c) => s + c.gp, 0);
+  return {
+    ts: sellEvent.ts,
+    recipeKey: recipe.key,
+    productId: sellEvent.itemId,
+    productName: fcItemName(mapping, sellEvent.itemId),
+    productQty: sellEvent.qty,
+    revenue: sellEvent.price * sellEvent.qty,
+    tax: sellEvent.tax || 0,
+    costBasis,
+    totalCost,
+    profit: (sellEvent.price * sellEvent.qty) - (sellEvent.tax || 0) - totalCost,
+    estimated,
+    timeToFlip: sellEvent.ts - earliestTs,
+    sellRowId: sellEvent.id,
+  };
+}
+
 function selectBestRecipe(recipes, inventory, productQty) {
   let best = recipes[0];
   let bestScore = -1;
@@ -195,5 +253,5 @@ function buildRecipeIndexes(recipes) {
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion };
 }
