@@ -577,16 +577,17 @@ function shouldDropConversion(conv) {
     if (cb.wikiFallbackQty > 0 && cb.gp === 0) return true;
   }
 
-  // For repair-style recipes (Barrows / Moons), the repair fee can outrank
-  // the broken item by gp at low smithing levels — but a wiki-fallback or
-  // extrapolated broken item still means the user almost certainly didn't
-  // craft (they pure-flipped a repaired item from pre-history inventory).
-  // Drop these to avoid emitting phantom crafts with bogus cost basis.
+  // For repair-style recipes (Barrows / Moons): if the broken component had
+  // ZERO real FIFO inventory, the user can't have actually crafted — almost
+  // certainly a pre-history pure flip of the repaired item, drop it. But a
+  // partial shortfall (e.g. sold 5 repaired, had 4 broken + 1 from before
+  // the data window) is fine and the conversion should stay visible.
   const hasRepair = conv.costBasis.some((cb) => cb.repairCost);
   if (hasRepair) {
     for (const cb of conv.costBasis) {
       if (cb.repairCost) continue;
-      if (cb.wikiFallbackQty > 0 || cb.extrapolatedQty > 0) return true;
+      const realFIFOQty = (cb.qty || 0) - (cb.wikiFallbackQty || 0) - (cb.extrapolatedQty || 0) - (cb.selfAssembledQty || 0);
+      if (realFIFOQty <= 0) return true;
     }
   }
 
@@ -594,6 +595,18 @@ function shouldDropConversion(conv) {
   for (const cb of conv.costBasis) {
     if (cb.gp > primary.gp) primary = cb;
   }
+  // Keep the conversion when the user had SOME real FIFO inventory of the
+  // primary component — a craft like "4-of-5 Venator shards bought in-window
+  // + 1 pre-history" or "350-of-450 Oathplate shards + 100 pre-history" is
+  // a real craft, with the shortfall just topped up by inventory we can't
+  // see. Mark estimated (conv.estimated already true if any wiki/extrap was
+  // used) so the renderer flags it, but don't drop.
+  const primaryRealFIFOQty = (primary.qty || 0)
+    - (primary.wikiFallbackQty || 0)
+    - (primary.extrapolatedQty || 0)
+    - (primary.selfAssembledQty || 0);
+  if (primaryRealFIFOQty > 0) return false;
+  // Otherwise the primary is entirely fabricated (no real FIFO buy of it).
   if (primary.wikiFallbackQty > 0) return true;
   if (primary.extrapolatedQty > 0) return true;
   // Synth is trusted when the recursive primary chain lands on real FIFO at
