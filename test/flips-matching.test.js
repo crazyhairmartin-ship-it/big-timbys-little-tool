@@ -87,35 +87,61 @@ test("buildRecipeIndexes returns undefined for unknown ids", () => {
   assert.strictEqual(idx.byComponent.get(999), undefined);
 });
 
-test("popFromFIFO consumes lots in oldest-first order", () => {
+test("popFromInventory consumes lots in newest-first order (LIFO)", () => {
   const queue = [
     { qty: 3, unitPrice: 100, ts: 1, sourceRowId: "a", status: "complete" },
     { qty: 5, unitPrice: 110, ts: 2, sourceRowId: "b", status: "complete" },
   ];
-  const popped = core.popFromFIFO(queue, 4);
+  const popped = core.popFromInventory(queue, 4);
+  // Tail consumed first: full 4 from the qty-5 'b' lot.
   assert.deepStrictEqual(popped.map((l) => [l.qty, l.unitPrice, l.sourceRowId]), [
-    [3, 100, "a"], [1, 110, "b"],
+    [4, 110, "b"],
   ]);
-  assert.strictEqual(queue.length, 1);
-  assert.strictEqual(queue[0].qty, 4);
+  assert.strictEqual(queue.length, 2);
+  assert.strictEqual(queue[1].qty, 1);
+  assert.strictEqual(queue[0].qty, 3);
 });
 
-test("popFromFIFO returns what it can if inventory is short", () => {
+test("popFromInventory spills onto older lots when newest runs out", () => {
+  const queue = [
+    { qty: 3, unitPrice: 100, ts: 1, sourceRowId: "a", status: "complete" },
+    { qty: 5, unitPrice: 110, ts: 2, sourceRowId: "b", status: "complete" },
+  ];
+  const popped = core.popFromInventory(queue, 7);
+  // Consume all of 'b' (5), then 2 from 'a'.
+  assert.deepStrictEqual(popped.map((l) => [l.qty, l.unitPrice, l.sourceRowId]), [
+    [5, 110, "b"], [2, 100, "a"],
+  ]);
+  assert.strictEqual(queue.length, 1);
+  assert.strictEqual(queue[0].sourceRowId, "a");
+  assert.strictEqual(queue[0].qty, 1);
+});
+
+test("popFromInventory returns what it can if inventory is short", () => {
   const queue = [{ qty: 2, unitPrice: 100, ts: 1, sourceRowId: "a", status: "complete" }];
-  const popped = core.popFromFIFO(queue, 5);
+  const popped = core.popFromInventory(queue, 5);
   assert.strictEqual(popped.length, 1);
   assert.strictEqual(popped[0].qty, 2);
   assert.strictEqual(queue.length, 0);
 });
 
-test("popFromFIFO is a no-op on an empty queue", () => {
-  const popped = core.popFromFIFO([], 5);
+test("popFromInventory is a no-op on an empty queue", () => {
+  const popped = core.popFromInventory([], 5);
   assert.deepStrictEqual(popped, []);
 });
 
-test("popFromFIFO handles missing queue (undefined)", () => {
-  const popped = core.popFromFIFO(undefined, 5);
+test("popFromInventory handles missing queue (undefined)", () => {
+  const popped = core.popFromInventory(undefined, 5);
   assert.deepStrictEqual(popped, []);
+});
+
+test("popFromFIFO alias still works (LIFO semantics)", () => {
+  const queue = [
+    { qty: 3, ts: 1, sourceRowId: "a", unitPrice: 100, status: "complete" },
+    { qty: 5, ts: 2, sourceRowId: "b", unitPrice: 110, status: "complete" },
+  ];
+  const popped = core.popFromFIFO(queue, 2);
+  assert.strictEqual(popped[0].sourceRowId, "b");
 });
 
 test("selectBestRecipe picks the recipe with the most coverage", () => {

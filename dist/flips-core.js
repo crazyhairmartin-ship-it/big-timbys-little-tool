@@ -199,24 +199,32 @@ function resolveItemNames(events, nameIndex) {
   return { resolved, misses };
 }
 
-function popFromFIFO(queue, need) {
+// LIFO inventory pop: consume the most-recently-acquired lots first. OSRS GE
+// has no concept of which physical unit you sell — inventory is fungible —
+// and "I just bought X and then sold X" matches user intent far better than
+// "I sold the unit I held for 320 days while ignoring the one I bought
+// yesterday". FIFO assigns recent sells to ancient buys whenever a long-term
+// hold sits alongside active flipping, inventing fake multi-month flips.
+function popFromInventory(queue, need) {
   if (!queue || need <= 0) return [];
   const out = [];
   let remaining = need;
   while (remaining > 0 && queue.length > 0) {
-    const head = queue[0];
-    if (head.qty <= remaining) {
-      out.push(head);
-      remaining -= head.qty;
-      queue.shift();
+    const tail = queue[queue.length - 1];
+    if (tail.qty <= remaining) {
+      out.push(tail);
+      remaining -= tail.qty;
+      queue.pop();
     } else {
-      out.push({ ...head, qty: remaining });
-      head.qty -= remaining;
+      out.push({ ...tail, qty: remaining });
+      tail.qty -= remaining;
       remaining = 0;
     }
   }
   return out;
 }
+// Back-compat alias (older code path or tests may still reach for this name).
+const popFromFIFO = popFromInventory;
 
 function fcItemName(mapping, id) {
   return mapping[id]?.name || `#${id}`;
@@ -465,8 +473,12 @@ function selectBestRecipe(recipes, inventory, productQty) {
       const requireQty = c.qty * (productQty / (r.resultQty ?? 1));
       const queue = inventory.get(c.id) || [];
       let remaining = requireQty;
-      for (const lot of queue) {
+      // Walk newest-first to mirror LIFO pop — coverage is order-independent,
+      // but the cost tiebreaker should reflect the lots that will actually
+      // be consumed.
+      for (let i = queue.length - 1; i >= 0; i--) {
         if (remaining <= 0) break;
+        const lot = queue[i];
         const take = Math.min(lot.qty, remaining);
         covered += take;
         cost += take * lot.unitPrice;
@@ -496,24 +508,25 @@ function buildRecipeIndexes(recipes) {
   return { byProduct, byComponent };
 }
 
-// Decide whether a SELL is more naturally a craft than a pure flip. The FIFO
-// queues are sorted oldest-first, so `queue[0].ts` is the lot that would be
-// consumed first on either path. If the most recently-acquired required
-// component is newer than the oldest finished-product lot, the recent buy
-// signals an active craft project (and the older finished-product stock is
-// likely unrelated long-term holding).
+// Decide whether a SELL is more naturally a craft than a pure flip. Inventory
+// queues are sorted oldest-first; LIFO popping consumes the tail. So
+// `queue[last].ts` is the lot that would be consumed first on either path.
+// If components were all owned more recently than the most-recent finished
+// product, the craft was the user's most-recent acquisition activity and the
+// sell should be treated as a craft.
 function shouldPreferCraft(productInv, candidates, inventory) {
   if (!productInv || productInv.length === 0) return false;
-  const productOldestTs = productInv[0].ts;
+  const productNewestTs = productInv[productInv.length - 1].ts;
   for (const recipe of candidates) {
     let allAvailable = true;
-    let newestOldestComponentTs = -Infinity;
+    let craftPossibleAt = -Infinity; // ts when all required components were owned
     for (const c of recipe.components) {
       const ci = inventory.get(c.id);
       if (!ci || ci.length === 0) { allAvailable = false; break; }
-      if (ci[0].ts > newestOldestComponentTs) newestOldestComponentTs = ci[0].ts;
+      const ts = ci[ci.length - 1].ts;
+      if (ts > craftPossibleAt) craftPossibleAt = ts;
     }
-    if (allAvailable && newestOldestComponentTs > productOldestTs) return true;
+    if (allAvailable && craftPossibleAt > productNewestTs) return true;
   }
   return false;
 }
@@ -717,5 +730,5 @@ function filterConversionsByRange(conversions, start, end) {
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange, selfExtrapolateLot, shouldDropConversion, fuzzyEventKey, mergeEventPair, fuzzyDedupeMerge, fcRepairCost, shouldPreferCraft, emitPureFlip };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromInventory, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange, selfExtrapolateLot, shouldDropConversion, fuzzyEventKey, mergeEventPair, fuzzyDedupeMerge, fcRepairCost, shouldPreferCraft, emitPureFlip };
 }

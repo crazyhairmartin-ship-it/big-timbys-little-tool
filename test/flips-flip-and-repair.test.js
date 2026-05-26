@@ -192,3 +192,37 @@ test("shouldPreferCraft returns true when newest required component is newer tha
   const candidates = [RECIPES[0]];
   assert.strictEqual(core.shouldPreferCraft(productInv, candidates, inventory), true);
 });
+
+// ---------------- LIFO regression: long-hold + active flipping ----------------
+
+test("long-held lot is preserved when user actively flips the same item", () => {
+  // Masori-helm-style scenario: bought 1 a year ago and never sold it, then
+  // did several quick buy-and-flip cycles. Each flip-cycle SELL should be
+  // paired with its own freshly-bought lot, NOT with the year-old hold.
+  const DAY = 24 * 3600 * 1000;
+  const events = [
+    // The long-term hold: bought day 0, never the one being sold below.
+    { id: 1, ts: 0,             itemId: 11804, side: "BUY",  qty: 1, price: 30_000_000, tax: 0,         status: "complete" },
+
+    // Flip cycle 1: bought day 100, sold day 101.
+    { id: 2, ts: 100 * DAY,     itemId: 11804, side: "BUY",  qty: 1, price: 31_000_000, tax: 0,         status: "complete" },
+    { id: 3, ts: 101 * DAY,     itemId: 11804, side: "SELL", qty: 1, price: 32_000_000, tax: 640_000,   status: "complete" },
+
+    // Flip cycle 2: bought day 200, sold day 201.
+    { id: 4, ts: 200 * DAY,     itemId: 11804, side: "BUY",  qty: 1, price: 31_500_000, tax: 0,         status: "complete" },
+    { id: 5, ts: 201 * DAY,     itemId: 11804, side: "SELL", qty: 1, price: 32_500_000, tax: 650_000,   status: "complete" },
+
+    // Flip cycle 3: bought day 320, sold day 321.
+    { id: 6, ts: 320 * DAY,     itemId: 11804, side: "BUY",  qty: 1, price: 32_000_000, tax: 0,         status: "complete" },
+    { id: 7, ts: 321 * DAY,     itemId: 11804, side: "SELL", qty: 1, price: 33_000_000, tax: 660_000,   status: "complete" },
+  ];
+  const indexes = core.buildRecipeIndexes(RECIPES);
+  const convs = core.matchEvents(events, RECIPES, indexes, () => 0, MAPPING);
+
+  // Three quick flips, all one-day holds — NOT one 321-day hold.
+  assert.strictEqual(convs.length, 3, "expected 3 flip conversions");
+  for (const c of convs) {
+    assert.strictEqual(c.kind, "flip");
+    assert.strictEqual(c.timeToFlip, 1 * DAY, `expected 1-day flip, got ${c.timeToFlip / DAY} days`);
+  }
+});
