@@ -1023,4 +1023,4 @@ function renderHistory() {
   }
 }
 
-window.History = { renderHistory, onModeEnter, onModeExit, handleUpload, runUpload };
+window.Flips = { renderHistory, onModeEnter, onModeExit, handleUpload, runUpload };

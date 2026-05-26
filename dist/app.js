@@ -1499,7 +1499,7 @@ function applyFilters(items) {
 
 function renderGrid() {
   if (state.mode === "overnight" && window.Overnight) { window.Overnight.renderOvernight(); return; }
-  if (state.mode === "history" && window.History) { window.History.renderHistory(); return; }
+  if (state.mode === "history" && window.Flips) { window.Flips.renderHistory(); return; }
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
   const items = RECIPES.map(r => ({ recipe: r, calc: calcMargin(r) }));
@@ -2442,11 +2442,11 @@ async function init() {
     document.getElementById("mode-history").classList.toggle("active", m === "history");
     document.getElementById("layout").classList.toggle("mode-overnight", m === "overnight");
     document.getElementById("layout").classList.toggle("mode-history", m === "history");
-    if (prev === "history" && m !== "history" && window.History?.onModeExit) {
-      window.History.onModeExit();
+    if (prev === "history" && m !== "history" && window.Flips?.onModeExit) {
+      window.Flips.onModeExit();
     }
-    if (m === "history" && window.History?.onModeEnter) {
-      window.History.onModeEnter();
+    if (m === "history" && window.Flips?.onModeEnter) {
+      window.Flips.onModeEnter();
     }
     rebuildSortOptions(m);
     renderGrid();
