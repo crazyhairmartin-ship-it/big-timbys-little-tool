@@ -207,14 +207,57 @@ function mergeEventPair(a, b) {
   return out;
 }
 
+// FU writes one row per "session" of partial fills (aggregated qty); Copilot
+// writes one row per individual fill. When both sources cover the same
+// underlying trade, the Copilot rows at the same item+price within a tight
+// window sum to the FU qty. Detect that pattern and suppress the FU row in
+// favor of the per-fill Copilot records (better ts granularity, no double
+// inventory consumption). Returns a Set of suppressed event references.
+const FU_AGG_MATCH_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+function findRedundantFuAggregates(events) {
+  const groups = new Map();
+  for (const e of events) {
+    const idKey = e.itemId ?? e.itemName ?? "";
+    const key = `${e.account}|${e.side}|${idKey}|${e.price}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  }
+  const suppressed = new Set();
+  for (const groupEvents of groups.values()) {
+    if (groupEvents.length < 2) continue;
+    for (const fu of groupEvents) {
+      if (fu.source !== "fu" || suppressed.has(fu)) continue;
+      const nearbyCopilot = groupEvents.filter((e) =>
+        e.source === "copilot" &&
+        !suppressed.has(e) &&
+        Math.abs(e.ts - fu.ts) <= FU_AGG_MATCH_WINDOW_MS
+      );
+      // Need at least 2 Copilot rows to be considered an "FU aggregating
+      // multiple Copilot fills" pattern. A single-Copilot match goes through
+      // the normal key-based dedup (qty 1 vs qty 1 still merges fine there).
+      if (nearbyCopilot.length < 2) continue;
+      const sumQty = nearbyCopilot.reduce((s, e) => s + e.qty, 0);
+      if (sumQty === fu.qty) suppressed.add(fu);
+    }
+  }
+  return suppressed;
+}
+
 // Given an existing event list and an incoming event list, return:
 //   - merged: events to keep (existing replaced where matched)
 //   - inserts: events to add as new
+//   - deletes: existing event ids to remove (FU aggregates superseded by Copilot)
 //   - dedupedCount: how many incoming rows were matched to existing rows
 function fuzzyDedupeMerge(existing, incoming, windowMs) {
   const window = windowMs ?? FUZZY_DEDUPE_WINDOW_MS;
+  const suppressed = findRedundantFuAggregates([...existing, ...incoming]);
+  const deletes = [];
+  for (const e of existing) {
+    if (suppressed.has(e) && e.id != null) deletes.push(e.id);
+  }
   const byKey = new Map();
   for (const e of existing) {
+    if (suppressed.has(e)) continue;
     const k = fuzzyEventKey(e);
     if (!byKey.has(k)) byKey.set(k, []);
     byKey.get(k).push(e);
@@ -223,6 +266,7 @@ function fuzzyDedupeMerge(existing, incoming, windowMs) {
   const updates = []; // { existingId, mergedEvent }
   const inserts = [];
   for (const inc of incoming) {
+    if (suppressed.has(inc)) continue;
     const k = fuzzyEventKey(inc);
     const candidates = byKey.get(k) || [];
     let bestIdx = -1;
@@ -243,7 +287,7 @@ function fuzzyDedupeMerge(existing, incoming, windowMs) {
       inserts.push(inc);
     }
   }
-  return { updates, inserts, dedupedCount: updates.length };
+  return { updates, inserts, deletes, dedupedCount: updates.length };
 }
 
 function buildNameIndex(mapping) {
