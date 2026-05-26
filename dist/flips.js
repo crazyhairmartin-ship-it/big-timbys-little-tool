@@ -377,7 +377,7 @@ async function runUpload(file, { mode = "replace", fuAccountOverride } = {}) {
 
   for (const a of writeAccounts) {
     const all = await flipsDb.getEvents(a);
-    const conversions = matchEvents(all, RECIPES, indexes, wikiPriceSync, state.mapping);
+    const conversions = matchEvents(all, RECIPES, indexes, wikiPriceSync, state.mapping, { smithingLevel: state.smithing });
     const recipeSummaries = summarizeRecipes(conversions, RECIPES);
     await flipsDb.putAnalysis({
       account: a,
@@ -879,6 +879,7 @@ function switchHistoryTab(key, recipe, conversions) {
 function conversionStatusBadge(c) {
   const span = document.createElement("span");
   span.className = "conv-status";
+  if (c.kind === "flip") { span.textContent = "flip"; span.className += " flip-badge"; span.title = "Bought and sold the finished product (no crafting)"; return span; }
   if (c.estimated) { span.textContent = "~"; span.title = "Used wiki fallback for one or more components"; return span; }
   const hasCancelled = c.costBasis.some((cb) => cb.lotStatuses?.some((s) => s === "cancelled"));
   if (hasCancelled) { span.textContent = "⚠"; span.title = "Includes partially-cancelled lots"; return span; }
@@ -900,7 +901,11 @@ function toggleCostBasisExpansion(tr, conv) {
     const row = document.createElement("div");
     const estPart = cb.estimatedQty > 0 ? ` (${cb.estimatedQty} est)` : "";
     const selfPart = cb.selfAssembledQty > 0 ? ` (${cb.selfAssembledQty} self-assembled)` : "";
-    row.textContent = `${cb.qty}× ${cb.itemName}: ${fmtGp(cb.gp)}${estPart}${selfPart}`;
+    if (cb.repairCost) {
+      row.textContent = `${cb.itemName}: ${fmtGp(cb.gp)}`;
+    } else {
+      row.textContent = `${cb.qty}× ${cb.itemName}: ${fmtGp(cb.gp)}${estPart}${selfPart}`;
+    }
     td.appendChild(row);
   }
   breakdown.appendChild(td);

@@ -247,7 +247,7 @@ function selfExtrapolateLot(itemId, ts, needQty, priceWitnesses) {
   };
 }
 
-function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth) {
+function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth, options) {
   if (depth > 5) {
     const fbPrice = wikiPriceAt(itemId, ts);
     return { qty: needQty, unitPrice: fbPrice, ts, sourceRowId: null, status: "complete", fallback: true, estimated: true, synthesized: false };
@@ -259,7 +259,7 @@ function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wik
   }
   const subRecipe = selectBestRecipe(subRecipes, inventory, needQty);
   const synthSell = { id: null, ts, itemId, itemName: fcItemName(mapping, itemId), qty: needQty, price: 0, tax: 0 };
-  const nested = _attemptConversionInner(synthSell, subRecipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth + 1);
+  const nested = _attemptConversionInner(synthSell, subRecipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth + 1, options);
   // A synth lot is "primary-chain-tracked" when, recursively, the most-
   // expensive component at every layer of the nested chain came from real
   // FIFO lots. Cheap sub-components are allowed to self-extrapolate — only
@@ -293,11 +293,20 @@ function isPrimaryChainTracked(conv) {
   return true;
 }
 
-function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth) {
+// Smithing-level-adjusted repair cost, mirroring app.js: at level 99 you pay
+// half the NPC fee at an armour stand. Returns 0 for non-repair recipes.
+function fcRepairCost(repairBase, smithingLevel) {
+  if (!repairBase) return 0;
+  const lvl = Number.isFinite(smithingLevel) ? smithingLevel : 99;
+  return Math.round(repairBase * (1 - lvl / 200));
+}
+
+function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth, options) {
   const productQty = sellEvent.qty / (recipe.resultQty ?? 1);
   const costBasis = [];
   let estimated = false;
   let earliestTs = sellEvent.ts;
+  const smithingLevel = options?.smithingLevel ?? 99;
 
   for (const component of recipe.components) {
     const needed = component.qty * productQty;
@@ -323,7 +332,7 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
     let synthEstimated = false;
     let synthPrimaryChainTracked = false;
     if (shortfall > 0 && indexes.byProduct.has(component.id)) {
-      const synth = synthesizeFromNestedRecipe(component.id, shortfall, sellEvent.ts, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth);
+      const synth = synthesizeFromNestedRecipe(component.id, shortfall, sellEvent.ts, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth, options);
       lots.push(synth);
       synthesizedQty = synth.qty;
       synthPrimaryChainTracked = !!synth.primaryChainTracked;
@@ -364,8 +373,32 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
     });
   }
 
+  // Smithing-adjusted repair cost for Barrows-style "repair" recipes — the
+  // recipe defines `repairBase` (the NPC armour-stand fee at level 1) and we
+  // scale by smithing level. Treated as a known cost (not estimated) and
+  // emitted as a synthetic cost-basis line so the drilldown can show it.
+  const repairUnitCost = fcRepairCost(recipe.repairBase, smithingLevel);
+  if (repairUnitCost > 0) {
+    costBasis.push({
+      itemId: null,
+      itemName: `Repair @ ${smithingLevel} smithing`,
+      qty: productQty,
+      gp: repairUnitCost * productQty,
+      lots: [],
+      wikiFallbackQty: 0,
+      selfAssembledQty: 0,
+      synthEstimated: false,
+      synthPrimaryChainTracked: false,
+      extrapolatedQty: 0,
+      estimatedQty: 0,
+      lotStatuses: [],
+      repairCost: true,
+    });
+  }
+
   const totalCost = costBasis.reduce((s, c) => s + c.gp, 0);
   return {
+    kind: "craft",
     ts: sellEvent.ts,
     recipeKey: recipe.key,
     productId: sellEvent.itemId,
@@ -382,8 +415,8 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
   };
 }
 
-function attemptConversion(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses) {
-  return _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses || new Map(), 0);
+function attemptConversion(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, options) {
+  return _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses || new Map(), 0, options);
 }
 
 // A conversion is "too speculative to trust" when we're inventing the
@@ -463,7 +496,94 @@ function buildRecipeIndexes(recipes) {
   return { byProduct, byComponent };
 }
 
-function matchEvents(events, recipes, indexes, wikiPriceAt, mapping) {
+// Decide whether a SELL is more naturally a craft than a pure flip. The FIFO
+// queues are sorted oldest-first, so `queue[0].ts` is the lot that would be
+// consumed first on either path. If the most recently-acquired required
+// component is newer than the oldest finished-product lot, the recent buy
+// signals an active craft project (and the older finished-product stock is
+// likely unrelated long-term holding).
+function shouldPreferCraft(productInv, candidates, inventory) {
+  if (!productInv || productInv.length === 0) return false;
+  const productOldestTs = productInv[0].ts;
+  for (const recipe of candidates) {
+    let allAvailable = true;
+    let newestOldestComponentTs = -Infinity;
+    for (const c of recipe.components) {
+      const ci = inventory.get(c.id);
+      if (!ci || ci.length === 0) { allAvailable = false; break; }
+      if (ci[0].ts > newestOldestComponentTs) newestOldestComponentTs = ci[0].ts;
+    }
+    if (allAvailable && newestOldestComponentTs > productOldestTs) return true;
+  }
+  return false;
+}
+
+// Pure flip of a finished product: the user bought the recipe's product and
+// later sold it, with no crafting involved. Emitted as a conversion (with
+// kind: "flip") so the leaderboard surfaces it under the same recipe row.
+// Returns null when nothing can be consumed or when the item has no recipe.
+function emitPureFlip(sellEvent, productInv, candidates, qty, mapping) {
+  if (!productInv || productInv.length === 0) return null;
+  if (!candidates || candidates.length === 0) return null;
+  const lots = popFromFIFO(productInv, qty);
+  const consumed = lots.reduce((s, l) => s + l.qty, 0);
+  if (consumed <= 0) return null;
+
+  const recipeKey = candidates[0].key;
+  const gp = lots.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+  let earliestTs = sellEvent.ts;
+  for (const l of lots) if (l.ts < earliestTs) earliestTs = l.ts;
+  const revenue = sellEvent.price * consumed;
+  const taxShare = sellEvent.qty > 0 ? (sellEvent.tax || 0) * (consumed / sellEvent.qty) : 0;
+  return {
+    kind: "flip",
+    ts: sellEvent.ts,
+    recipeKey,
+    productId: sellEvent.itemId,
+    productName: fcItemName(mapping, sellEvent.itemId),
+    productQty: consumed,
+    revenue,
+    tax: taxShare,
+    costBasis: [{
+      itemId: sellEvent.itemId,
+      itemName: fcItemName(mapping, sellEvent.itemId),
+      qty: consumed,
+      gp,
+      lots: lots.map((l) => l.sourceRowId).filter((x) => x != null),
+      wikiFallbackQty: 0,
+      selfAssembledQty: 0,
+      synthEstimated: false,
+      synthPrimaryChainTracked: false,
+      extrapolatedQty: 0,
+      estimatedQty: 0,
+      lotStatuses: lots.map((l) => l.status).filter(Boolean),
+    }],
+    totalCost: gp,
+    profit: revenue - taxShare - gp,
+    estimated: false,
+    timeToFlip: sellEvent.ts - earliestTs,
+    sellRowId: sellEvent.id,
+  };
+}
+
+// How many finished products the user can craft right now from direct
+// inventory (ignores wiki fallback, synth-from-nested, and self-extrap).
+// Used by matchEvents to size the craft when preferring craft-over-flip, so
+// a partial-coverage sell doesn't push every wiki-fallback heuristic.
+function computeMaxCraftableQty(recipe, inventory) {
+  if (!recipe.components || recipe.components.length === 0) return 0;
+  const productPerCraft = recipe.resultQty ?? 1;
+  let minSets = Infinity;
+  for (const c of recipe.components) {
+    const queue = inventory.get(c.id) || [];
+    const totalQty = queue.reduce((s, l) => s + l.qty, 0);
+    const setsFromThis = Math.floor(totalQty / c.qty);
+    if (setsFromThis < minSets) minSets = setsFromThis;
+  }
+  return minSets === Infinity ? 0 : minSets * productPerCraft;
+}
+
+function matchEvents(events, recipes, indexes, wikiPriceAt, mapping, options) {
   const inventory = new Map();
   // Price-witness ledger: every BUY is recorded here. Lots get consumed from
   // `inventory` as sells happen, but `priceWitnesses` is append-only so we can
@@ -488,21 +608,51 @@ function matchEvents(events, recipes, indexes, wikiPriceAt, mapping) {
       continue;
     }
     if (e.side === "SELL") {
+      const candidates = indexes.byProduct.get(e.itemId) || [];
+      const productHasRecipe = candidates.length > 0;
+      const productInv = inventory.get(e.itemId);
       let remainingQty = e.qty;
-      if (inventory.has(e.itemId)) {
-        const directLots = popFromFIFO(inventory.get(e.itemId), remainingQty);
-        const consumed = directLots.reduce((s, l) => s + l.qty, 0);
-        remainingQty -= consumed;
+
+      const preferCraft = productHasRecipe && shouldPreferCraft(productInv, candidates, inventory);
+
+      // Phase 1: when preferring craft, craft up to the limit of direct
+      // component inventory first. This avoids forcing wiki fallback for a
+      // mixed sell (e.g., 1 finished + 1 craft-able set, selling 2 — we want
+      // 1 craft + 1 flip, not a wiki-padded 2-craft attempt that gets dropped).
+      if (preferCraft && productHasRecipe) {
+        const recipe = selectBestRecipe(candidates, inventory, remainingQty);
+        const maxCraftable = computeMaxCraftableQty(recipe, inventory);
+        const craftQty = Math.min(maxCraftable, remainingQty);
+        if (craftQty > 0) {
+          const conv = attemptConversion(
+            { ...e, qty: craftQty },
+            recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, options
+          );
+          if (!shouldDropConversion(conv)) {
+            conversions.push(conv);
+            remainingQty -= craftQty;
+          }
+        }
       }
+
+      // Phase 2: pure-flip pre-consume from finished-product inventory.
+      if (productInv && productInv.length > 0 && remainingQty > 0) {
+        const flipConv = emitPureFlip(e, productInv, candidates, remainingQty, mapping);
+        if (flipConv) {
+          conversions.push(flipConv);
+          remainingQty -= flipConv.productQty;
+        }
+      }
+
       if (remainingQty <= 0) continue;
+      if (!productHasRecipe) continue;
 
-      const candidates = indexes.byProduct.get(e.itemId);
-      if (!candidates || candidates.length === 0) continue;
-
+      // Phase 3: craft any remaining qty (default path crafts here; preferCraft
+      // path falls through here only if Phase 1 was capped by component supply).
       const recipe = selectBestRecipe(candidates, inventory, remainingQty);
       const conv = attemptConversion(
         { ...e, qty: remainingQty },
-        recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses
+        recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, options
       );
       if (!shouldDropConversion(conv)) {
         conversions.push(conv);
@@ -567,5 +717,5 @@ function filterConversionsByRange(conversions, start, end) {
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange, selfExtrapolateLot, shouldDropConversion, fuzzyEventKey, mergeEventPair, fuzzyDedupeMerge };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange, selfExtrapolateLot, shouldDropConversion, fuzzyEventKey, mergeEventPair, fuzzyDedupeMerge, fcRepairCost, shouldPreferCraft, emitPureFlip };
 }

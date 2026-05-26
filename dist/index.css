@@ -1566,6 +1566,16 @@ footer {
 .conv-table td.loss   { color: var(--red,   #f87171); }
 .conv-table td.cost-cell { cursor: pointer; text-decoration: underline dotted; }
 .conv-status { display: inline-block; width: 1rem; text-align: center; }
+.conv-status.flip-badge {
+  width: auto;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(96, 165, 250, 0.15);
+  color: #93c5fd;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
 .cost-breakdown-row td.cost-breakdown {
   background: rgba(255, 255, 255, 0.03);
   padding: 8px 12px;
