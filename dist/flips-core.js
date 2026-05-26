@@ -8,6 +8,9 @@ function parseCopilot(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
   if (lines.length < 2) return [];
   // Header: Timestamp,Account,Side,Item,Quantity,Paid/Received,Tax,Price ea.,Part of Flip
+  // Copilot's Tax column is computed at export time with the current 2% rate
+  // and no 5M-per-unit cap — so a pre-cutover sale or a >250M-per-unit sale
+  // records the wrong number. We recompute from price + ts + qty instead.
   const events = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(",");
@@ -15,17 +18,18 @@ function parseCopilot(text) {
     const side = cols[2];
     if (side !== "BUY" && side !== "SELL") continue;
     const qty = Number(cols[4]);
-    const tax = Number(cols[6]);
     const price = Number(cols[7]);
+    const ts = Date.parse(cols[0]);
     if (!Number.isFinite(qty) || !Number.isFinite(price)) continue;
+    const tax = side === "SELL" ? fcGeTax(price, qty, ts) : 0;
     events.push({
       account: cols[1],
-      ts: Date.parse(cols[0]),
+      ts,
       itemName: cols[3],
       side,
       qty,
       price,
-      tax: Number.isFinite(tax) ? tax : 0,
+      tax,
       status: "complete",
       source: "copilot",
     });
@@ -42,10 +46,16 @@ const FU_STATE_MAP = {
   SELLING:         { side: "SELL", status: "pending"   },
 };
 
-// GE tax: 2% of sale price per unit, capped at 5M per unit, exempt under 100 gp.
-function fcGeTax(price, qty) {
+// OSRS doubled the GE tax rate from 1% to 2% on 29 May 2025; the 5M-per-unit
+// cap and the <100 gp exemption have been there throughout. Historical FU
+// rows from before the cutover must be taxed at 1% to match what the user
+// actually paid; rows on or after get 2%. Copilot CSVs carry tax in the file
+// itself so this code path is FU-only — and FU rows always have a timestamp.
+const GE_TAX_2PCT_CUTOVER_MS = Date.UTC(2025, 4, 29); // May = month index 4
+function fcGeTax(price, qty, ts) {
   if (price < 100) return 0;
-  const per = Math.min(Math.floor(price * 0.02), 5_000_000);
+  const rate = (ts != null && ts < GE_TAX_2PCT_CUTOVER_MS) ? 0.01 : 0.02;
+  const per = Math.min(Math.floor(price * rate), 5_000_000);
   return per * qty;
 }
 
@@ -77,7 +87,7 @@ function parseFlippingUtilities(text, accountName) {
     const price = Number(priceStr);
     const ts = fcParseFuDate(date);
     if (!Number.isFinite(qty) || !Number.isFinite(price) || !Number.isFinite(ts)) continue;
-    const tax = map.side === "SELL" ? fcGeTax(price, qty) : 0;
+    const tax = map.side === "SELL" ? fcGeTax(price, qty, ts) : 0;
     events.push({
       account: accountName,
       ts,

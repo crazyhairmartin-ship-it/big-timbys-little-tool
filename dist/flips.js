@@ -507,6 +507,13 @@ function onModeEnter() {
       state.flipsHistory.analysisCache = await flipsDb.getAnalysis(state.flipsHistory.activeAccount);
       renderHistory();
     });
+    const showFlipsCheckbox = document.getElementById("history-show-flips");
+    showFlipsCheckbox.checked = state.flipsHistory.showFlips;
+    showFlipsCheckbox.addEventListener("change", (ev) => {
+      state.flipsHistory.showFlips = ev.target.checked;
+      localStorage.setItem("osrs-combo-history-show-flips", ev.target.checked ? "1" : "0");
+      renderHistory();
+    });
     document.getElementById("history-replace").addEventListener("click", () => {
       const input = document.getElementById("history-file-input");
       input.dataset.mode = "replace";
@@ -838,7 +845,10 @@ function openHistoryDrilldown(recipeKey) {
   if (!cache) return;
   const recipe = RECIPES.find((r) => r.key === recipeKey);
   if (!recipe) return;
-  const conversions = cache.conversions.filter((c) => c.recipeKey === recipeKey);
+  const conversions = cache.conversions.filter((c) =>
+    c.recipeKey === recipeKey &&
+    (state.flipsHistory.showFlips || c.kind !== "flip")
+  );
   if (conversions.length === 0) return;
 
   const dialog = document.getElementById("chart-modal");
@@ -1124,7 +1134,10 @@ function renderHistory() {
   empty.hidden = true;
 
   const cache = state.flipsHistory.analysisCache;
-  const conversions = cache?.conversions || [];
+  const allConversions = cache?.conversions || [];
+  const conversions = state.flipsHistory.showFlips
+    ? allConversions
+    : allConversions.filter((c) => c.kind !== "flip");
   const { start, end } = fcRangeBounds(state.flipsHistory.range);
   const inRange = filterConversionsByRange(conversions, start, end);
   const summaries = summarizeRecipes(inRange, RECIPES);
