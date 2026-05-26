@@ -59,6 +59,29 @@ function fcGeTax(price, qty, ts) {
   return per * qty;
 }
 
+// Invert fcGeTax: given the net per-unit a seller received, find the gross
+// per-unit listed price such that gross - floor(gross*rate) (capped at 5M) =
+// net. Flipping Utilities records the NET sell price, while Copilot and our
+// internal model use the GROSS — this normalizes FU rows so revenue/tax math
+// matches reality and cross-source dedup can succeed.
+function fcGrossFromNet(net, ts) {
+  if (net < 99) return net;
+  const rate = (ts != null && ts < GE_TAX_2PCT_CUTOVER_MS) ? 0.01 : 0.02;
+  // Cap region: when tax saturates at 5M per unit, gross = net + 5M.
+  const capThreshold = 5_000_000 / rate;
+  if (net + 5_000_000 >= capThreshold) return net + 5_000_000;
+  // Sub-cap: search around the linear inversion to find the integer gross
+  // that produces exactly `net` after OSRS's floor-rounded tax.
+  let gross = Math.ceil(net / (1 - rate));
+  for (let i = 0; i < 5; i++) {
+    const tax = Math.floor(gross * rate);
+    if (gross - tax === net) return gross;
+    if (gross - tax < net) gross++;
+    else gross--;
+  }
+  return gross; // best effort if no exact match (shouldn't normally happen)
+}
+
 function fcParseFuDate(s) {
   // Format: "2026-05-22 12:00 PM"
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{1,2}):(\d{2}) (AM|PM)$/);
@@ -84,10 +107,20 @@ function parseFlippingUtilities(text, accountName) {
     const map = FU_STATE_MAP[state];
     if (!map) continue;
     const qty = Number(qtyStr);
-    const price = Number(priceStr);
+    const rawPrice = Number(priceStr);
     const ts = fcParseFuDate(date);
-    if (!Number.isFinite(qty) || !Number.isFinite(price) || !Number.isFinite(ts)) continue;
-    const tax = map.side === "SELL" ? fcGeTax(price, qty, ts) : 0;
+    if (!Number.isFinite(qty) || !Number.isFinite(rawPrice) || !Number.isFinite(ts)) continue;
+    // FU records the NET per-unit received on completed/cancelled SELLs (the
+    // GE has already taken its cut). Gross it up so `price` consistently
+    // means the listed price, matching Copilot. Pending SELLs (SELLING) and
+    // all BUYs are recorded at the listed price already — no conversion.
+    let price = rawPrice;
+    let tax = 0;
+    if (map.side === "SELL" && map.status !== "pending") {
+      const gross = fcGrossFromNet(rawPrice, ts);
+      price = gross;
+      tax = (gross - rawPrice) * qty;
+    }
     events.push({
       account: accountName,
       ts,
@@ -750,5 +783,5 @@ function filterConversionsByRange(conversions, start, end) {
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromInventory, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange, selfExtrapolateLot, shouldDropConversion, fuzzyEventKey, mergeEventPair, fuzzyDedupeMerge, fcRepairCost, shouldPreferCraft, emitPureFlip };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, fcGrossFromNet, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromInventory, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange, selfExtrapolateLot, shouldDropConversion, fuzzyEventKey, mergeEventPair, fuzzyDedupeMerge, fcRepairCost, shouldPreferCraft, emitPureFlip };
 }

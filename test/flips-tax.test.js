@@ -81,21 +81,75 @@ test("parseCopilot keeps BUY tax at 0 even if the CSV says otherwise", () => {
 
 // ---------------- parseFlippingUtilities ----------------
 
-test("parseFlippingUtilities computes 1% tax for SELLs before cutover", () => {
+// FU records the NET sell price; we invert to recover the gross listed price.
+test("parseFlippingUtilities grosses up the net SELL price using the 1% rate before cutover", () => {
+  // Pre-cutover Zaryte sale where FU recorded a net of 327,982,496 — gross
+  // listed price would have been 331,295,450 (1% tax, no cap hit).
   const csv = [
     "name,date,quantity,price,state",
-    "Zaryte crossbow,2025-04-27 01:53 PM,1,331295450,SOLD",
+    "Zaryte crossbow,2025-04-27 01:53 PM,1,327982496,SOLD",
   ].join("\n");
   const events = core.parseFlippingUtilities(csv, "Tester");
   assert.strictEqual(events.length, 1);
+  assert.strictEqual(events[0].price, 331_295_450);
   assert.strictEqual(events[0].tax, 3_312_954);
 });
 
-test("parseFlippingUtilities computes 2% tax for SELLs after cutover", () => {
+test("parseFlippingUtilities grosses up the net SELL price using the 2% rate after cutover", () => {
+  // 200M gross post-cutover -> tax 4M -> net 196M.
   const csv = [
     "name,date,quantity,price,state",
-    "Zaryte crossbow,2025-07-29 11:45 AM,1,200000000,SOLD",
+    "Zaryte crossbow,2025-07-29 11:45 AM,1,196000000,SOLD",
   ].join("\n");
   const events = core.parseFlippingUtilities(csv, "Tester");
+  assert.strictEqual(events[0].price, 200_000_000);
   assert.strictEqual(events[0].tax, 4_000_000);
+});
+
+// ---------------- Regression: Pegasian boots cross-source parity ----------------
+
+test("FU and Copilot of the same SELL produce equal price & tax after parsing", () => {
+  // Real user data: a 5/19/2026 Pegasian boots sale.
+  //   Copilot row (gross 29,483,536, tax 589,671 per CSV):
+  //     2026-05-19T18:59:20Z,Big Timby,SELL,Pegasian boots,1,29483536,589671,29483536,YES
+  //   FU row (net 28,893,866):
+  //     Pegasian boots,2026-05-19 02:59 PM,1,28893866,SOLD
+  // After parsing both should agree on price (gross) and tax (capped 2%).
+  const copilotCsv = [
+    "Timestamp,Account,Side,Item,Quantity,Paid/Received,Tax,Price ea.,Part of Flip",
+    "2026-05-19T18:59:20Z,Big Timby,SELL,Pegasian boots,1,29483536,589671,29483536,YES",
+  ].join("\n");
+  const fuCsv = [
+    "name,date,quantity,price,state",
+    "Pegasian boots,2026-05-19 02:59 PM,1,28893866,SOLD",
+  ].join("\n");
+  const cop = core.parseCopilot(copilotCsv);
+  const fu  = core.parseFlippingUtilities(fuCsv, "Big Timby");
+  assert.strictEqual(cop[0].price, 29_483_536);
+  assert.strictEqual(fu[0].price,  29_483_536, "FU price should gross up to match Copilot");
+  assert.strictEqual(cop[0].tax, fu[0].tax);
+});
+
+test("fcGrossFromNet inverts exactly across the 5M cap boundary", () => {
+  // At gross 250M post-cutover, tax just hits the 5M cap; net is 245M.
+  // Anything above sits in the cap region where gross = net + 5M.
+  const POST = Date.UTC(2025, 6, 1);
+  assert.strictEqual(core.fcGrossFromNet(245_000_000, POST), 250_000_000);
+  assert.strictEqual(core.fcGrossFromNet(395_000_000, POST), 400_000_000);
+  // Sub-cap: ordinary linear inversion (gross such that gross - floor(2%*gross) = net).
+  assert.strictEqual(core.fcGrossFromNet(100_000_000, POST), 102_040_816);
+  // Pre-cutover (1% rate, cap at 500M gross).
+  const PRE = Date.UTC(2025, 3, 1);
+  assert.strictEqual(core.fcGrossFromNet(495_000_000, PRE), 500_000_000);
+});
+
+test("FU pending SELL keeps the raw price (no tax inversion)", () => {
+  // SELLING = pending. No GE tax taken yet; price is the offer (gross).
+  const csv = [
+    "name,date,quantity,price,state",
+    "Pegasian boots,2026-05-19 03:00 PM,1,29000000,SELLING",
+  ].join("\n");
+  const events = core.parseFlippingUtilities(csv, "Tester");
+  assert.strictEqual(events[0].price, 29_000_000);
+  assert.strictEqual(events[0].tax, 0);
 });
