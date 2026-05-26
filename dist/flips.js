@@ -227,8 +227,16 @@ function deriveAccountFromFilename(filename) {
   return filename.replace(/\.csv$/i, "").trim() || "Account";
 }
 
+async function ensureMappingLoaded() {
+  if (Object.keys(state.mapping).length > 0) return;
+  const data = await api("/mapping");
+  state.mapping = {};
+  for (const it of data) state.mapping[it.id] = it;
+}
+
 async function runUpload(file, { mode = "replace", fuAccountOverride } = {}) {
   ensureRecipeIndexes();
+  await ensureMappingLoaded();
   const text = await file.text();
   const format = detectFormat(text);
   if (!format) throw new Error("Unrecognised CSV format. Supported: Flipping Utilities, Copilot.");
@@ -531,7 +539,7 @@ function applyHistoryFilters(summaries) {
     const recipe = RECIPES.find((r) => r.key === s.recipeKey);
     if (!recipe) return true;
     if (recipe.components.length > maxSlots) return false;
-    if (tagsActive && tagsActive.size > 0 && !tagsActive.has(s.category)) return false;
+    if (tagsActive && tagsActive.size > 0 && recipe._tags && !recipe._tags.some((t) => tagsActive.has(t))) return false;
     if (minCost != null || maxCost != null) {
       const live = state.prices?.[s.productId]?.high ?? null;
       if (live != null) {

@@ -1583,3 +1583,7 @@ footer {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 .comp-table .row-icon { width: 22px; height: 22px; vertical-align: middle; margin-right: 6px; }
+
+/* Hide the chart-modal's static legend when the History tab repopulates the modal. */
+#chart-modal:has(.modal-controls.history-modal) .modal-legend { display: none; }
+#chart-modal:has(.modal-controls.history-modal) .chart-wrap { display: none; }
