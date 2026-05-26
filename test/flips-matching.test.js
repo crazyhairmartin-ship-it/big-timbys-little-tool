@@ -48,3 +48,41 @@ test("resolveItemNames aggregates miss counts", () => {
     [{ name: "Mystery A", count: 2 }, { name: "Mystery B", count: 1 }]
   );
 });
+
+const RECIPES_FIXTURE = [
+  {
+    key: "armadyl-godsword",
+    id: 11802,
+    name: "Armadyl godsword",
+    cat: "Godswords",
+    components: [{ id: 11798, qty: 1 }, { id: 11810, qty: 1 }],
+  },
+  {
+    key: "bandos-godsword",
+    id: 11804,
+    name: "Bandos godsword",
+    cat: "Godswords",
+    components: [{ id: 11798, qty: 1 }, { id: 11812, qty: 1 }],
+  },
+  {
+    key: "godsword-blade",
+    id: 11798,
+    name: "Godsword blade",
+    cat: "Godswords",
+    components: [{ id: 11820, qty: 1 }, { id: 11818, qty: 1 }, { id: 11822, qty: 1 }],
+  },
+];
+
+test("buildRecipeIndexes maps products and components", () => {
+  const idx = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  assert.strictEqual(idx.byProduct.get(11798).length, 1);
+  assert.strictEqual(idx.byProduct.get(11804).length, 1);
+  assert.strictEqual(idx.byComponent.get(11798).length, 2);
+  assert.strictEqual(idx.byComponent.get(11820).length, 1);
+});
+
+test("buildRecipeIndexes returns undefined for unknown ids", () => {
+  const idx = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  assert.strictEqual(idx.byProduct.get(999), undefined);
+  assert.strictEqual(idx.byComponent.get(999), undefined);
+});

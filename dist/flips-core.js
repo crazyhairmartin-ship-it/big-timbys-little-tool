@@ -132,7 +132,21 @@ function resolveItemNames(events, nameIndex) {
   return { resolved, misses };
 }
 
+function buildRecipeIndexes(recipes) {
+  const byProduct = new Map();
+  const byComponent = new Map();
+  for (const r of recipes) {
+    if (!byProduct.has(r.id)) byProduct.set(r.id, []);
+    byProduct.get(r.id).push(r);
+    for (const c of r.components) {
+      if (!byComponent.has(c.id)) byComponent.set(c.id, []);
+      byComponent.get(c.id).push(r);
+    }
+  }
+  return { byProduct, byComponent };
+}
+
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes };
 }
