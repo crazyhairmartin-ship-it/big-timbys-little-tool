@@ -1,0 +1,50 @@
+const test = require("node:test");
+const assert = require("node:assert");
+const core = require("../dist/flips-core.js");
+
+// Minimal mapping: id → wiki item object (as fetched from /mapping).
+const MAPPING = {
+  995:      { id: 995,      name: "Coins",          limit: 0 },
+  11798:    { id: 11798,    name: "Godsword blade", limit: 8 },
+  11810:    { id: 11810,    name: "Armadyl hilt",   limit: 8 },
+  11812:    { id: 11812,    name: "Bandos hilt",    limit: 8 },
+  11802:    { id: 11802,    name: "Armadyl godsword", limit: 8 },
+  11804:    { id: 11804,    name: "Bandos godsword",  limit: 8 },
+  11820:    { id: 11820,    name: "Godsword shard 1", limit: 100 },
+  11818:    { id: 11818,    name: "Godsword shard 2", limit: 100 },
+  11822:    { id: 11822,    name: "Godsword shard 3", limit: 100 },
+};
+
+test("buildNameIndex creates lowercase name -> id map", () => {
+  const idx = core.buildNameIndex(MAPPING);
+  assert.strictEqual(idx.get("bandos godsword"), 11804);
+  assert.strictEqual(idx.get("godsword blade"), 11798);
+});
+
+test("resolveItemNames decorates events with itemId and collects misses", () => {
+  const idx = core.buildNameIndex(MAPPING);
+  const events = [
+    { itemName: "Bandos hilt",     qty: 1, price: 1 },
+    { itemName: "Imaginary item",  qty: 1, price: 1 },
+    { itemName: "godsword blade",  qty: 1, price: 1 },
+  ];
+  const { resolved, misses } = core.resolveItemNames(events, idx);
+  assert.strictEqual(resolved[0].itemId, 11812);
+  assert.strictEqual(resolved[1].itemId, null);
+  assert.strictEqual(resolved[2].itemId, 11798);
+  assert.deepStrictEqual(misses, [{ name: "Imaginary item", count: 1 }]);
+});
+
+test("resolveItemNames aggregates miss counts", () => {
+  const idx = core.buildNameIndex(MAPPING);
+  const events = [
+    { itemName: "Mystery A" },
+    { itemName: "Mystery A" },
+    { itemName: "Mystery B" },
+  ];
+  const { misses } = core.resolveItemNames(events, idx);
+  assert.deepStrictEqual(
+    misses.sort((a, b) => a.name.localeCompare(b.name)),
+    [{ name: "Mystery A", count: 2 }, { name: "Mystery B", count: 1 }]
+  );
+});

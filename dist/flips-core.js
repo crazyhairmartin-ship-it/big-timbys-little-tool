@@ -107,7 +107,32 @@ function detectFormat(text) {
   return null;
 }
 
+function buildNameIndex(mapping) {
+  const idx = new Map();
+  for (const id in mapping) {
+    const item = mapping[id];
+    if (item && item.name) idx.set(item.name.toLowerCase(), item.id);
+  }
+  return idx;
+}
+
+function resolveItemNames(events, nameIndex) {
+  const resolved = new Array(events.length);
+  const missCounts = new Map();
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    const id = nameIndex.get((e.itemName || "").toLowerCase());
+    resolved[i] = { ...e, itemId: id ?? null };
+    if (id == null) {
+      const n = e.itemName || "";
+      missCounts.set(n, (missCounts.get(n) || 0) + 1);
+    }
+  }
+  const misses = [...missCounts.entries()].map(([name, count]) => ({ name, count }));
+  return { resolved, misses };
+}
+
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames };
 }
