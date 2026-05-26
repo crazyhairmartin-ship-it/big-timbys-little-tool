@@ -414,6 +414,18 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
       qty: needed,
       gp,
       lots: lots.map((l) => l.sourceRowId).filter((x) => x != null),
+      // Per-lot trail so the UI can show "bought 3× @ 2.1M on 5/3, 2× @ 2.3M
+      // on 5/7" instead of an opaque single line. Each entry covers one of
+      // the lots actually consumed (real, extrapolated, synth, or fallback).
+      lotDetails: lots.map((l) => ({
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        ts: l.ts,
+        sourceRowId: l.sourceRowId ?? null,
+        kind: l.fallback ? "wiki" : l.extrapolated ? "extrapolated" : l.synthesized ? "synth" : "real",
+        extrapolatedFromTs: l.extrapolatedFromTs ?? null,
+        extrapolatedFromRowId: l.extrapolatedFromRowId ?? null,
+      })),
       wikiFallbackQty: lots.filter((l) => l.fallback).reduce((s, l) => s + l.qty, 0),
       selfAssembledQty: synthesizedQty,
       synthEstimated, // synth lot itself relied on wiki deeper in chain
@@ -588,9 +600,15 @@ function shouldPreferCraft(productInv, candidates, inventory, sellTs) {
 // later sold it, with no crafting involved. Emitted as a conversion (with
 // kind: "flip") so the leaderboard surfaces it under the same recipe row.
 // Returns null when nothing can be consumed or when the item has no recipe.
+//
+// Skipped for "decombine" recipes (1 source → N outputs, e.g. Zulrah's scales
+// from a cracked Toxic blowpipe): plain flipping of scales has nothing to do
+// with decombining, and attributing them to the decombine leaderboard row is
+// misleading.
 function emitPureFlip(sellEvent, productInv, candidates, qty, mapping) {
   if (!productInv || productInv.length === 0) return null;
   if (!candidates || candidates.length === 0) return null;
+  if (candidates.every((r) => r.cat === "Decombines")) return null;
   const lots = popFromFIFO(productInv, qty);
   const consumed = lots.reduce((s, l) => s + l.qty, 0);
   if (consumed <= 0) return null;
@@ -616,6 +634,13 @@ function emitPureFlip(sellEvent, productInv, candidates, qty, mapping) {
       qty: consumed,
       gp,
       lots: lots.map((l) => l.sourceRowId).filter((x) => x != null),
+      lotDetails: lots.map((l) => ({
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        ts: l.ts,
+        sourceRowId: l.sourceRowId ?? null,
+        kind: "real",
+      })),
       wikiFallbackQty: 0,
       selfAssembledQty: 0,
       synthEstimated: false,
