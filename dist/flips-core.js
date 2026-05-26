@@ -155,7 +155,32 @@ function fcItemName(mapping, id) {
   return mapping[id]?.name || `#${id}`;
 }
 
-function attemptConversion(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping) {
+function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wikiPriceAt, mapping, depth) {
+  if (depth > 5) {
+    const fbPrice = wikiPriceAt(itemId, ts);
+    return { qty: needQty, unitPrice: fbPrice, ts, sourceRowId: null, status: "complete", fallback: true, estimated: true, synthesized: false };
+  }
+  const subRecipes = indexes.byProduct.get(itemId);
+  if (!subRecipes || subRecipes.length === 0) {
+    const fbPrice = wikiPriceAt(itemId, ts);
+    return { qty: needQty, unitPrice: fbPrice, ts, sourceRowId: null, status: "complete", fallback: true, estimated: true, synthesized: false };
+  }
+  const subRecipe = selectBestRecipe(subRecipes, inventory, needQty);
+  const synthSell = { id: null, ts, itemId, itemName: fcItemName(mapping, itemId), qty: needQty, price: 0, tax: 0 };
+  const nested = _attemptConversionInner(synthSell, subRecipe, inventory, indexes, wikiPriceAt, mapping, depth + 1);
+  return {
+    qty: needQty,
+    unitPrice: nested.totalCost / needQty,
+    ts,
+    sourceRowId: null,
+    status: "complete",
+    fallback: false,
+    estimated: nested.estimated,
+    synthesized: true,
+  };
+}
+
+function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, depth) {
   const productQty = sellEvent.qty / (recipe.resultQty ?? 1);
   const costBasis = [];
   let estimated = false;
@@ -166,8 +191,17 @@ function attemptConversion(sellEvent, recipe, inventory, indexes, wikiPriceAt, m
     if (!inventory.has(component.id)) inventory.set(component.id, []);
     const queue = inventory.get(component.id);
     const lots = popFromFIFO(queue, needed);
-    const coveredQty = lots.reduce((s, l) => s + l.qty, 0);
-    const shortfall = needed - coveredQty;
+    let coveredQty = lots.reduce((s, l) => s + l.qty, 0);
+    let shortfall = needed - coveredQty;
+    let synthesizedQty = 0;
+
+    if (shortfall > 0 && indexes.byProduct.has(component.id)) {
+      const synth = synthesizeFromNestedRecipe(component.id, shortfall, sellEvent.ts, inventory, indexes, wikiPriceAt, mapping, depth);
+      lots.push(synth);
+      synthesizedQty = synth.qty;
+      if (synth.estimated) estimated = true;
+      shortfall -= synth.qty;
+    }
 
     if (shortfall > 0) {
       const fbPrice = wikiPriceAt(component.id, sellEvent.ts);
@@ -186,7 +220,7 @@ function attemptConversion(sellEvent, recipe, inventory, indexes, wikiPriceAt, m
       gp,
       lots: lots.map((l) => l.sourceRowId).filter((x) => x != null),
       estimatedQty: lots.filter((l) => l.fallback).reduce((s, l) => s + l.qty, 0),
-      selfAssembledQty: 0,
+      selfAssembledQty: synthesizedQty,
       lotStatuses: lots.filter((l) => l.sourceRowId != null).map((l) => l.status),
     });
   }
@@ -207,6 +241,10 @@ function attemptConversion(sellEvent, recipe, inventory, indexes, wikiPriceAt, m
     timeToFlip: sellEvent.ts - earliestTs,
     sellRowId: sellEvent.id,
   };
+}
+
+function attemptConversion(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping) {
+  return _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, 0);
 }
 
 function selectBestRecipe(recipes, inventory, productQty) {
@@ -253,5 +291,5 @@ function buildRecipeIndexes(recipes) {
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe };
 }

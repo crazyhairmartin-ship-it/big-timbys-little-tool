@@ -204,3 +204,34 @@ test("attemptConversion with zero matching inventory falls back fully", () => {
   assert.strictEqual(c.estimated, true);
   assert.strictEqual(c.totalCost, 14000000 + 17500000);
 });
+
+test("nested recipe: shards in inventory back out a self-assembled blade", () => {
+  const inventory = new Map();
+  inventory.set(11820, [{ qty: 1, unitPrice: 4_000_000, ts: 1, sourceRowId: "s1", status: "complete" }]);
+  inventory.set(11818, [{ qty: 1, unitPrice: 4_500_000, ts: 2, sourceRowId: "s2", status: "complete" }]);
+  inventory.set(11822, [{ qty: 1, unitPrice: 5_700_000, ts: 3, sourceRowId: "s3", status: "complete" }]);
+  inventory.set(11812, [{ qty: 1, unitPrice: 17_800_000, ts: 4, sourceRowId: "h", status: "complete" }]);
+  const sellEvent = { id: "sell", ts: 100, itemId: 11804, itemName: "Bandos godsword", qty: 1, price: 33_000_000, tax: 660_000 };
+  const indexes = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  const wikiPrice = () => { throw new Error("wiki should not be consulted"); };
+
+  const c = core.attemptConversion(sellEvent, RECIPES_FIXTURE[1], inventory, indexes, wikiPrice, MAPPING);
+
+  assert.strictEqual(c.totalCost, 4_000_000 + 4_500_000 + 5_700_000 + 17_800_000);
+  assert.strictEqual(c.estimated, false);
+  const bladeCost = c.costBasis.find((cb) => cb.itemId === 11798);
+  assert.strictEqual(bladeCost.selfAssembledQty, 1);
+});
+
+test("nested recipe with mixed shard inventory falls back to wiki for missing shard", () => {
+  const inventory = new Map();
+  inventory.set(11820, [{ qty: 1, unitPrice: 4_000_000, ts: 1, sourceRowId: "s1", status: "complete" }]);
+  inventory.set(11818, [{ qty: 1, unitPrice: 4_500_000, ts: 2, sourceRowId: "s2", status: "complete" }]);
+  inventory.set(11812, [{ qty: 1, unitPrice: 17_800_000, ts: 4, sourceRowId: "h", status: "complete" }]);
+  const sellEvent = { id: "sell", ts: 100, itemId: 11804, itemName: "Bandos godsword", qty: 1, price: 33_000_000, tax: 660_000 };
+  const indexes = core.buildRecipeIndexes(RECIPES_FIXTURE);
+  const wikiPrice = (id) => id === 11822 ? 5_500_000 : 0;
+  const c = core.attemptConversion(sellEvent, RECIPES_FIXTURE[1], inventory, indexes, wikiPrice, MAPPING);
+  assert.strictEqual(c.estimated, true);
+  assert.strictEqual(c.totalCost, 4_000_000 + 4_500_000 + 5_500_000 + 17_800_000);
+});
