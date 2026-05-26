@@ -135,6 +135,28 @@ Review the draft release and click **Publish** to make it visible to others.
 
 ---
 
+## History tab
+
+Upload a CSV export of your trade history to see per-recipe analysis of your
+actual combination-item flipping — realized profit, ROI, average time-to-flip,
+and win rate, with a drilldown for each recipe (Conversions list, cumulative
+profit chart, and per-component breakdown).
+
+Supported formats:
+- **Flipping Utilities** (RuneLite plugin) — `name,date,quantity,price,state`.
+- **Copilot** — `Timestamp,Account,Side,Item,Quantity,Paid/Received,Tax,Price ea.,Part of Flip`.
+
+The file format is auto-detected from the first line. You can drag-and-drop a
+`.csv` anywhere on the History tab, or use the **Choose file** button. Existing
+data can be replaced or merged on subsequent uploads (merge dedupes by
+timestamp + side + item + qty + price).
+
+Data is stored in your browser only (IndexedDB) — nothing is uploaded to a
+server. Each visitor sees only their own data; clearing browser data clears the
+history.
+
+---
+
 ## Data sources
 
 - **Prices** — `prices.runescape.wiki/api/v1/osrs/latest` (real-time, refreshes every 60s in the app)

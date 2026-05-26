@@ -1394,3 +1394,201 @@ footer {
 /* The time filter only applies in Experimental mode — hide it otherwise. */
 #layout:not(.mode-overnight) .ov-time-filter { display: none; }
 
+
+/* ---------------- History mode ---------------- */
+.mode-history .filter-group:has(#hide-stale-products),
+.mode-history .filter-group:has(#hide-stale-components),
+.mode-history .filter-group:has(#hide-low-volume),
+.mode-history .ov-time-filter {
+  display: none;
+}
+.history-sidebar-block { display: none; }
+.mode-history .history-sidebar-block { display: block; }
+
+.history-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  padding: 48px 24px;
+}
+.history-drop-zone {
+  max-width: 480px;
+  text-align: center;
+  border: 2px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  padding: 48px 24px;
+}
+.history-drop-zone h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.history-drop-zone p  { margin: 6px 0 18px; opacity: 0.75; }
+.history-drop-zone .btn-primary { margin: 6px 0 12px; }
+.history-upload-error {
+  color: var(--red, #f87171);
+  margin-top: 12px;
+  font-size: 0.85rem;
+}
+.history-drag-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(245, 197, 24, 0.08);
+  border: 2px dashed rgba(245, 197, 24, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: rgba(245, 197, 24, 0.95);
+  pointer-events: none;
+  z-index: 10;
+}
+.card.history .history-primary {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin: 8px 0 2px;
+}
+.card.history .history-primary.profit { color: var(--green, #4ade80); }
+.card.history .history-primary.loss   { color: var(--red,   #f87171); }
+.card.history .history-est-note {
+  font-size: 0.78rem;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+.card.history .history-meta {
+  font-size: 0.85rem;
+  opacity: 0.85;
+  margin: 4px 0;
+}
+.card.history .history-last {
+  font-size: 0.75rem;
+  opacity: 0.55;
+  margin-top: 8px;
+}
+.history-loaded-data {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+  margin-top: 12px;
+  font-size: 0.85rem;
+}
+.history-loaded-data .summary { opacity: 0.8; margin-bottom: 8px; line-height: 1.35; }
+.history-loaded-data .controls { display: flex; gap: 6px; flex-wrap: wrap; }
+.history-loaded-data .controls button {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+}
+.history-loaded-data .controls button:hover { background: rgba(255, 255, 255, 0.06); }
+.history-summary-bar {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 12px;
+}
+
+#history-account-modal {
+  border: none;
+  border-radius: 12px;
+  padding: 0;
+  max-width: 420px;
+  background: var(--panel, #1c1c1f);
+  color: inherit;
+}
+#history-account-modal .modal-header { padding: 16px 20px; }
+#history-account-modal .modal-body  { padding: 0 20px 20px; }
+#history-account-modal input {
+  width: 100%;
+  padding: 8px 10px;
+  margin: 8px 0 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: inherit;
+}
+.account-modal-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.account-modal-buttons button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.account-modal-buttons button.btn-primary {
+  background: var(--accent, #f5c518);
+  color: #1a1a1d;
+  border-color: var(--accent, #f5c518);
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.history-table th, .history-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+.history-table th.sortable { cursor: pointer; user-select: none; }
+.history-table th.sortable:hover { background: rgba(255, 255, 255, 0.04); }
+.history-table td.profit { color: var(--green, #4ade80); }
+.history-table td.loss   { color: var(--red,   #f87171); }
+.history-table .row-icon { width: 24px; height: 24px; vertical-align: middle; }
+.history-table .muted    { opacity: 0.55; }
+.history-table tr[data-recipe-key]:hover { background: rgba(255, 255, 255, 0.04); cursor: pointer; }
+
+.modal-controls.history-modal { display: none; }
+.conv-summary {
+  padding: 8px 0 12px;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+.conv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.conv-table th, .conv-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+.conv-table td.profit { color: var(--green, #4ade80); }
+.conv-table td.loss   { color: var(--red,   #f87171); }
+.conv-table td.cost-cell { cursor: pointer; text-decoration: underline dotted; }
+.conv-status { display: inline-block; width: 1rem; text-align: center; }
+.cost-breakdown-row td.cost-breakdown {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  white-space: normal;
+}
+.comp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.comp-table th, .comp-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.comp-table .row-icon { width: 22px; height: 22px; vertical-align: middle; margin-right: 6px; }
+
+/* Hide the chart-modal's static legend when the History tab repopulates the modal. */
+#chart-modal:has(.modal-controls.history-modal) .modal-legend { display: none; }
+#chart-modal:has(.modal-controls.history-modal) .chart-wrap { display: none; }
+
+.history-upload-error.notice {
+  color: var(--green, #4ade80);
+  font-weight: 500;
+}
