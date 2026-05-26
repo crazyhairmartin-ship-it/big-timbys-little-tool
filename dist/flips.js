@@ -463,6 +463,263 @@ function onModeExit() {
   if (bar) bar.remove();
 }
 
+function fcRangeBounds(rangeKey) {
+  if (rangeKey === "all") return { start: null, end: null };
+  const now = Date.now();
+  const day = 86_400_000;
+  const map = { week: 7 * day, month: 30 * day, "3mo": 90 * day, year: 365 * day };
+  return { start: now - (map[rangeKey] || 0), end: null };
+}
+
+function fcHumanMs(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h}h ${m % 60}m`;
+  const d = Math.round(h / 24);
+  return `${d}d ${h % 24}h`;
+}
+
+function fcRelative(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 0) return "now";
+  const day = 86_400_000;
+  if (diff < day) return `${Math.round(diff / 3_600_000)}h ago`;
+  if (diff < 30 * day) return `${Math.round(diff / day)}d ago`;
+  return `${Math.round(diff / (30 * day))}mo ago`;
+}
+
+function fcSortSummaries(summaries, sortKey) {
+  const dir = sortKey.endsWith("-asc") ? 1 : -1;
+  const base = sortKey.replace(/-(asc|desc)$/, "");
+  const getter = {
+    profit: (s) => s.totalProfit,
+    roi: (s) => s.avgROI,
+    conversions: (s) => s.conversions,
+    avgprofit: (s) => s.avgProfit,
+    timetoflip: (s) => s.avgTimeToFlip,
+    winrate: (s) => s.winRate,
+    name: (s) => s.productName,
+  }[base] || ((s) => s.totalProfit);
+  return summaries.slice().sort((a, b) => {
+    const av = getter(a); const bv = getter(b);
+    if (typeof av === "string") return dir * av.localeCompare(bv);
+    return dir * (av - bv);
+  });
+}
+
+function applyHistoryFilters(summaries) {
+  const f = state.filters;
+  const search = (f.search || "").toLowerCase().trim();
+  const profitableOnly = !!f.profitableOnly;
+  const favoritesOnly = !!f.favoritesOnly;
+  const maxSlots = Number.isFinite(f.maxSlots) && f.maxSlots > 0 ? f.maxSlots : Infinity;
+  const minCost = f.minCost ?? null;
+  const maxCost = f.maxCost ?? null;
+  const tagsActive = (f.activeCats instanceof Set) ? f.activeCats : null;
+
+  return summaries.filter((s) => {
+    if (search && !s.productName.toLowerCase().includes(search)) return false;
+    if (profitableOnly && s.totalProfit <= 0) return false;
+    if (favoritesOnly && !(state.favorites?.has?.(s.recipeKey))) return false;
+    const recipe = RECIPES.find((r) => r.key === s.recipeKey);
+    if (!recipe) return true;
+    if (recipe.components.length > maxSlots) return false;
+    if (tagsActive && tagsActive.size > 0 && !tagsActive.has(s.category)) return false;
+    if (minCost != null || maxCost != null) {
+      const live = state.prices?.[s.productId]?.high ?? null;
+      if (live != null) {
+        if (minCost != null && live < minCost) return false;
+        if (maxCost != null && live > maxCost) return false;
+      }
+    }
+    return true;
+  });
+}
+
+function makeBadge(label) {
+  const b = document.createElement("span");
+  b.className = "card-badge";
+  b.textContent = label;
+  return b;
+}
+
+function renderHistoryCards(host, summaries) {
+  host.replaceChildren();
+  const frag = document.createDocumentFragment();
+  for (const s of summaries) {
+    const card = document.createElement("article");
+    card.className = "card history";
+    card.dataset.recipeKey = s.recipeKey;
+    if (s.totalProfit > 0) card.classList.add("profit");
+    if (s.totalProfit < 0) card.classList.add("loss");
+
+    const badges = document.createElement("div");
+    badges.className = "card-badges";
+    if (s.estimatedShare > 0.05) badges.appendChild(makeBadge("est"));
+    if (s.totalProfit < 0) badges.appendChild(makeBadge("loss"));
+    if (Date.now() - s.lastTs > 30 * 86_400_000) badges.appendChild(makeBadge("dormant"));
+    card.appendChild(badges);
+
+    const head = document.createElement("div");
+    head.className = "card-head";
+    const iconWrap = document.createElement("div");
+    iconWrap.className = "card-icon";
+    const img = document.createElement("img");
+    img.src = iconUrl(s.productId);
+    img.alt = "";
+    iconWrap.appendChild(img);
+    head.appendChild(iconWrap);
+    const title = document.createElement("div");
+    title.className = "card-title";
+    const name = document.createElement("div");
+    name.className = "card-name";
+    name.textContent = s.productName;
+    title.appendChild(name);
+    const catRow = document.createElement("div");
+    catRow.className = "card-cat-row";
+    const catSpan = document.createElement("span");
+    catSpan.textContent = s.category;
+    catRow.appendChild(catSpan);
+    title.appendChild(catRow);
+    head.appendChild(title);
+    card.appendChild(head);
+
+    const primary = document.createElement("div");
+    primary.className = "history-primary " + (s.totalProfit >= 0 ? "profit" : "loss");
+    primary.textContent = fmtGp(s.totalProfit);
+    card.appendChild(primary);
+
+    if (s.estimatedShare > 0.05) {
+      const est = document.createElement("div");
+      est.className = "history-est-note";
+      est.textContent = `~${Math.round(s.estimatedShare * 100)}% estimated`;
+      card.appendChild(est);
+    }
+
+    const meta1 = document.createElement("div");
+    meta1.className = "history-meta";
+    meta1.textContent = `${s.conversions} conversions · ${(s.avgROI * 100).toFixed(1)}% ROI`;
+    card.appendChild(meta1);
+
+    const meta2 = document.createElement("div");
+    meta2.className = "history-meta";
+    meta2.textContent = `Avg flip: ${fcHumanMs(s.avgTimeToFlip)} · ${Math.round(s.winRate * 100)}% win`;
+    card.appendChild(meta2);
+
+    const last = document.createElement("div");
+    last.className = "history-last";
+    last.textContent = `Last: ${fcRelative(s.lastTs)}`;
+    card.appendChild(last);
+
+    card.addEventListener("click", () => openHistoryDrilldown(s.recipeKey));
+    frag.appendChild(card);
+  }
+  host.appendChild(frag);
+}
+
+function renderHistoryTable(host, summaries) {
+  const cols = [
+    { key: "name",        label: "Recipe" },
+    { key: "profit",      label: "Realized profit" },
+    { key: "conversions", label: "Conversions" },
+    { key: "avgprofit",   label: "Avg / conv" },
+    { key: "roi",         label: "ROI %" },
+    { key: "timetoflip",  label: "Avg flip" },
+    { key: "winrate",     label: "Win rate" },
+    { key: "lastts",      label: "Last" },
+  ];
+  const currentSort = state.filters.historySort;
+  const sortBase = currentSort.replace(/-(asc|desc)$/, "");
+  const sortDir = currentSort.endsWith("-asc") ? "asc" : "desc";
+  const arrow = (key) => sortBase === key ? (sortDir === "asc" ? " ▲" : " ▼") : "";
+
+  host.replaceChildren();
+  const table = document.createElement("table");
+  table.className = "history-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const c of cols) {
+    const th = document.createElement("th");
+    th.className = "sortable";
+    th.dataset.key = c.key;
+    th.textContent = c.label + arrow(c.key);
+    th.addEventListener("click", () => {
+      let next;
+      if (sortBase === c.key) next = sortDir === "desc" ? `${c.key}-asc` : `${c.key}-desc`;
+      else next = `${c.key}-desc`;
+      state.filters.historySort = next;
+      localStorage.setItem("osrs-combo-history-sort", next);
+      renderHistory();
+    });
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  for (const s of summaries) {
+    const tr = document.createElement("tr");
+    tr.dataset.recipeKey = s.recipeKey;
+    tr.addEventListener("click", () => openHistoryDrilldown(s.recipeKey));
+    const profitClass = s.totalProfit >= 0 ? "profit" : "loss";
+
+    for (let i = 0; i < 8; i++) tr.appendChild(document.createElement("td"));
+
+    const recipeTd = tr.children[0];
+    recipeTd.className = "recipe-cell";
+    const img = document.createElement("img");
+    img.src = iconUrl(s.productId); img.alt = ""; img.className = "row-icon";
+    recipeTd.appendChild(img);
+    recipeTd.appendChild(document.createTextNode(" " + s.productName + " "));
+    const catSpan = document.createElement("span");
+    catSpan.className = "muted";
+    catSpan.textContent = "· " + s.category;
+    recipeTd.appendChild(catSpan);
+
+    tr.children[1].className = profitClass;
+    tr.children[1].textContent = fmtGp(s.totalProfit) + (s.estimatedShare > 0.05 ? ` ~${Math.round(s.estimatedShare * 100)}%` : "");
+    tr.children[2].textContent = s.conversions;
+    tr.children[3].textContent = fmtGp(Math.round(s.avgProfit));
+    tr.children[4].textContent = (s.avgROI * 100).toFixed(1) + "%";
+    tr.children[5].textContent = fcHumanMs(s.avgTimeToFlip);
+    tr.children[6].textContent = Math.round(s.winRate * 100) + "%";
+    tr.children[7].className = "muted";
+    tr.children[7].textContent = fcRelative(s.lastTs);
+
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  host.appendChild(table);
+}
+
+function renderHistorySummaryBar(conversions, summaries) {
+  let bar = document.getElementById("history-summary-bar");
+  const main = document.getElementById("main");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "history-summary-bar";
+    bar.className = "history-summary-bar";
+    main.insertBefore(bar, main.querySelector(".view-toggle").nextSibling);
+  }
+  if (conversions.length === 0) {
+    bar.textContent = "No conversions in this range.";
+    return;
+  }
+  const totalProfit = summaries.reduce((s, r) => s + r.totalProfit, 0);
+  const tss = conversions.map((c) => c.ts);
+  const minTs = new Date(Math.min(...tss)).toLocaleDateString();
+  const maxTs = new Date(Math.max(...tss)).toLocaleDateString();
+  bar.textContent = `${conversions.length.toLocaleString()} conversions · ${fmtGp(totalProfit)} realized · ${summaries.length} recipes · ${minTs} → ${maxTs}`;
+}
+
+function openHistoryDrilldown(_recipeKey) {
+  // Implemented in Phase 6.
+}
+
 function renderHistory() {
   ensureRecipeIndexes();
   const grid = document.getElementById("grid");
@@ -475,13 +732,29 @@ function renderHistory() {
     grid.hidden = true;
     tableWrap.hidden = true;
     empty.hidden = false;
+    const bar = document.getElementById("history-summary-bar");
+    if (bar) bar.remove();
     return;
   }
   empty.hidden = true;
-  grid.hidden = false;
-  tableWrap.hidden = true;
-  const n = state.flipsHistory.analysisCache?.conversions?.length ?? 0;
-  grid.textContent = `Loaded ${n} conversions. (Leaderboard renders in Task 25.)`;
+
+  const cache = state.flipsHistory.analysisCache;
+  const conversions = cache?.conversions || [];
+  const { start, end } = fcRangeBounds(state.flipsHistory.range);
+  const inRange = filterConversionsByRange(conversions, start, end);
+  const summaries = summarizeRecipes(inRange, RECIPES);
+  const filtered = applyHistoryFilters(summaries);
+  const sorted = fcSortSummaries(filtered, state.filters.historySort);
+
+  renderHistorySummaryBar(inRange, filtered);
+
+  if (state.view === "cards") {
+    grid.hidden = false; tableWrap.hidden = true;
+    renderHistoryCards(grid, sorted);
+  } else {
+    grid.hidden = true; tableWrap.hidden = false;
+    renderHistoryTable(tableWrap, sorted);
+  }
 }
 
 window.History = { renderHistory, onModeEnter, onModeExit, handleUpload, runUpload };

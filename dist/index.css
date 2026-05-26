@@ -1525,3 +1525,22 @@ footer {
   color: #1a1a1d;
   border-color: var(--accent, #f5c518);
 }
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.history-table th, .history-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+.history-table th.sortable { cursor: pointer; user-select: none; }
+.history-table th.sortable:hover { background: rgba(255, 255, 255, 0.04); }
+.history-table td.profit { color: var(--green, #4ade80); }
+.history-table td.loss   { color: var(--red,   #f87171); }
+.history-table .row-icon { width: 24px; height: 24px; vertical-align: middle; }
+.history-table .muted    { opacity: 0.55; }
+.history-table tr[data-recipe-key]:hover { background: rgba(255, 255, 255, 0.04); cursor: pointer; }
