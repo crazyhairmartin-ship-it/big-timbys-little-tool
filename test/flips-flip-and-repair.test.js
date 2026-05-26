@@ -193,6 +193,67 @@ test("shouldPreferCraft returns true when newest required component is newer tha
   assert.strictEqual(core.shouldPreferCraft(productInv, candidates, inventory), true);
 });
 
+// ---------------- 7-day craft-preference window ----------------
+
+test("shouldPreferCraft returns true when components are within the 7-day window of the sell", () => {
+  const DAY = 24 * 3600 * 1000;
+  const sellTs = 100 * DAY;
+  const productInv = [{ qty: 1, unitPrice: 30_000_000, ts: 0, sourceRowId: "p", status: "complete" }];
+  const inventory = new Map();
+  // Components bought 3 days before the sell.
+  inventory.set(11798, [{ qty: 1, unitPrice: 14_000_000, ts: sellTs - 3 * DAY, sourceRowId: "blade", status: "complete" }]);
+  inventory.set(11812, [{ qty: 1, unitPrice: 17_000_000, ts: sellTs - 2 * DAY, sourceRowId: "hilt",  status: "complete" }]);
+  assert.strictEqual(core.shouldPreferCraft(productInv, [RECIPES[0]], inventory, sellTs), true);
+});
+
+test("shouldPreferCraft returns false when newest component is older than 7 days before the sell", () => {
+  // Flip-and-replace pattern: held finished + stale components from an
+  // earlier project. The sell should be treated as a flip of the held one.
+  const DAY = 24 * 3600 * 1000;
+  const sellTs = 100 * DAY;
+  const productInv = [{ qty: 1, unitPrice: 30_000_000, ts: 0, sourceRowId: "p", status: "complete" }];
+  const inventory = new Map();
+  inventory.set(11798, [{ qty: 1, unitPrice: 14_000_000, ts: sellTs - 30 * DAY, sourceRowId: "blade", status: "complete" }]);
+  inventory.set(11812, [{ qty: 1, unitPrice: 17_000_000, ts: sellTs - 30 * DAY, sourceRowId: "hilt",  status: "complete" }]);
+  assert.strictEqual(core.shouldPreferCraft(productInv, [RECIPES[0]], inventory, sellTs), false);
+});
+
+test("matchEvents: held finished + 30-day-old components -> flip the held one (don't steal components)", () => {
+  // The exact pattern the user described: held a godsword (long), bought
+  // components weeks ago for a future project, now the godsword price is
+  // good and they sell the held one. Components must remain in inventory
+  // for a future craft, not be attributed to this sell.
+  const DAY = 24 * 3600 * 1000;
+  const events = [
+    { id: 1, ts: 0,           itemId: 11804, side: "BUY",  qty: 1, price: 30_000_000, tax: 0,       status: "complete" }, // hold the finished
+    { id: 2, ts: 70 * DAY,    itemId: 11798, side: "BUY",  qty: 1, price: 14_000_000, tax: 0,       status: "complete" }, // components, 30d before sell
+    { id: 3, ts: 70 * DAY,    itemId: 11812, side: "BUY",  qty: 1, price: 17_000_000, tax: 0,       status: "complete" },
+    { id: 4, ts: 100 * DAY,   itemId: 11804, side: "SELL", qty: 1, price: 38_000_000, tax: 760_000, status: "complete" },
+  ];
+  const indexes = core.buildRecipeIndexes(RECIPES);
+  const convs = core.matchEvents(events, RECIPES, indexes, () => 0, MAPPING);
+  assert.strictEqual(convs.length, 1);
+  assert.strictEqual(convs[0].kind, "flip", "should flip the long-held finished product, not steal stale components");
+  assert.strictEqual(convs[0].totalCost, 30_000_000);
+});
+
+test("matchEvents: same-day component buy still triggers craft attribution", () => {
+  // Regression: the 5/21-style same-day craft must still resolve as a craft.
+  const DAY = 24 * 3600 * 1000;
+  const HOUR = 3600 * 1000;
+  const events = [
+    { id: 1, ts: 0,                                   itemId: 11804, side: "BUY",  qty: 1, price: 30_000_000, tax: 0,       status: "complete" }, // held finished, ancient
+    { id: 2, ts: 365 * DAY,                           itemId: 11798, side: "BUY",  qty: 1, price: 14_000_000, tax: 0,       status: "complete" }, // blade today
+    { id: 3, ts: 365 * DAY + 2 * HOUR,                itemId: 11812, side: "BUY",  qty: 1, price: 17_000_000, tax: 0,       status: "complete" }, // hilt 2h later
+    { id: 4, ts: 365 * DAY + 4 * HOUR + 30 * 60_000,  itemId: 11804, side: "SELL", qty: 1, price: 38_000_000, tax: 760_000, status: "complete" }, // sell 4.5h after first buy
+  ];
+  const indexes = core.buildRecipeIndexes(RECIPES);
+  const convs = core.matchEvents(events, RECIPES, indexes, () => 0, MAPPING);
+  assert.strictEqual(convs.length, 1);
+  assert.strictEqual(convs[0].kind, "craft");
+  assert.strictEqual(convs[0].totalCost, 14_000_000 + 17_000_000);
+});
+
 // ---------------- LIFO regression: long-hold + active flipping ----------------
 
 test("long-held lot is preserved when user actively flips the same item", () => {

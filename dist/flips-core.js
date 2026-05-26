@@ -518,13 +518,20 @@ function buildRecipeIndexes(recipes) {
   return { byProduct, byComponent };
 }
 
-// Decide whether a SELL is more naturally a craft than a pure flip. Inventory
-// queues are sorted oldest-first; LIFO popping consumes the tail. So
-// `queue[last].ts` is the lot that would be consumed first on either path.
-// If components were all owned more recently than the most-recent finished
-// product, the craft was the user's most-recent acquisition activity and the
-// sell should be treated as a craft.
-function shouldPreferCraft(productInv, candidates, inventory) {
+// Decide whether a SELL is more naturally a craft than a pure flip. Only
+// fires when the user holds BOTH finished product and a full set of components
+// simultaneously — otherwise the choice is forced. Multi-week/month crafts
+// where productInv is empty are unaffected by this heuristic.
+//
+// Two conditions must hold for craft preference:
+//   1. The newest required component is newer than the newest held finished
+//      product (recent acquisition signals an active project, not stale stock).
+//   2. That newest component was bought within FRESH_CRAFT_WINDOW_MS of the
+//      sell — i.e., this looks like a quick craft-and-sell cycle, not a
+//      flip-and-replace where components were bought weeks ago for a different
+//      future craft.
+const FRESH_CRAFT_WINDOW_MS = 7 * 24 * 3600 * 1000; // 7 days
+function shouldPreferCraft(productInv, candidates, inventory, sellTs) {
   if (!productInv || productInv.length === 0) return false;
   const productNewestTs = productInv[productInv.length - 1].ts;
   for (const recipe of candidates) {
@@ -536,7 +543,10 @@ function shouldPreferCraft(productInv, candidates, inventory) {
       const ts = ci[ci.length - 1].ts;
       if (ts > craftPossibleAt) craftPossibleAt = ts;
     }
-    if (allAvailable && craftPossibleAt > productNewestTs) return true;
+    if (!allAvailable) continue;
+    if (craftPossibleAt <= productNewestTs) continue;
+    if (sellTs != null && (sellTs - craftPossibleAt) > FRESH_CRAFT_WINDOW_MS) continue;
+    return true;
   }
   return false;
 }
@@ -636,7 +646,7 @@ function matchEvents(events, recipes, indexes, wikiPriceAt, mapping, options) {
       const productInv = inventory.get(e.itemId);
       let remainingQty = e.qty;
 
-      const preferCraft = productHasRecipe && shouldPreferCraft(productInv, candidates, inventory);
+      const preferCraft = productHasRecipe && shouldPreferCraft(productInv, candidates, inventory, e.ts);
 
       // Phase 1: when preferring craft, craft up to the limit of direct
       // component inventory first. This avoids forcing wiki fallback for a
