@@ -267,11 +267,22 @@ async function runUpload(file, { mode = "replace", fuAccountOverride } = {}) {
 
   const indexes = ensureRecipeIndexes();
   const needs = [];
+  // Walk the full recipe tree for each product sold so nested components
+  // (e.g. shards inside a synthesized godsword blade) get wiki-prefetched too.
+  function collectComponentNeeds(itemId, ts, depth) {
+    if (depth > 5) return;
+    const recipes = indexes.byProduct.get(itemId);
+    if (!recipes) return;
+    for (const r of recipes) {
+      for (const c of r.components) {
+        needs.push({ itemId: c.id, ts });
+        collectComponentNeeds(c.id, ts, depth + 1);
+      }
+    }
+  }
   for (const e of resolved) {
     if (e.side === "SELL" && e.itemId && indexes.byProduct.has(e.itemId)) {
-      for (const r of indexes.byProduct.get(e.itemId)) {
-        for (const c of r.components) needs.push({ itemId: c.id, ts: e.ts });
-      }
+      collectComponentNeeds(e.itemId, e.ts, 0);
     }
   }
   await prefetchWikiPrices(needs);
