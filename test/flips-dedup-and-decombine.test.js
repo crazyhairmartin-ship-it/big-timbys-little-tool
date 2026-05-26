@@ -110,6 +110,50 @@ test("shouldDropConversion drops a repair-recipe conv whose broken item is wiki-
   assert.strictEqual(convs.length, 0, "should drop the phantom craft");
 });
 
+test("partial shortfall on primary keeps the conversion (Venator 4/5, Oathplate 350/450)", () => {
+  // User bought 4 of 5 Venator shards in-window; the 5th came from pre-history
+  // inventory we can't see. Previously this conversion was dropped because
+  // the primary (shards) had any wiki-fallback at all; now it stays visible
+  // and the shortfall is priced via self-extrapolation from the user's own
+  // recent shard buys (so the cost basis is realistic, not just wiki).
+  const MAP = {
+    27614: { id: 27614, name: "Venator shard",        limit: 50 },
+    27612: { id: 27612, name: "Venator bow (uncharged)", limit: 8 },
+  };
+  const RECIPES = [
+    { key: "venator-bow", id: 27612, name: "Venator bow (uncharged)", cat: "Ranged", components: [{ id: 27614, qty: 5 }] },
+  ];
+  const events = [
+    { id: 1, ts: 1, itemId: 27614, itemName: "Venator shard", side: "BUY",  qty: 4, price: 28_000_000, tax: 0, status: "complete" },
+    { id: 2, ts: 100, itemId: 27612, itemName: "Venator bow (uncharged)", side: "SELL", qty: 1, price: 160_000_000, tax: 3_200_000, status: "complete" },
+  ];
+  const indexes = core.buildRecipeIndexes(RECIPES);
+  const convs = core.matchEvents(events, RECIPES, indexes, (id) => id === 27614 ? 30_000_000 : 0, MAP);
+  assert.strictEqual(convs.length, 1, "expected the partial-shortfall craft to remain visible");
+  const shardLine = convs[0].costBasis.find((cb) => cb.itemId === 27614);
+  assert.strictEqual(shardLine.extrapolatedQty, 1, "shortfall covered by self-extrapolation from user's own buy");
+});
+
+test("zero real FIFO on primary still drops (no in-window evidence at all)", () => {
+  // Counterpart to the partial-coverage case: if the user bought ZERO shards
+  // in-window, drop. Selling a Venator bow with no shard purchases at all is
+  // either a pure flip of the bow itself (different path) or a craft built
+  // entirely outside the data window — we can't trust the cost basis.
+  const MAP = {
+    27614: { id: 27614, name: "Venator shard",        limit: 50 },
+    27612: { id: 27612, name: "Venator bow (uncharged)", limit: 8 },
+  };
+  const RECIPES = [
+    { key: "venator-bow", id: 27612, name: "Venator bow (uncharged)", cat: "Ranged", components: [{ id: 27614, qty: 5 }] },
+  ];
+  const events = [
+    { id: 1, ts: 100, itemId: 27612, itemName: "Venator bow (uncharged)", side: "SELL", qty: 1, price: 160_000_000, tax: 3_200_000, status: "complete" },
+  ];
+  const indexes = core.buildRecipeIndexes(RECIPES);
+  const convs = core.matchEvents(events, RECIPES, indexes, (id) => id === 27614 ? 30_000_000 : 0, MAP);
+  assert.strictEqual(convs.length, 0, "no shard buys in-window -> no trustworthy craft");
+});
+
 test("shouldDropConversion keeps a repair-recipe conv when the broken item is a REAL buy", () => {
   const events = [
     { id: 1, ts: Date.parse("2026-05-13T10:00:00Z"), itemId: 4878, itemName: "Ahrim's robeskirt 0", side: "BUY",  qty: 1, price: 2_500_000, tax: 0,      status: "complete" },
