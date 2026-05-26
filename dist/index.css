@@ -1544,3 +1544,42 @@ footer {
 .history-table .row-icon { width: 24px; height: 24px; vertical-align: middle; }
 .history-table .muted    { opacity: 0.55; }
 .history-table tr[data-recipe-key]:hover { background: rgba(255, 255, 255, 0.04); cursor: pointer; }
+
+.modal-controls.history-modal { display: none; }
+.conv-summary {
+  padding: 8px 0 12px;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+.conv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.conv-table th, .conv-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+.conv-table td.profit { color: var(--green, #4ade80); }
+.conv-table td.loss   { color: var(--red,   #f87171); }
+.conv-table td.cost-cell { cursor: pointer; text-decoration: underline dotted; }
+.conv-status { display: inline-block; width: 1rem; text-align: center; }
+.cost-breakdown-row td.cost-breakdown {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  white-space: normal;
+}
+.comp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.comp-table th, .comp-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.comp-table .row-icon { width: 22px; height: 22px; vertical-align: middle; margin-right: 6px; }

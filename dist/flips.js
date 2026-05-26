@@ -403,6 +403,9 @@ function onModeEnter() {
       input.dataset.mode = "merge";
       input.click();
     });
+    document.getElementById("chart-modal").addEventListener("close", () => {
+      document.querySelector("#chart-modal .modal-controls")?.classList.remove("history-modal");
+    });
     document.getElementById("history-clear").addEventListener("click", async () => {
       if (!state.flipsHistory.activeAccount) return;
       if (!confirm(`Clear all stored data for ${state.flipsHistory.activeAccount}? This cannot be undone.`)) return;
@@ -716,8 +719,271 @@ function renderHistorySummaryBar(conversions, summaries) {
   bar.textContent = `${conversions.length.toLocaleString()} conversions · ${fmtGp(totalProfit)} realized · ${summaries.length} recipes · ${minTs} → ${maxTs}`;
 }
 
-function openHistoryDrilldown(_recipeKey) {
-  // Implemented in Phase 6.
+function openHistoryDrilldown(recipeKey) {
+  const cache = state.flipsHistory.analysisCache;
+  if (!cache) return;
+  const recipe = RECIPES.find((r) => r.key === recipeKey);
+  if (!recipe) return;
+  const conversions = cache.conversions.filter((c) => c.recipeKey === recipeKey);
+  if (conversions.length === 0) return;
+
+  const dialog = document.getElementById("chart-modal");
+  document.getElementById("modal-title").textContent = recipe.name;
+
+  const tabs = document.getElementById("chart-tabs");
+  tabs.replaceChildren();
+  for (const [key, label] of [["conversions", "Conversions"], ["profit", "Profit"], ["components", "Components"]]) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.dataset.historyTab = key;
+    if (key === state.flipsHistory.modalTab) btn.classList.add("active");
+    btn.addEventListener("click", () => switchHistoryTab(key, recipe, conversions));
+    tabs.appendChild(btn);
+  }
+
+  document.querySelector("#chart-modal .modal-controls").classList.add("history-modal");
+  document.getElementById("modal-detail").replaceChildren();
+  document.getElementById("modal-links").replaceChildren();
+
+  switchHistoryTab(state.flipsHistory.modalTab, recipe, conversions);
+  dialog.showModal();
+}
+
+function switchHistoryTab(key, recipe, conversions) {
+  state.flipsHistory.modalTab = key;
+  localStorage.setItem("osrs-combo-history-modal-tab", key);
+  document.querySelectorAll("#chart-tabs button[data-history-tab]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.historyTab === key);
+  });
+  if (key === "conversions") renderConversionsTab(recipe, conversions);
+  else if (key === "profit") renderProfitTab(recipe, conversions);
+  else if (key === "components") renderComponentsTab(recipe, conversions);
+  renderHistoryModalLinks(recipe);
+}
+
+function conversionStatusBadge(c) {
+  const span = document.createElement("span");
+  span.className = "conv-status";
+  if (c.estimated) { span.textContent = "~"; span.title = "Used wiki fallback for one or more components"; return span; }
+  const hasCancelled = c.costBasis.some((cb) => cb.lotStatuses?.some((s) => s === "cancelled"));
+  if (hasCancelled) { span.textContent = "⚠"; span.title = "Includes partially-cancelled lots"; return span; }
+  const hasPending = c.costBasis.some((cb) => cb.lotStatuses?.some((s) => s === "pending"));
+  if (hasPending) { span.textContent = "…"; span.title = "Includes in-flight (pending) lots"; return span; }
+  span.textContent = "✓"; span.title = "Complete";
+  return span;
+}
+
+function toggleCostBasisExpansion(tr, conv) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains("cost-breakdown-row")) { next.remove(); return; }
+  const breakdown = document.createElement("tr");
+  breakdown.className = "cost-breakdown-row";
+  const td = document.createElement("td");
+  td.colSpan = 9;
+  td.className = "cost-breakdown";
+  for (const cb of conv.costBasis) {
+    const row = document.createElement("div");
+    const estPart = cb.estimatedQty > 0 ? ` (${cb.estimatedQty} est)` : "";
+    const selfPart = cb.selfAssembledQty > 0 ? ` (${cb.selfAssembledQty} self-assembled)` : "";
+    row.textContent = `${cb.qty}× ${cb.itemName}: ${fmtGp(cb.gp)}${estPart}${selfPart}`;
+    td.appendChild(row);
+  }
+  breakdown.appendChild(td);
+  tr.after(breakdown);
+}
+
+function renderConversionsTab(_recipe, conversions) {
+  const host = document.getElementById("modal-detail");
+  host.replaceChildren();
+  const sorted = conversions.slice().sort((a, b) => b.ts - a.ts);
+  const totals = sorted.reduce((acc, c) => {
+    acc.profit += c.profit;
+    if (c.profit > 0) acc.wins++;
+    return acc;
+  }, { profit: 0, wins: 0 });
+  const winRate = sorted.length > 0 ? Math.round((totals.wins / sorted.length) * 100) : 0;
+
+  const summary = document.createElement("div");
+  summary.className = "conv-summary";
+  summary.textContent = `${sorted.length} conversions · ${fmtGp(totals.profit)} profit · avg ${fmtGp(Math.round(totals.profit / Math.max(sorted.length, 1)))} · ${winRate}% win`;
+  host.appendChild(summary);
+
+  const table = document.createElement("table");
+  table.className = "conv-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["Date", "Qty", "Revenue", "Cost", "Tax", "Profit", "ROI", "Time to flip", ""]) {
+    const th = document.createElement("th");
+    th.textContent = label;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  for (const c of sorted) {
+    const tr = document.createElement("tr");
+    tr.dataset.convTs = c.ts;
+    const profitClass = c.profit >= 0 ? "profit" : "loss";
+    for (let i = 0; i < 9; i++) tr.appendChild(document.createElement("td"));
+    tr.children[0].textContent = new Date(c.ts).toLocaleString();
+    tr.children[1].textContent = c.productQty;
+    tr.children[2].textContent = fmtGp(c.revenue);
+    tr.children[3].className = "cost-cell";
+    tr.children[3].textContent = fmtGp(c.totalCost);
+    tr.children[3].title = "Click to see component breakdown";
+    tr.children[3].addEventListener("click", (ev) => {
+      toggleCostBasisExpansion(tr, c);
+      ev.stopPropagation();
+    });
+    tr.children[4].textContent = fmtGp(c.tax);
+    tr.children[5].className = profitClass;
+    tr.children[5].textContent = fmtGp(c.profit);
+    tr.children[6].textContent = c.totalCost > 0 ? ((c.profit / c.totalCost) * 100).toFixed(1) + "%" : "—";
+    tr.children[7].textContent = fcHumanMs(c.timeToFlip);
+    tr.children[8].appendChild(conversionStatusBadge(c));
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  host.appendChild(table);
+}
+
+function drawProfitCanvas(canvas, conversions) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (conversions.length === 0) {
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.fillText("No conversions to chart.", 10, 20);
+    return;
+  }
+  const sorted = conversions.slice().sort((a, b) => a.ts - b.ts);
+  let running = 0;
+  const points = sorted.map((c) => { running += c.profit; return { ts: c.ts, total: running, est: c.estimated }; });
+
+  const tsMin = points[0].ts;
+  const tsMax = points[points.length - 1].ts;
+  const valMin = Math.min(0, ...points.map((p) => p.total));
+  const valMax = Math.max(0, ...points.map((p) => p.total));
+  const pad = 32;
+  const xFor = (ts) => pad + ((ts - tsMin) / Math.max(tsMax - tsMin, 1)) * (W - 2 * pad);
+  const yFor = (v)  => H - pad - ((v - valMin) / Math.max(valMax - valMin, 1)) * (H - 2 * pad);
+
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, yFor(0));
+  ctx.lineTo(W - pad, yFor(0));
+  ctx.stroke();
+
+  ctx.lineWidth = 2;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1], cur = points[i];
+    ctx.setLineDash(cur.est ? [4, 4] : []);
+    ctx.strokeStyle = cur.total >= 0 ? "rgba(74,222,128,0.85)" : "rgba(248,113,113,0.85)";
+    ctx.beginPath();
+    ctx.moveTo(xFor(prev.ts), yFor(prev.total));
+    ctx.lineTo(xFor(cur.ts), yFor(prev.total));
+    ctx.lineTo(xFor(cur.ts), yFor(cur.total));
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.font = "11px system-ui";
+  ctx.fillText(fmtGp(valMax), 4, yFor(valMax) + 4);
+  ctx.fillText(fmtGp(valMin), 4, yFor(valMin) + 4);
+  ctx.fillText(new Date(tsMin).toLocaleDateString(), pad, H - 8);
+  const endLabel = new Date(tsMax).toLocaleDateString();
+  ctx.fillText(endLabel, W - pad - ctx.measureText(endLabel).width, H - 8);
+}
+
+function renderProfitTab(_recipe, conversions) {
+  const host = document.getElementById("modal-detail");
+  host.replaceChildren();
+  const canvas = document.createElement("canvas");
+  canvas.id = "history-profit-canvas";
+  canvas.width = 760; canvas.height = 320;
+  canvas.style.width = "100%";
+  canvas.style.maxWidth = "760px";
+  host.appendChild(canvas);
+  drawProfitCanvas(canvas, conversions);
+}
+
+function computeComponentStats(recipe, conversions) {
+  const byId = new Map();
+  for (const c of recipe.components) {
+    byId.set(c.id, {
+      itemId: c.id,
+      itemName: state.mapping[c.id]?.name || `#${c.id}`,
+      consumed: 0, selfAssembled: 0, estimated: 0, totalGp: 0,
+    });
+  }
+  for (const conv of conversions) {
+    for (const cb of conv.costBasis) {
+      const s = byId.get(cb.itemId);
+      if (!s) continue;
+      s.consumed += cb.qty;
+      s.selfAssembled += cb.selfAssembledQty || 0;
+      s.estimated += cb.estimatedQty || 0;
+      s.totalGp += cb.gp;
+    }
+  }
+  return [...byId.values()];
+}
+
+function renderComponentsTab(recipe, conversions) {
+  const host = document.getElementById("modal-detail");
+  host.replaceChildren();
+  const stats = computeComponentStats(recipe, conversions);
+  const table = document.createElement("table");
+  table.className = "comp-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["Component", "Consumed", "Self-assembled", "Estimated", "Total spent", "Avg buy price"]) {
+    const th = document.createElement("th");
+    th.textContent = label;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  for (const c of stats) {
+    const tr = document.createElement("tr");
+    for (let i = 0; i < 6; i++) tr.appendChild(document.createElement("td"));
+    const nameCell = tr.children[0];
+    const img = document.createElement("img");
+    img.src = iconUrl(c.itemId); img.alt = ""; img.className = "row-icon";
+    nameCell.appendChild(img);
+    nameCell.appendChild(document.createTextNode(" " + c.itemName));
+    tr.children[1].textContent = c.consumed;
+    tr.children[2].textContent = c.selfAssembled;
+    tr.children[3].textContent = c.estimated;
+    tr.children[4].textContent = fmtGp(c.totalGp);
+    tr.children[5].textContent = c.consumed > 0 ? fmtGp(Math.round(c.totalGp / c.consumed)) : "—";
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  host.appendChild(table);
+}
+
+function renderHistoryModalLinks(recipe) {
+  const host = document.getElementById("modal-links");
+  host.replaceChildren();
+  const name = state.mapping[recipe.id]?.name || recipe.name;
+  const linkSpec = [
+    { label: "Wiki ↗", href: `https://oldschool.runescape.wiki/w/Special:Search?search=${encodeURIComponent(name)}` },
+    { label: "GE database ↗", href: `https://secure.runescape.com/m=itemdb_oldschool/results?query=${encodeURIComponent(name)}` },
+  ];
+  for (const l of linkSpec) {
+    const a = document.createElement("a");
+    a.href = l.href; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = l.label;
+    host.appendChild(a);
+    host.appendChild(document.createTextNode(" "));
+  }
 }
 
 function renderHistory() {
