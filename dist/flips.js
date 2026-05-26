@@ -188,6 +188,10 @@ function ensureRecipeIndexes() {
 ---------------------------------------------------------------- */
 const wikiPriceCache = new Map();           // key: `${itemId}|${day}` -> number
 const storeDayCache = new Map();            // key: "YYYY-MM-DD" -> Map<itemId, midPrice>
+// Per-item timeseries cache. One wiki call returns ~15-30 days of data for the
+// item; we keep the whole series in memory so 50 different timestamps for the
+// same item resolve to 50 cache hits instead of 50 HTTP requests.
+const timeseriesCache = new Map();          // key: itemId -> Promise<point[]>
 
 const PRICE_STORE_BASE =
   "https://raw.githubusercontent.com/crazyhairmartin-ship-it/big-timbys-little-tool/price-history/prices/";
@@ -228,27 +232,37 @@ async function fetchPriceStoreDay(dayIso) {
   return byId;
 }
 
+async function fetchTimeseries(itemId) {
+  let p = timeseriesCache.get(itemId);
+  if (p) return p;
+  p = (async () => {
+    try {
+      const data = await api(`/timeseries?timestep=24h&id=${itemId}`);
+      return data.data || [];
+    } catch (_) {
+      return [];
+    }
+  })();
+  timeseriesCache.set(itemId, p);
+  return p;
+}
+
 async function fetchWikiPriceForDay(itemId, ts) {
   const key = `${itemId}|${dayKey(ts)}`;
   if (wikiPriceCache.has(key)) return wikiPriceCache.get(key);
   let price = 0;
-  try {
-    const data = await api(`/timeseries?timestep=24h&id=${itemId}`);
-    const points = data.data || [];
-    const tsSec = Math.floor(ts / 1000);
-    let best = null;
-    for (const p of points) {
-      if (p.timestamp <= tsSec && (!best || p.timestamp > best.timestamp)) best = p;
-    }
-    if (best) {
-      const mid = ((best.avgHighPrice || 0) + (best.avgLowPrice || 0)) / 2;
-      price = Math.round(mid) || best.avgHighPrice || best.avgLowPrice || 0;
-    }
-  } catch (_) {
-    price = 0;
+  const points = await fetchTimeseries(itemId);
+  const tsSec = Math.floor(ts / 1000);
+  let best = null;
+  for (const p of points) {
+    if (p.timestamp <= tsSec && (!best || p.timestamp > best.timestamp)) best = p;
+  }
+  if (best) {
+    const mid = ((best.avgHighPrice || 0) + (best.avgLowPrice || 0)) / 2;
+    price = Math.round(mid) || best.avgHighPrice || best.avgLowPrice || 0;
   }
   if (price === 0) {
-    // Wiki had no point near this timestamp — try the recorded store.
+    // Wiki had no point near this timestamp — try the recorded 90-day store.
     const byId = await fetchPriceStoreDay(isoDay(ts));
     if (byId.has(itemId)) price = byId.get(itemId);
   }
@@ -257,17 +271,33 @@ async function fetchWikiPriceForDay(itemId, ts) {
 }
 
 async function prefetchWikiPrices(needs) {
+  // Step 1: warm up timeseries cache. One HTTP request per unique itemId
+  // returns ~15-30 days of data, so this is far cheaper than fetching
+  // per-(item,day) pair separately.
+  const itemIds = [...new Set(needs.map((n) => n.itemId))];
+  const CONCURRENCY_TS = 15;
+  let i = 0;
+  async function timeseriesWorker() {
+    while (i < itemIds.length) {
+      const idx = i++;
+      await fetchTimeseries(itemIds[idx]);
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY_TS }, timeseriesWorker));
+
+  // Step 2: resolve per-(item,day) prices from the cached timeseries. This is
+  // mostly synchronous now — only the 90-day store fallback may hit HTTP.
   const distinct = new Set();
   for (const n of needs) distinct.add(`${n.itemId}|${dayKey(n.ts)}|${n.ts}`);
   const queue = [...distinct].map((s) => {
     const parts = s.split("|");
     return { itemId: Number(parts[0]), ts: Number(parts[2]) };
   });
-  const CONCURRENCY = 5;
-  let i = 0;
+  const CONCURRENCY = 20;
+  let j = 0;
   async function worker() {
-    while (i < queue.length) {
-      const idx = i++;
+    while (j < queue.length) {
+      const idx = j++;
       const { itemId, ts } = queue[idx];
       await fetchWikiPriceForDay(itemId, ts);
     }
