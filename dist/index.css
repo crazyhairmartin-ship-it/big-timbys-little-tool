@@ -1591,6 +1591,14 @@ footer {
   font-size: 0.82rem;
   white-space: normal;
 }
+.cost-breakdown-item { margin-bottom: 6px; }
+.cost-breakdown-lots {
+  margin-left: 18px;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--muted, #9aa0a6);
+}
+.cost-breakdown-lots .lot-estimated { color: #d4a04f; font-style: italic; }
 .comp-table {
   width: 100%;
   border-collapse: collapse;

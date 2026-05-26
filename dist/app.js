@@ -661,6 +661,7 @@ const state = {
     customRange: { start: null, end: null },
     modalTab: localStorage.getItem("osrs-combo-history-modal-tab") || "conversions",
     showFlips: localStorage.getItem("osrs-combo-history-show-flips") === "1",
+    profitFilter: localStorage.getItem("osrs-combo-history-profit-filter") || "all", // "all" | "profits" | "losses"
     analysisCache: null,
   },
   smithing: parseInt(localStorage.getItem("osrs-combo-smithing") || "99", 10),

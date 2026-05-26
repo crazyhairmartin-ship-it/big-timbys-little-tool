@@ -514,6 +514,13 @@ function onModeEnter() {
       localStorage.setItem("osrs-combo-history-show-flips", ev.target.checked ? "1" : "0");
       renderHistory();
     });
+    const profitFilterSel = document.getElementById("history-profit-filter");
+    profitFilterSel.value = state.flipsHistory.profitFilter;
+    profitFilterSel.addEventListener("change", (ev) => {
+      state.flipsHistory.profitFilter = ev.target.value;
+      localStorage.setItem("osrs-combo-history-profit-filter", ev.target.value);
+      renderHistory();
+    });
     document.getElementById("history-replace").addEventListener("click", () => {
       const input = document.getElementById("history-file-input");
       input.dataset.mode = "replace";
@@ -909,12 +916,37 @@ function toggleCostBasisExpansion(tr, conv) {
   td.className = "cost-breakdown";
   for (const cb of conv.costBasis) {
     const row = document.createElement("div");
+    row.className = "cost-breakdown-item";
     const estPart = cb.estimatedQty > 0 ? ` (${cb.estimatedQty} est)` : "";
     const selfPart = cb.selfAssembledQty > 0 ? ` (${cb.selfAssembledQty} self-assembled)` : "";
     if (cb.repairCost) {
       row.textContent = `${cb.itemName}: ${fmtGp(cb.gp)}`;
     } else {
-      row.textContent = `${cb.qty}× ${cb.itemName}: ${fmtGp(cb.gp)}${estPart}${selfPart}`;
+      const head = document.createElement("div");
+      head.textContent = `${cb.qty}× ${cb.itemName}: ${fmtGp(cb.gp)}${estPart}${selfPart}`;
+      row.appendChild(head);
+      // Per-lot detail: buy date + unit price + source flavor.
+      if (cb.lotDetails && cb.lotDetails.length) {
+        const list = document.createElement("div");
+        list.className = "cost-breakdown-lots";
+        for (const lot of cb.lotDetails) {
+          const lotLine = document.createElement("div");
+          if (lot.kind === "real") {
+            lotLine.textContent = `↳ ${lot.qty} @ ${fmtGp(Math.round(lot.unitPrice))} bought ${new Date(lot.ts).toLocaleDateString()}`;
+          } else if (lot.kind === "extrapolated") {
+            const fromDate = lot.extrapolatedFromTs ? new Date(lot.extrapolatedFromTs).toLocaleDateString() : "another buy";
+            lotLine.textContent = `↳ ${lot.qty} @ ~${fmtGp(Math.round(lot.unitPrice))} (extrapolated from your buy on ${fromDate})`;
+            lotLine.className = "lot-estimated";
+          } else if (lot.kind === "synth") {
+            lotLine.textContent = `↳ ${lot.qty} @ ${fmtGp(Math.round(lot.unitPrice))} (self-assembled from sub-components)`;
+          } else { // wiki
+            lotLine.textContent = `↳ ${lot.qty} @ ~${fmtGp(Math.round(lot.unitPrice))} (wiki price — no buy data)`;
+            lotLine.className = "lot-estimated";
+          }
+          list.appendChild(lotLine);
+        }
+        row.appendChild(list);
+      }
     }
     td.appendChild(row);
   }
@@ -1141,7 +1173,12 @@ function renderHistory() {
   const { start, end } = fcRangeBounds(state.flipsHistory.range);
   const inRange = filterConversionsByRange(conversions, start, end);
   const summaries = summarizeRecipes(inRange, RECIPES);
-  const filtered = applyHistoryFilters(summaries);
+  let filtered = applyHistoryFilters(summaries);
+  if (state.flipsHistory.profitFilter === "profits") {
+    filtered = filtered.filter((s) => s.totalProfit > 0);
+  } else if (state.flipsHistory.profitFilter === "losses") {
+    filtered = filtered.filter((s) => s.totalProfit < 0);
+  }
   const sorted = fcSortSummaries(filtered, state.filters.historySort);
 
   renderHistorySummaryBar(inRange, filtered);
