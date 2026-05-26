@@ -168,12 +168,53 @@ function ensureRecipeIndexes() {
   return recipeIndexes;
 }
 
-/* ---- Wiki price-history fetcher (cached per item+day) ---- */
-const wikiPriceCache = new Map();
+/* ---- Wiki price-history fetcher (cached per item+day) ----
+   Lookup order for a (itemId, ts) pair:
+     1. Wiki /timeseries (24h step, ~15 days back).
+     2. Recorded 90-day price-history store (per-day JSON files hosted on the
+        repo's price-history branch). Used by the Experimental tab too.
+     3. Return 0 — the caller may then decide to drop the conversion.
+---------------------------------------------------------------- */
+const wikiPriceCache = new Map();           // key: `${itemId}|${day}` -> number
+const storeDayCache = new Map();            // key: "YYYY-MM-DD" -> Map<itemId, midPrice>
+
+const PRICE_STORE_BASE =
+  "https://raw.githubusercontent.com/crazyhairmartin-ship-it/big-timbys-little-tool/price-history/prices/";
 
 function dayKey(ts) {
   const d = new Date(ts);
   return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+}
+
+function isoDay(ts) {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+async function fetchPriceStoreDay(dayIso) {
+  if (storeDayCache.has(dayIso)) return storeDayCache.get(dayIso);
+  let byId = new Map();
+  try {
+    const r = await fetch(PRICE_STORE_BASE + dayIso + ".json");
+    if (r.ok) {
+      const dayFile = await r.json();
+      // Average each item's high+low across all hours present in the file.
+      const sums = new Map(); // id -> { sum, n }
+      for (const [, idMap] of Object.entries(dayFile.hours || {})) {
+        for (const [id, pair] of Object.entries(idMap)) {
+          if (!Array.isArray(pair)) continue;
+          const mid = ((pair[0] || 0) + (pair[1] || 0)) / 2;
+          if (!mid) continue;
+          const k = Number(id);
+          const cur = sums.get(k) || { sum: 0, n: 0 };
+          cur.sum += mid; cur.n += 1;
+          sums.set(k, cur);
+        }
+      }
+      for (const [id, { sum, n }] of sums) byId.set(id, Math.round(sum / n));
+    }
+  } catch (_) { /* unreachable day — leave empty */ }
+  storeDayCache.set(dayIso, byId);
+  return byId;
 }
 
 async function fetchWikiPriceForDay(itemId, ts) {
@@ -194,6 +235,11 @@ async function fetchWikiPriceForDay(itemId, ts) {
     }
   } catch (_) {
     price = 0;
+  }
+  if (price === 0) {
+    // Wiki had no point near this timestamp — try the recorded store.
+    const byId = await fetchPriceStoreDay(isoDay(ts));
+    if (byId.has(itemId)) price = byId.get(itemId);
   }
   wikiPriceCache.set(key, price);
   return price;

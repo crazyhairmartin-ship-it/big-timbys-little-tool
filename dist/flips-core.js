@@ -155,7 +155,32 @@ function fcItemName(mapping, id) {
   return mapping[id]?.name || `#${id}`;
 }
 
-function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wikiPriceAt, mapping, depth) {
+// Find the user's closest historical buy of an item (in either direction) and
+// extrapolate a price for `needQty` units. Returns null if no buys ever exist.
+function selfExtrapolateLot(itemId, ts, needQty, priceWitnesses) {
+  const ws = priceWitnesses.get(itemId);
+  if (!ws || ws.length === 0) return null;
+  let best = ws[0];
+  let bestDelta = Math.abs(ws[0].ts - ts);
+  for (let i = 1; i < ws.length; i++) {
+    const d = Math.abs(ws[i].ts - ts);
+    if (d < bestDelta) { best = ws[i]; bestDelta = d; }
+  }
+  return {
+    qty: needQty,
+    unitPrice: best.unitPrice,
+    ts,
+    sourceRowId: null,
+    status: "complete",
+    fallback: false,
+    estimated: false,
+    extrapolated: true,
+    extrapolatedFromRowId: best.sourceRowId,
+    extrapolatedFromTs: best.ts,
+  };
+}
+
+function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth) {
   if (depth > 5) {
     const fbPrice = wikiPriceAt(itemId, ts);
     return { qty: needQty, unitPrice: fbPrice, ts, sourceRowId: null, status: "complete", fallback: true, estimated: true, synthesized: false };
@@ -167,7 +192,7 @@ function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wik
   }
   const subRecipe = selectBestRecipe(subRecipes, inventory, needQty);
   const synthSell = { id: null, ts, itemId, itemName: fcItemName(mapping, itemId), qty: needQty, price: 0, tax: 0 };
-  const nested = _attemptConversionInner(synthSell, subRecipe, inventory, indexes, wikiPriceAt, mapping, depth + 1);
+  const nested = _attemptConversionInner(synthSell, subRecipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth + 1);
   return {
     qty: needQty,
     unitPrice: nested.totalCost / needQty,
@@ -177,10 +202,11 @@ function synthesizeFromNestedRecipe(itemId, needQty, ts, inventory, indexes, wik
     fallback: false,
     estimated: nested.estimated,
     synthesized: true,
+    nestedConv: nested,
   };
 }
 
-function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, depth) {
+function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth) {
   const productQty = sellEvent.qty / (recipe.resultQty ?? 1);
   const costBasis = [];
   let estimated = false;
@@ -194,15 +220,28 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
     let coveredQty = lots.reduce((s, l) => s + l.qty, 0);
     let shortfall = needed - coveredQty;
     let synthesizedQty = 0;
+    let extrapolatedQty = 0;
 
+    // Step 1: self-extrapolate from any of the user's own buy history of this item.
+    if (shortfall > 0) {
+      const extr = selfExtrapolateLot(component.id, sellEvent.ts, shortfall, priceWitnesses);
+      if (extr) {
+        lots.push(extr);
+        extrapolatedQty = extr.qty;
+        shortfall -= extr.qty;
+      }
+    }
+
+    // Step 2: if the component is itself a recipe product, try synthesizing from its components.
     if (shortfall > 0 && indexes.byProduct.has(component.id)) {
-      const synth = synthesizeFromNestedRecipe(component.id, shortfall, sellEvent.ts, inventory, indexes, wikiPriceAt, mapping, depth);
+      const synth = synthesizeFromNestedRecipe(component.id, shortfall, sellEvent.ts, inventory, indexes, wikiPriceAt, mapping, priceWitnesses, depth);
       lots.push(synth);
       synthesizedQty = synth.qty;
       if (synth.estimated) estimated = true;
       shortfall -= synth.qty;
     }
 
+    // Step 3: wiki fallback (least trusted).
     if (shortfall > 0) {
       const fbPrice = wikiPriceAt(component.id, sellEvent.ts);
       lots.push({ qty: shortfall, unitPrice: fbPrice, ts: sellEvent.ts, sourceRowId: null, status: "complete", fallback: true });
@@ -219,8 +258,10 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
       qty: needed,
       gp,
       lots: lots.map((l) => l.sourceRowId).filter((x) => x != null),
-      estimatedQty: lots.filter((l) => l.fallback).reduce((s, l) => s + l.qty, 0),
+      wikiFallbackQty: lots.filter((l) => l.fallback).reduce((s, l) => s + l.qty, 0),
       selfAssembledQty: synthesizedQty,
+      extrapolatedQty,
+      estimatedQty: lots.filter((l) => l.fallback).reduce((s, l) => s + l.qty, 0), // kept for back-compat with renderers
       lotStatuses: lots.filter((l) => l.sourceRowId != null).map((l) => l.status),
     });
   }
@@ -243,8 +284,37 @@ function _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPric
   };
 }
 
-function attemptConversion(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping) {
-  return _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, 0);
+function attemptConversion(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses) {
+  return _attemptConversionInner(sellEvent, recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses || new Map(), 0);
+}
+
+// A conversion is "too speculative to trust" when we're inventing the
+// primary (most-expensive) component out of thin air. Per user intent:
+// "estimate the cheaper components, not the expensive ones". Reasons to drop:
+//   1. Total cost basis is $0 — we have no information at all.
+//   2. Any component was wiki-fallback AND came back with $0 — that component
+//      has no usable data and we can't reason about its share.
+//   3. The primary component (highest gp) required extrapolation (using a
+//      price witness elsewhere in the user's history) or wiki fallback. If
+//      the user didn't actually own enough of the primary to craft the
+//      product, the "conversion" probably never happened.
+//
+// Synth-from-nested-recipe (e.g. blade reconstructed from shards the user
+// actually bought) IS trusted for the primary — that's still the user's own
+// real buy data, just one recipe layer down.
+function shouldDropConversion(conv) {
+  if (!conv.costBasis.length) return true;
+  if (conv.totalCost === 0) return true;
+
+  for (const cb of conv.costBasis) {
+    if (cb.wikiFallbackQty > 0 && cb.gp === 0) return true;
+  }
+
+  let primary = conv.costBasis[0];
+  for (const cb of conv.costBasis) {
+    if (cb.gp > primary.gp) primary = cb;
+  }
+  return primary.wikiFallbackQty > 0 || primary.extrapolatedQty > 0;
 }
 
 function selectBestRecipe(recipes, inventory, productQty) {
@@ -291,6 +361,10 @@ function buildRecipeIndexes(recipes) {
 
 function matchEvents(events, recipes, indexes, wikiPriceAt, mapping) {
   const inventory = new Map();
+  // Price-witness ledger: every BUY is recorded here. Lots get consumed from
+  // `inventory` as sells happen, but `priceWitnesses` is append-only so we can
+  // always recall what the user paid for an item at any point in their history.
+  const priceWitnesses = new Map();
   const conversions = [];
   const sorted = events.slice().sort((a, b) => a.ts - b.ts || (a.id ?? 0) - (b.id ?? 0));
 
@@ -305,12 +379,11 @@ function matchEvents(events, recipes, indexes, wikiPriceAt, mapping) {
         sourceRowId: e.id,
         status: e.status,
       });
+      if (!priceWitnesses.has(e.itemId)) priceWitnesses.set(e.itemId, []);
+      priceWitnesses.get(e.itemId).push({ ts: e.ts, unitPrice: e.price, sourceRowId: e.id });
       continue;
     }
     if (e.side === "SELL") {
-      // First, consume any inventory of the sold item itself — that portion is
-      // a "pure flip" of the assembled product (bought + resold without crafting).
-      // Only the leftover quantity, if any, gets attributed to a recipe conversion.
       let remainingQty = e.qty;
       if (inventory.has(e.itemId)) {
         const directLots = popFromFIFO(inventory.get(e.itemId), remainingQty);
@@ -320,15 +393,16 @@ function matchEvents(events, recipes, indexes, wikiPriceAt, mapping) {
       if (remainingQty <= 0) continue;
 
       const candidates = indexes.byProduct.get(e.itemId);
-      if (!candidates || candidates.length === 0) continue; // non-recipe pure flip; no conversion emitted
+      if (!candidates || candidates.length === 0) continue;
 
-      // Attribute only the un-flipped portion to a recipe conversion.
       const recipe = selectBestRecipe(candidates, inventory, remainingQty);
       const conv = attemptConversion(
         { ...e, qty: remainingQty },
-        recipe, inventory, indexes, wikiPriceAt, mapping
+        recipe, inventory, indexes, wikiPriceAt, mapping, priceWitnesses
       );
-      conversions.push(conv);
+      if (!shouldDropConversion(conv)) {
+        conversions.push(conv);
+      }
     }
   }
   return conversions;
@@ -389,5 +463,5 @@ function filterConversionsByRange(conversions, start, end) {
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe, attemptConversion, synthesizeFromNestedRecipe, matchEvents, summarizeRecipes, filterConversionsByRange, selfExtrapolateLot, shouldDropConversion };
 }
