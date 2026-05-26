@@ -643,6 +643,7 @@ const state = {
     buyHourStart: 0, buyHourEnd: 23,
     sellHourStart: 0, sellHourEnd: 23,
     maxSlots: null,       // max distinct components per craft; null = no limit
+    historySort: localStorage.getItem("osrs-combo-history-sort") || "profit-desc",
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -652,6 +653,15 @@ const state = {
   // Active view mode: "cards" or "table"
   view: localStorage.getItem("osrs-combo-view") || "cards",
   mode: localStorage.getItem("osrs-combo-mode") || "realtime",
+  // History tab state (uploaded CSV-derived flip analysis).
+  flipsHistory: {
+    activeAccount: localStorage.getItem("osrs-combo-history-account") || null,
+    accounts: [],
+    range: localStorage.getItem("osrs-combo-history-range") || "all",
+    customRange: { start: null, end: null },
+    modalTab: localStorage.getItem("osrs-combo-history-modal-tab") || "conversions",
+    analysisCache: null,
+  },
   smithing: parseInt(localStorage.getItem("osrs-combo-smithing") || "99", 10),
   // Independent strategies — each picks one side of the spread:
   //   supplies: "insta-buy" (pay high to acquire now) | "slow-buy" (offer at low, wait)
@@ -1489,6 +1499,7 @@ function applyFilters(items) {
 
 function renderGrid() {
   if (state.mode === "overnight" && window.Overnight) { window.Overnight.renderOvernight(); return; }
+  if (state.mode === "history" && window.History) { window.History.renderHistory(); return; }
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
   const items = RECIPES.map(r => ({ recipe: r, calc: calcMargin(r) }));
@@ -2423,21 +2434,66 @@ async function init() {
   // Apply persisted view on init
   setView(state.view);
   const setMode = (m) => {
+    const prev = state.mode;
     state.mode = m;
     localStorage.setItem("osrs-combo-mode", m);
     document.getElementById("mode-realtime").classList.toggle("active", m === "realtime");
     document.getElementById("mode-overnight").classList.toggle("active", m === "overnight");
+    document.getElementById("mode-history").classList.toggle("active", m === "history");
     document.getElementById("layout").classList.toggle("mode-overnight", m === "overnight");
+    document.getElementById("layout").classList.toggle("mode-history", m === "history");
+    if (prev === "history" && m !== "history" && window.History?.onModeExit) {
+      window.History.onModeExit();
+    }
+    if (m === "history" && window.History?.onModeEnter) {
+      window.History.onModeEnter();
+    }
+    rebuildSortOptions(m);
     renderGrid();
   };
+  function rebuildSortOptions(mode) {
+    const sel = document.getElementById("sort");
+    sel.replaceChildren();
+    const opts = mode === "history" ? [
+      ["profit-desc",      "Realized profit (high → low)"],
+      ["roi-desc",         "ROI % (high → low)"],
+      ["conversions-desc", "Conversions (high → low)"],
+      ["avgprofit-desc",   "Avg profit / conversion"],
+      ["timetoflip-asc",   "Avg time-to-flip (fastest)"],
+      ["winrate-desc",     "Win rate (high → low)"],
+      ["name-asc",         "Name (A→Z)"],
+    ] : [
+      ["recommended",  "Recommended"],
+      ["margin-desc",  "Margin (high → low)"],
+      ["roi-desc",     "ROI % (high → low)"],
+      ["daily-desc",   "Daily potential (high → low)"],
+      ["flips-desc",   "Trades/day (high → low)"],
+      ["cost-asc",     "Cost (low → high)"],
+      ["cost-desc",    "Cost (high → low)"],
+      ["name",         "Name (A→Z)"],
+    ];
+    for (const [v, label] of opts) {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = label;
+      sel.appendChild(o);
+    }
+    sel.value = mode === "history" ? state.filters.historySort : state.filters.sort;
+  }
   document.getElementById("mode-realtime").addEventListener("click", () => setMode("realtime"));
   document.getElementById("mode-overnight").addEventListener("click", () => setMode("overnight"));
+  document.getElementById("mode-history").addEventListener("click", () => setMode("history"));
   setMode(state.mode);
   document.getElementById("search").addEventListener("input", (e) => {
     state.filters.search = e.target.value;
     renderGrid();
   });
   document.getElementById("sort").addEventListener("change", (e) => {
+    if (state.mode === "history") {
+      state.filters.historySort = e.target.value;
+      localStorage.setItem("osrs-combo-history-sort", state.filters.historySort);
+      renderGrid();
+      return;
+    }
     state.filters.sort = e.target.value;
     renderGrid();
   });
