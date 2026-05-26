@@ -662,6 +662,7 @@ const state = {
     modalTab: localStorage.getItem("osrs-combo-history-modal-tab") || "conversions",
     showFlips: localStorage.getItem("osrs-combo-history-show-flips") === "1",
     profitFilter: localStorage.getItem("osrs-combo-history-profit-filter") || "all", // "all" | "profits" | "losses"
+    hiddenConvIds: new Set(JSON.parse(localStorage.getItem("osrs-combo-history-hidden-conv-ids") || "[]")),
     analysisCache: null,
   },
   smithing: parseInt(localStorage.getItem("osrs-combo-smithing") || "99", 10),

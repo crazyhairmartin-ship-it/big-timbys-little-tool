@@ -642,6 +642,40 @@ function fcSortSummaries(summaries, sortKey) {
   });
 }
 
+// Stable conversion identity that survives reanalysis (sell row IDs change
+// after a CSV re-upload, but ts + productId + qty + kind do not).
+function convKey(c) {
+  return `${c.ts}|${c.productId}|${c.productQty}|${c.kind || "craft"}`;
+}
+
+function persistHiddenConvs() {
+  localStorage.setItem("osrs-combo-history-hidden-conv-ids", JSON.stringify([...state.flipsHistory.hiddenConvIds]));
+}
+
+function hiddenConvsForRecipe(recipeKey) {
+  const cache = state.flipsHistory.analysisCache;
+  if (!cache) return [];
+  return cache.conversions.filter((c) =>
+    c.recipeKey === recipeKey && state.flipsHistory.hiddenConvIds.has(convKey(c))
+  );
+}
+
+function hiddenConvKeysForRecipe(recipeKey) {
+  return hiddenConvsForRecipe(recipeKey).map(convKey);
+}
+
+// Per-conversion visibility: applies pure-flip toggle, profit/loss filter,
+// and the user's hide list. Aggregated card totals are computed only over
+// visible conversions so summaries always reflect what the user is seeing.
+function visibleConversion(c) {
+  if (!state.flipsHistory.showFlips && c.kind === "flip") return false;
+  const pf = state.flipsHistory.profitFilter;
+  if (pf === "profits" && c.profit <= 0) return false;
+  if (pf === "losses"  && c.profit >= 0) return false;
+  if (state.flipsHistory.hiddenConvIds?.has(convKey(c))) return false;
+  return true;
+}
+
 function applyHistoryFilters(summaries) {
   const f = state.filters;
   const search = (f.search || "").toLowerCase().trim();
@@ -853,8 +887,7 @@ function openHistoryDrilldown(recipeKey) {
   const recipe = RECIPES.find((r) => r.key === recipeKey);
   if (!recipe) return;
   const conversions = cache.conversions.filter((c) =>
-    c.recipeKey === recipeKey &&
-    (state.flipsHistory.showFlips || c.kind !== "flip")
+    c.recipeKey === recipeKey && visibleConversion(c)
   );
   if (conversions.length === 0) return;
 
@@ -912,7 +945,7 @@ function toggleCostBasisExpansion(tr, conv) {
   const breakdown = document.createElement("tr");
   breakdown.className = "cost-breakdown-row";
   const td = document.createElement("td");
-  td.colSpan = 9;
+  td.colSpan = 10;
   td.className = "cost-breakdown";
   for (const cb of conv.costBasis) {
     const row = document.createElement("div");
@@ -970,11 +1003,32 @@ function renderConversionsTab(_recipe, conversions) {
   summary.textContent = `${sorted.length} conversions · ${fmtGp(totals.profit)} profit · avg ${fmtGp(Math.round(totals.profit / Math.max(sorted.length, 1)))} · ${winRate}% win`;
   host.appendChild(summary);
 
+  const recipe = _recipe;
+  const hiddenForThisRecipe = hiddenConvsForRecipe(recipe.key).length;
+  if (hiddenForThisRecipe > 0) {
+    const hint = document.createElement("div");
+    hint.className = "conv-hidden-hint";
+    hint.textContent = `${hiddenForThisRecipe} hidden`;
+    const unhide = document.createElement("button");
+    unhide.type = "button";
+    unhide.textContent = "Unhide all";
+    unhide.className = "linklike";
+    unhide.addEventListener("click", () => {
+      for (const k of hiddenConvKeysForRecipe(recipe.key)) state.flipsHistory.hiddenConvIds.delete(k);
+      persistHiddenConvs();
+      openHistoryDrilldown(recipe.key);
+      renderHistory();
+    });
+    hint.appendChild(document.createTextNode(" "));
+    hint.appendChild(unhide);
+    host.appendChild(hint);
+  }
+
   const table = document.createElement("table");
   table.className = "conv-table";
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  for (const label of ["Date", "Qty", "Revenue", "Cost", "Tax", "Profit", "ROI", "Time to flip", ""]) {
+  for (const label of ["Date", "Qty", "Revenue", "Cost", "Tax", "Profit", "ROI", "Time to flip", "", ""]) {
     const th = document.createElement("th");
     th.textContent = label;
     headRow.appendChild(th);
@@ -987,7 +1041,7 @@ function renderConversionsTab(_recipe, conversions) {
     const tr = document.createElement("tr");
     tr.dataset.convTs = c.ts;
     const profitClass = c.profit >= 0 ? "profit" : "loss";
-    for (let i = 0; i < 9; i++) tr.appendChild(document.createElement("td"));
+    for (let i = 0; i < 10; i++) tr.appendChild(document.createElement("td"));
     tr.children[0].textContent = new Date(c.ts).toLocaleString();
     tr.children[1].textContent = c.productQty;
     tr.children[2].textContent = fmtGp(c.revenue);
@@ -1004,6 +1058,19 @@ function renderConversionsTab(_recipe, conversions) {
     tr.children[6].textContent = c.totalCost > 0 ? ((c.profit / c.totalCost) * 100).toFixed(1) + "%" : "—";
     tr.children[7].textContent = fcHumanMs(c.timeToFlip);
     tr.children[8].appendChild(conversionStatusBadge(c));
+    const hideBtn = document.createElement("button");
+    hideBtn.type = "button";
+    hideBtn.className = "conv-hide-btn";
+    hideBtn.title = "Hide this trade from totals";
+    hideBtn.textContent = "×";
+    hideBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      state.flipsHistory.hiddenConvIds.add(convKey(c));
+      persistHiddenConvs();
+      openHistoryDrilldown(recipe.key);
+      renderHistory();
+    });
+    tr.children[9].appendChild(hideBtn);
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
@@ -1167,18 +1234,11 @@ function renderHistory() {
 
   const cache = state.flipsHistory.analysisCache;
   const allConversions = cache?.conversions || [];
-  const conversions = state.flipsHistory.showFlips
-    ? allConversions
-    : allConversions.filter((c) => c.kind !== "flip");
+  const conversions = allConversions.filter((c) => visibleConversion(c));
   const { start, end } = fcRangeBounds(state.flipsHistory.range);
   const inRange = filterConversionsByRange(conversions, start, end);
   const summaries = summarizeRecipes(inRange, RECIPES);
-  let filtered = applyHistoryFilters(summaries);
-  if (state.flipsHistory.profitFilter === "profits") {
-    filtered = filtered.filter((s) => s.totalProfit > 0);
-  } else if (state.flipsHistory.profitFilter === "losses") {
-    filtered = filtered.filter((s) => s.totalProfit < 0);
-  }
+  const filtered = applyHistoryFilters(summaries);
   const sorted = fcSortSummaries(filtered, state.filters.historySort);
 
   renderHistorySummaryBar(inRange, filtered);
