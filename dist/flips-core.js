@@ -151,6 +151,34 @@ function popFromFIFO(queue, need) {
   return out;
 }
 
+function selectBestRecipe(recipes, inventory, productQty) {
+  let best = recipes[0];
+  let bestScore = -1;
+  let bestCost = Infinity;
+  for (const r of recipes) {
+    let covered = 0;
+    let cost = 0;
+    for (const c of r.components) {
+      const requireQty = c.qty * (productQty / (r.resultQty ?? 1));
+      const queue = inventory.get(c.id) || [];
+      let remaining = requireQty;
+      for (const lot of queue) {
+        if (remaining <= 0) break;
+        const take = Math.min(lot.qty, remaining);
+        covered += take;
+        cost += take * lot.unitPrice;
+        remaining -= take;
+      }
+    }
+    if (covered > bestScore || (covered === bestScore && cost < bestCost)) {
+      best = r;
+      bestScore = covered;
+      bestCost = cost;
+    }
+  }
+  return best;
+}
+
 function buildRecipeIndexes(recipes) {
   const byProduct = new Map();
   const byComponent = new Map();
@@ -167,5 +195,5 @@ function buildRecipeIndexes(recipes) {
 
 // Node test harness can require() this; browsers skip the guard.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO };
+  module.exports = { parseCopilot, parseFlippingUtilities, fcGeTax, detectFormat, buildNameIndex, resolveItemNames, buildRecipeIndexes, popFromFIFO, selectBestRecipe };
 }

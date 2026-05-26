@@ -117,3 +117,28 @@ test("popFromFIFO handles missing queue (undefined)", () => {
   const popped = core.popFromFIFO(undefined, 5);
   assert.deepStrictEqual(popped, []);
 });
+
+test("selectBestRecipe picks the recipe with the most coverage", () => {
+  const inventory = new Map();
+  inventory.set(11798, [{ qty: 1, unitPrice: 14000000, ts: 1, sourceRowId: "a", status: "complete" }]);
+  inventory.set(11812, [{ qty: 1, unitPrice: 17800000, ts: 2, sourceRowId: "b", status: "complete" }]);
+  // No Armadyl hilt -> bandos-godsword has 2/2 covered, armadyl-godsword 1/2.
+  const recipes = [RECIPES_FIXTURE[0], RECIPES_FIXTURE[1]];
+  const r = core.selectBestRecipe(recipes, inventory, 1);
+  assert.strictEqual(r.key, "bandos-godsword");
+});
+
+test("selectBestRecipe ties broken by lower cost basis", () => {
+  const inventory = new Map();
+  inventory.set(11798, [{ qty: 2, unitPrice: 14000000, ts: 1, sourceRowId: "blade", status: "complete" }]);
+  inventory.set(11810, [{ qty: 1, unitPrice: 20000000, ts: 2, sourceRowId: "ah", status: "complete" }]);
+  inventory.set(11812, [{ qty: 1, unitPrice: 17800000, ts: 3, sourceRowId: "bh", status: "complete" }]);
+  const r = core.selectBestRecipe([RECIPES_FIXTURE[0], RECIPES_FIXTURE[1]], inventory, 1);
+  assert.strictEqual(r.key, "bandos-godsword");
+});
+
+test("selectBestRecipe returns first recipe when no inventory at all", () => {
+  const inventory = new Map();
+  const r = core.selectBestRecipe([RECIPES_FIXTURE[0], RECIPES_FIXTURE[1]], inventory, 1);
+  assert.strictEqual(r.key, "armadyl-godsword");
+});
