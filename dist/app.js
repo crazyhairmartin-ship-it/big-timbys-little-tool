@@ -381,7 +381,7 @@ const RECIPES = [
   // --- Smithing: a few hand-coded entries to verify the schema + UI; the
   //     rest will land via the wiki scrape in Phase 2.
   { key:"smith-cannonball",         id:2,     name:"Cannonball",         cat:"Smithing", skill:"Smithing", level:35, xp:25.5, ticks:5,  components:[{id:2353,qty:1}], resultQty:4 },
-  { key:"smith-rune-dart-tip",      id:5630,  name:"Rune dart tip",      cat:"Smithing", skill:"Smithing", level:89, xp:75,   ticks:3,  components:[{id:2363,qty:1}], resultQty:10 },
+  { key:"smith-rune-dart-tip",      id:824,   name:"Rune dart tip",      cat:"Smithing", skill:"Smithing", level:89, xp:75,   ticks:3,  components:[{id:2363,qty:1}], resultQty:10 },
   { key:"smith-rune-platebody",     id:1127,  name:"Rune platebody",     cat:"Smithing", skill:"Smithing", level:99, xp:375,  ticks:9,  components:[{id:2363,qty:5}] },
   { key:"smith-adamant-platebody",  id:1123,  name:"Adamant platebody",  cat:"Smithing", skill:"Smithing", level:88, xp:312.5,ticks:9,  components:[{id:2361,qty:5}] },
   { key:"smith-rune-2h",            id:1319,  name:"Rune 2h sword",      cat:"Smithing", skill:"Smithing", level:99, xp:225,  ticks:9,  components:[{id:2363,qty:3}] },
