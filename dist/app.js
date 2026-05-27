@@ -659,6 +659,7 @@ const state = {
     skillingSort: localStorage.getItem("osrs-combo-skilling-sort") || "gphr-desc",
     skillingSkill: localStorage.getItem("osrs-combo-skilling-skill") || "all",
     skillingSubCats: new Set(JSON.parse(localStorage.getItem("osrs-combo-skilling-subcats") || "[]")),
+    skillingTiers: new Set(JSON.parse(localStorage.getItem("osrs-combo-skilling-tiers") || "[]")),
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -1608,34 +1609,59 @@ function renderSkillingCard(recipe, calc, s) {
   return card;
 }
 
-function renderSkillingSubCatChips() {
-  const host = document.getElementById("skilling-subcats");
+// Stable tier ordering across skills — alphabetical would put Adamant first.
+const TIER_ORDER = ["Bronze", "Iron", "Steel", "Mithril", "Adamant", "Rune", "Gold"];
+
+function renderSkillingChipGroup(hostId, field, activeSet, storageKey, customOrder) {
+  const host = document.getElementById(hostId);
   if (!host) return;
   host.replaceChildren();
-  // Sub-categories present for the currently-selected skill (or all skills).
   const skill = state.filters.skillingSkill;
-  const subCats = new Set();
+  const values = new Set();
   for (const r of RECIPES) {
-    if (!r.skill || !r.subCat) continue;
+    if (!r.skill) continue;
     if (skill !== "all" && r.skill !== skill) continue;
-    subCats.add(r.subCat);
+    if (r[field]) values.add(r[field]);
   }
-  const ordered = [...subCats].sort();
-  const active = state.filters.skillingSubCats;
-  for (const sc of ordered) {
+  let ordered;
+  if (customOrder) {
+    ordered = customOrder.filter((v) => values.has(v));
+    for (const v of [...values].sort()) if (!ordered.includes(v)) ordered.push(v);
+  } else {
+    ordered = [...values].sort();
+  }
+  for (const v of ordered) {
     const chip = el("button", {
-      class: "cat-chip" + (active.has(sc) ? " active" : ""),
-      attrs: { type: "button", "data-subcat": sc },
-      text: sc,
+      class: "cat-chip" + (activeSet.has(v) ? " active" : ""),
+      attrs: { type: "button" },
+      text: v,
     });
     chip.addEventListener("click", () => {
-      if (active.has(sc)) active.delete(sc); else active.add(sc);
-      localStorage.setItem("osrs-combo-skilling-subcats", JSON.stringify([...active]));
+      if (activeSet.has(v)) activeSet.delete(v); else activeSet.add(v);
+      localStorage.setItem(storageKey, JSON.stringify([...activeSet]));
       renderSkillingSubCatChips();
+      renderSkillingTierChips();
       renderGrid();
     });
     host.appendChild(chip);
   }
+}
+
+function renderSkillingSubCatChips() {
+  renderSkillingChipGroup(
+    "skilling-subcats", "subCat",
+    state.filters.skillingSubCats,
+    "osrs-combo-skilling-subcats"
+  );
+}
+
+function renderSkillingTierChips() {
+  renderSkillingChipGroup(
+    "skilling-tiers", "tier",
+    state.filters.skillingTiers,
+    "osrs-combo-skilling-tiers",
+    TIER_ORDER
+  );
 }
 
 function renderSkilling() {
@@ -1648,10 +1674,12 @@ function renderSkilling() {
   const search = (state.filters.search || "").toLowerCase().trim();
   const skill = state.filters.skillingSkill;
   const subCats = state.filters.skillingSubCats;
+  const tiers = state.filters.skillingTiers;
   const items = RECIPES
     .filter((r) => r.skill)
     .filter((r) => skill === "all" || r.skill === skill)
     .filter((r) => subCats.size === 0 || (r.subCat && subCats.has(r.subCat)))
+    .filter((r) => tiers.size === 0 || (r.tier && tiers.has(r.tier)))
     .map((r) => {
       const calc = calcMargin(r);
       return { recipe: r, calc, s: skillingStats(r, calc) };
@@ -2683,14 +2711,18 @@ async function init() {
     skillSel.addEventListener("change", (ev) => {
       state.filters.skillingSkill = ev.target.value;
       localStorage.setItem("osrs-combo-skilling-skill", state.filters.skillingSkill);
-      // Switching skills invalidates the selected sub-cats.
+      // Switching skills invalidates both sub-filters — labels won't carry across.
       state.filters.skillingSubCats.clear();
+      state.filters.skillingTiers.clear();
       localStorage.setItem("osrs-combo-skilling-subcats", "[]");
+      localStorage.setItem("osrs-combo-skilling-tiers", "[]");
       renderSkillingSubCatChips();
+      renderSkillingTierChips();
       renderGrid();
     });
   }
   renderSkillingSubCatChips();
+  renderSkillingTierChips();
 
   setMode(state.mode);
   document.getElementById("search").addEventListener("input", (e) => {

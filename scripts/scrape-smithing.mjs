@@ -14,13 +14,22 @@
 import fs from "node:fs/promises";
 
 const TIERS = [
-  { tpl: "Smithing/Bronze bar",  barName: "Bronze",  barId: 2349, xpPerBar: 12.5 },
-  { tpl: "Smithing/Iron bar",    barName: "Iron",    barId: 2351, xpPerBar: 25 },
-  { tpl: "Smithing/Steel bar",   barName: "Steel",   barId: 2353, xpPerBar: 37.5 },
-  { tpl: "Smithing/Mithril bar", barName: "Mithril", barId: 2359, xpPerBar: 50 },
-  { tpl: "Smithing/Adamant bar", barName: "Adamant", barId: 2361, xpPerBar: 62.5 },
-  { tpl: "Smithing/Runite bar",  barName: "Rune",    barId: 2363, xpPerBar: 75 },
-  { tpl: "Smithing/Gold bar",    barName: "Gold",    barId: 2357, xpPerBar: 22.5 },
+  { tpl: "Smithing/Bronze bar",     barName: "Bronze",  barId: 2349, xpPerBar: 12.5 },
+  { tpl: "Smithing/Iron bar",       barName: "Iron",    barId: 2351, xpPerBar: 25 },
+  { tpl: "Smithing/Steel bar",      barName: "Steel",   barId: 2353, xpPerBar: 37.5 },
+  { tpl: "Smithing/Mithril bar",    barName: "Mithril", barId: 2359, xpPerBar: 50 },
+  { tpl: "Smithing/Adamantite bar", barName: "Adamant", barId: 2361, xpPerBar: 62.5 },
+  { tpl: "Smithing/Runite bar",     barName: "Rune",    barId: 2363, xpPerBar: 75 },
+  // Gold uses a different wiki format (only Helmet and Bowl, both quest-gated)
+  // — hand-coded after the scraped tiers.
+];
+
+// Gold bar items aren't in the standard SmithingTableRow format on the wiki;
+// they live in a plain wikitable. Both require quests and are obscure, but
+// included for completeness.
+const HARDCODED_GOLD = [
+  { name: "Gold helmet", id: 6886, level: 50, xp: 30, bars: 3 },
+  { name: "Gold bowl",   id: 6892, level: 50, xp: 30, bars: 2 },
 ];
 
 // Anvil smithing is 3 sec (5 ticks) by default. A few specific items take
@@ -111,6 +120,7 @@ async function main() {
         cat: "Smithing",
         skill: "Smithing",
         subCat: subCatFor(item),
+        tier: tier.barName,
         level,
         xp,
         ticks,
@@ -118,6 +128,23 @@ async function main() {
         ...(qty !== 1 ? { resultQty: qty } : {}),
       });
     }
+  }
+
+  // Gold bar items, hand-coded.
+  for (const g of HARDCODED_GOLD) {
+    recipes.push({
+      key: `smith-${slugify(g.name)}`,
+      id: g.id,
+      name: g.name,
+      cat: "Smithing",
+      skill: "Smithing",
+      subCat: subCatFor(g.name),
+      tier: "Gold",
+      level: g.level,
+      xp: g.xp,
+      ticks: 5,
+      components: [{ id: 2357, qty: g.bars }],
+    });
   }
 
   // Stable order: by skill level then name.
