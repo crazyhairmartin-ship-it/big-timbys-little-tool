@@ -657,6 +657,8 @@ const state = {
     maxSlots: null,       // max distinct components per craft; null = no limit
     historySort: localStorage.getItem("osrs-combo-history-sort") || "profit-desc",
     skillingSort: localStorage.getItem("osrs-combo-skilling-sort") || "gphr-desc",
+    skillingSkill: localStorage.getItem("osrs-combo-skilling-skill") || "all",
+    skillingSubCats: new Set(JSON.parse(localStorage.getItem("osrs-combo-skilling-subcats") || "[]")),
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -1606,6 +1608,36 @@ function renderSkillingCard(recipe, calc, s) {
   return card;
 }
 
+function renderSkillingSubCatChips() {
+  const host = document.getElementById("skilling-subcats");
+  if (!host) return;
+  host.replaceChildren();
+  // Sub-categories present for the currently-selected skill (or all skills).
+  const skill = state.filters.skillingSkill;
+  const subCats = new Set();
+  for (const r of RECIPES) {
+    if (!r.skill || !r.subCat) continue;
+    if (skill !== "all" && r.skill !== skill) continue;
+    subCats.add(r.subCat);
+  }
+  const ordered = [...subCats].sort();
+  const active = state.filters.skillingSubCats;
+  for (const sc of ordered) {
+    const chip = el("button", {
+      class: "cat-chip" + (active.has(sc) ? " active" : ""),
+      attrs: { type: "button", "data-subcat": sc },
+      text: sc,
+    });
+    chip.addEventListener("click", () => {
+      if (active.has(sc)) active.delete(sc); else active.add(sc);
+      localStorage.setItem("osrs-combo-skilling-subcats", JSON.stringify([...active]));
+      renderSkillingSubCatChips();
+      renderGrid();
+    });
+    host.appendChild(chip);
+  }
+}
+
 function renderSkilling() {
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
@@ -1614,8 +1646,12 @@ function renderSkilling() {
   grid.replaceChildren();
 
   const search = (state.filters.search || "").toLowerCase().trim();
+  const skill = state.filters.skillingSkill;
+  const subCats = state.filters.skillingSubCats;
   const items = RECIPES
     .filter((r) => r.skill)
+    .filter((r) => skill === "all" || r.skill === skill)
+    .filter((r) => subCats.size === 0 || (r.subCat && subCats.has(r.subCat)))
     .map((r) => {
       const calc = calcMargin(r);
       return { recipe: r, calc, s: skillingStats(r, calc) };
@@ -2639,6 +2675,23 @@ async function init() {
   document.getElementById("mode-overnight").addEventListener("click", () => setMode("overnight"));
   document.getElementById("mode-history").addEventListener("click", () => setMode("history"));
   document.getElementById("mode-skilling").addEventListener("click", () => setMode("skilling"));
+
+  // Skilling sidebar wiring.
+  const skillSel = document.getElementById("skilling-skill");
+  if (skillSel) {
+    skillSel.value = state.filters.skillingSkill;
+    skillSel.addEventListener("change", (ev) => {
+      state.filters.skillingSkill = ev.target.value;
+      localStorage.setItem("osrs-combo-skilling-skill", state.filters.skillingSkill);
+      // Switching skills invalidates the selected sub-cats.
+      state.filters.skillingSubCats.clear();
+      localStorage.setItem("osrs-combo-skilling-subcats", "[]");
+      renderSkillingSubCatChips();
+      renderGrid();
+    });
+  }
+  renderSkillingSubCatChips();
+
   setMode(state.mode);
   document.getElementById("search").addEventListener("input", (e) => {
     state.filters.search = e.target.value;
