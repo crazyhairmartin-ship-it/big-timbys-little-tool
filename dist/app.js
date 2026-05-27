@@ -666,6 +666,10 @@ const state = {
     smithingDoubleMould:    localStorage.getItem("osrs-combo-smithing-double-mould") === "1",
     smithingAncientFurnace: localStorage.getItem("osrs-combo-smithing-ancient-furnace") === "1",
     fletchingKnife:         localStorage.getItem("osrs-combo-fletching-knife") === "1",
+    cookingLevel:           parseInt(localStorage.getItem("osrs-combo-cooking-level") || "99", 10),
+    cookingMethod:          localStorage.getItem("osrs-combo-cooking-method") || "range",
+    cookingGauntlets:       localStorage.getItem("osrs-combo-cooking-gauntlets") === "1",
+    cookingCape:            localStorage.getItem("osrs-combo-cooking-cape") === "1",
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -1713,6 +1717,47 @@ function applyHerbloreModifiers(recipe, calc) {
   return { ...calc, revenue: newRevenue, tax: newTax, totalCost: newCost, margin: newMargin };
 }
 
+// Cooking burn rate (per recipe, with the user's current setup applied).
+//   recipe.burnStopFire   - level you stop burning on a fire (-1 = always burns)
+//   recipe.burnStopRange  - level you stop burning on a regular range
+//   recipe.burnStopRangeGauntlets - level you stop burning on a range with
+//     Cooking gauntlets (only set for gauntlets-affected fish)
+// Linear interpolation between recipe.level (max burn) and stop level (no
+// burn). When stop is -1 (always burns), use a fixed 40% burn rate as a
+// stand-in for "high, never improves". When stop is undefined, no data ->
+// assume no burn (fine for foods that just don't burn meaningfully).
+const ALWAYS_BURNS_RATE = 0.40;
+function cookingBurnRate(recipe) {
+  if (state.filters.cookingCape) return 0;
+  const level = state.filters.cookingLevel || 99;
+  if (level < (recipe.level || 1)) return 0; // can't even cook this yet
+  const method = state.filters.cookingMethod;
+  let stop;
+  if (method === "fire") {
+    stop = recipe.burnStopFire;
+  } else {
+    stop = (state.filters.cookingGauntlets && recipe.burnStopRangeGauntlets != null)
+      ? recipe.burnStopRangeGauntlets
+      : recipe.burnStopRange;
+  }
+  if (stop === -1) return ALWAYS_BURNS_RATE;
+  if (stop == null) return 0;
+  if (level >= stop) return 0;
+  const minLvl = recipe.level || 1;
+  if (stop <= minLvl) return 0;
+  return Math.max(0, Math.min(1, (stop - level) / (stop - minLvl)));
+}
+function applyCookingModifiers(recipe, calc) {
+  if (recipe.skill !== "Cooking") return calc;
+  const burn = cookingBurnRate(recipe);
+  if (burn === 0) return calc;
+  const yieldRate = 1 - burn;
+  const newRevenue = (calc.revenue || 0) * yieldRate;
+  const newTax = (calc.tax || 0) * yieldRate;
+  const newMargin = newRevenue - newTax - (calc.totalCost || 0);
+  return { ...calc, revenue: newRevenue, tax: newTax, margin: newMargin };
+}
+
 // Fletching knife (Vale Totems reward, July 2025): -1 tick per fletching
 // action (after the first item in a batch). For batch-style actions
 // (arrows/bolts/darts at ~3 ticks/click), this is roughly a 1.5x speed
@@ -1797,6 +1842,7 @@ function renderSkilling() {
     .filter((r) => tiers.size === 0 || (r.tier && tiers.has(r.tier)))
     .map((r) => {
       let calc = applyHerbloreModifiers(r, calcMargin(r));
+      calc = applyCookingModifiers(r, calc);
       const sm = applySmithingModifiers(r, calc);
       const fl = applyFletchingModifiers(sm.recipe, sm.calc);
       return { recipe: fl.recipe, calc: fl.calc, s: skillingStats(fl.recipe, fl.calc) };
@@ -2894,6 +2940,45 @@ async function init() {
       renderGrid();
     });
   }
+  // Cooking setup controls.
+  const cookLevel = document.getElementById("cooking-level");
+  if (cookLevel) {
+    cookLevel.value = state.filters.cookingLevel;
+    cookLevel.addEventListener("input", (ev) => {
+      const v = Math.max(1, Math.min(99, parseInt(ev.target.value, 10) || 99));
+      state.filters.cookingLevel = v;
+      localStorage.setItem("osrs-combo-cooking-level", String(v));
+      renderGrid();
+    });
+  }
+  const cookMethod = document.getElementById("cooking-method");
+  if (cookMethod) {
+    cookMethod.value = state.filters.cookingMethod;
+    cookMethod.addEventListener("change", (ev) => {
+      state.filters.cookingMethod = ev.target.value;
+      localStorage.setItem("osrs-combo-cooking-method", ev.target.value);
+      renderGrid();
+    });
+  }
+  const cookGaunt = document.getElementById("cooking-gauntlets");
+  if (cookGaunt) {
+    cookGaunt.checked = state.filters.cookingGauntlets;
+    cookGaunt.addEventListener("change", (ev) => {
+      state.filters.cookingGauntlets = ev.target.checked;
+      localStorage.setItem("osrs-combo-cooking-gauntlets", ev.target.checked ? "1" : "0");
+      renderGrid();
+    });
+  }
+  const cookCape = document.getElementById("cooking-cape");
+  if (cookCape) {
+    cookCape.checked = state.filters.cookingCape;
+    cookCape.addEventListener("change", (ev) => {
+      state.filters.cookingCape = ev.target.checked;
+      localStorage.setItem("osrs-combo-cooking-cape", ev.target.checked ? "1" : "0");
+      renderGrid();
+    });
+  }
+
   const fknife = document.getElementById("fletching-knife");
   if (fknife) {
     fknife.checked = state.filters.fletchingKnife;

@@ -227,6 +227,68 @@ const PIZZA_XP = {
   "Pineapple pizza": 188,
 };
 
+// Gauntlets-affected fish hardcoded with their reduced burn-stop level on a
+// regular range. (Wiki "Affected by cooking gauntlets" table; gauntlets
+// "default" column.) Other fish either always burn at the gauntlets level or
+// don't gain from gauntlets.
+const GAUNTLETS_BURN_STOP = {
+  "lobster":    64,
+  "swordfish":  80,
+  "monkfish":   86,
+  "shark":      94, // shark always burns on fire/range without Hosidius+gauntlets
+  "anglerfish": 97,
+  "dark crab":  90,
+  "karambwan":  null, // karambwan stops burning at 99 even with gauntlets? omit
+};
+
+// Scrape the OSRS wiki's master burn-level table at Cooking/Burn level.
+// The page has multiple wikitables (Gauntlets-affected, Range-affected,
+// Meats, Baked goods, etc.). Column counts vary, so we extract the first
+// two numeric cells after each food's plinkt as { fire, range }. Gauntlets
+// stop-burning level for the specific gauntlets-affected fish comes from
+// the hardcoded map above.
+async function scrapeBurnLevels() {
+  const text = await fetchWikitext("Cooking/Burn level");
+  const out = new Map();
+  if (!text) return out;
+  const tables = [...text.matchAll(/\{\|[^\n]*class="wikitable[^\n]*\n([\s\S]+?)\n\|\}/g)];
+  for (const tbl of tables) {
+    const rows = tbl[1].split("|-");
+    for (const row of rows) {
+      const cells = row.split(/\n\|/).map((s) => s.trim()).filter(Boolean);
+      if (cells.length < 3) continue;
+      let itemName = null, itemIdx = -1;
+      for (let i = 0; i < cells.length; i++) {
+        const mm = cells[i].match(/\{\{plinkt\|([^|}]+?)(?:\|[^}]*)?\}\}/);
+        if (mm) { itemName = mm[1]; itemIdx = i; break; }
+      }
+      if (!itemName) continue;
+      const parseCell = (s) => {
+        if (!s) return undefined; // marker: no data
+        const t = s.trim();
+        if (t === "-" || /^\s*-\s*$/.test(t)) return -1; // sentinel: always burns
+        if (t.includes("{{NA}}")) return undefined;
+        const n = parseInt(t.replace(/[^0-9]/g, ""), 10);
+        return Number.isFinite(n) && n > 0 ? n : undefined;
+      };
+      const nums = cells.slice(itemIdx + 1).map(parseCell);
+      // The first two cells after Food are Fire and (Normal) Range. They may
+      // be "-" (always burns -> -1), a number (stop level), or NA (undefined).
+      const fire  = nums[0];
+      const range = nums[1];
+      const key = itemName.toLowerCase();
+      if (!out.has(key)) {
+        const rec = {};
+        if (fire  !== undefined) rec.burnStopFire  = fire;
+        if (range !== undefined) rec.burnStopRange = range;
+        if (GAUNTLETS_BURN_STOP[key] !== undefined) rec.burnStopRangeGauntlets = GAUNTLETS_BURN_STOP[key];
+        out.set(key, rec);
+      }
+    }
+  }
+  return out;
+}
+
 async function scrapeCookingPiesAndPizzas(nameToId, skipped) {
   const recipes = [];
   const pages = [
@@ -266,6 +328,7 @@ async function scrapeCookingPiesAndPizzas(nameToId, skipped) {
   return recipes;
 }
 async function scrapeCooking(nameToId, skipped) {
+  const burnLevels = await scrapeBurnLevels();
   const recipes = [
     ...await scrapeCookingPiesAndPizzas(nameToId, skipped),
   ];
@@ -298,14 +361,18 @@ async function scrapeCooking(nameToId, skipped) {
         skipped.push(`Cooking: ${inputName} -> ${outputName} (no mapping id)`);
         continue;
       }
+      const burn = burnLevels.get(outputName.toLowerCase()) || {};
       recipes.push({
         key: `cook-${slugify(outputName)}`,
         id: outputId, name: outputName,
         cat: "Cooking", skill: "Cooking",
         subCat,
         level, xp,
-        actionsPerHourMax: 3000, // wiki standard for fish/meat cooking
+        actionsPerHourMax: 3000,
         components: [{ id: inputId, qty: 1 }],
+        ...("burnStopFire"           in burn ? { burnStopFire:           burn.burnStopFire } : {}),
+        ...("burnStopRange"          in burn ? { burnStopRange:          burn.burnStopRange } : {}),
+        ...("burnStopRangeGauntlets" in burn ? { burnStopRangeGauntlets: burn.burnStopRangeGauntlets } : {}),
       });
     }
   }
