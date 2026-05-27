@@ -346,6 +346,125 @@ async function scrapeFletching(nameToId, skipped) {
   return recipes;
 }
 
+/* ---------------- Herblore ----------------
+ * Source: Calculator:Herblore/Potions. Rows use the template invocation
+ *   {{/Template:Unfinished|PotionName|Level|XP|herb|secondary}}
+ * where `herb` is the herb stem ("guam", "ranarr", etc.) -- the actual input
+ * is "<Herb> potion (unf)". Output is "<PotionName>(3)" (3-dose tradeable).
+ *
+ * Wiki notes 2,400 potions/hr at optimal banking; we use that as
+ * actionsPerHourMax.
+---------------------------------------------------------- */
+const HERB_TO_UNF = {
+  guam:          "Guam potion (unf)",
+  marrentill:    "Marrentill potion (unf)",
+  tarromin:      "Tarromin potion (unf)",
+  harralander:   "Harralander potion (unf)",
+  ranarr:        "Ranarr potion (unf)",
+  toadflax:      "Toadflax potion (unf)",
+  irit:          "Irit potion (unf)",
+  avantoe:       "Avantoe potion (unf)",
+  kwuarm:        "Kwuarm potion (unf)",
+  snapdragon:    "Snapdragon potion (unf)",
+  cadantine:     "Cadantine potion (unf)",
+  lantadyme:     "Lantadyme potion (unf)",
+  dwarf:         "Dwarf weed potion (unf)",
+  "dwarf weed":  "Dwarf weed potion (unf)",
+  torstol:       "Torstol potion (unf)",
+  huasca:        "Huasca potion (unf)",
+};
+function capWords(s) {
+  return s.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+async function scrapeHerblore(nameToId, skipped) {
+  const recipes = [];
+  const text = await fetchWikitext("Calculator:Herblore/Potions");
+  if (!text) return recipes;
+  // Pull all /Template:Unfinished invocations across the page.
+  const rows = [...text.matchAll(/\{\{\/Template:Unfinished\|([^}]+)\}\}/g)];
+  for (const m of rows) {
+    const parts = m[1].split("|").map((s) => s.trim());
+    if (parts.length < 5) continue;
+    const [potionRaw, levelStr, xpStr, herbRaw, secondaryRaw] = parts;
+    const level = parseInt(levelStr, 10);
+    const xp = parseFloat(xpStr);
+    if (!Number.isFinite(level) || !Number.isFinite(xp)) continue;
+    const herb = herbRaw.toLowerCase().trim();
+    const unfName = HERB_TO_UNF[herb] || (capWords(herb) + " potion (unf)");
+    const secondaryName = capWords(secondaryRaw);
+    // GE name for finished potions is "<Name>(3)".
+    const potionName = potionRaw.trim();
+    const finishedName = potionName + "(3)";
+    const finishedId = nameToId.get(finishedName.toLowerCase()) ?? nameToId.get(potionName.toLowerCase());
+    const unfId = nameToId.get(unfName.toLowerCase());
+    const secondaryId = nameToId.get(secondaryName.toLowerCase());
+    if (!finishedId) { skipped.push(`Herblore: ${finishedName} (no mapping id)`); continue; }
+    if (!unfId)      { skipped.push(`Herblore: unf ${unfName} (no mapping id)`); continue; }
+    if (!secondaryId){ skipped.push(`Herblore: secondary ${secondaryName} (no mapping id)`); continue; }
+    recipes.push({
+      key: `herb-${slugify(potionName)}`,
+      id: finishedId,
+      name: finishedName,
+      cat: "Herblore", skill: "Herblore", subCat: "Potions",
+      level, xp,
+      actionsPerHourMax: 2400, // wiki: optimal banking ~2,400/hr
+      components: [{ id: unfId, qty: 1 }, { id: secondaryId, qty: 1 }],
+    });
+  }
+  return recipes;
+}
+
+/* ---------------- Crafting ----------------
+ * Coverage so far:
+ *   - Gem cutting (Calculator:Crafting/Gem cutting): uncut gem -> cut gem.
+ *
+ * Full jewellery/leather/glass/battlestaves coverage is deferred -- those
+ * pages use section-headers to switch implicit inputs (e.g. "Sapphire
+ * jewellery" section binds Sapphire as a second input for every row), which
+ * needs a different parser shape.
+---------------------------------------------------------- */
+const GEM_CUT_XP_TICKS = 3; // Cutting one gem is a 3-tick (1.8s) action.
+async function scrapeCrafting(nameToId, skipped) {
+  const recipes = [];
+  const text = await fetchWikitext("Calculator:Crafting/Gem cutting");
+  if (!text) return recipes;
+  const m = text.match(/\{\|[^\n]*class="wikitable.*?\n((?:.+\n)+?)\|\}/s);
+  if (!m) return recipes;
+  const rows = m[1].split("|-").slice(1);
+  for (const row of rows) {
+    const cells = row.split(/\n\|/).map((s) => s.trim()).filter(Boolean);
+    if (cells.length < 5) continue;
+    const itemMatch = cells[0].match(/\{\{plink\|([^|}]+?)(?:\|[^}]*)?\}\}/);
+    if (!itemMatch) continue;
+    const itemName = itemMatch[1];
+    const level = parseInt(cells[1], 10);
+    if (!Number.isFinite(level)) continue;
+    // Take the LAST numeric in the row -- XP (Cut) sits near the end and
+    // higher-tier gems have N/A in the smashed-XP column, so "second numeric"
+    // doesn't work universally.
+    let xp = NaN;
+    for (let i = 2; i < cells.length; i++) {
+      const t = cells[i].replace(/,/g, "").trim();
+      if (/^-?\d+(\.\d+)?$/.test(t)) xp = parseFloat(t);
+    }
+    if (!Number.isFinite(xp)) continue;
+    const outputId = nameToId.get(itemName.toLowerCase());
+    const inputId = nameToId.get(`uncut ${itemName.toLowerCase()}`);
+    if (!outputId || !inputId) {
+      skipped.push(`Crafting: cut ${itemName} (no mapping id)`);
+      continue;
+    }
+    recipes.push({
+      key: `craft-cut-${slugify(itemName)}`,
+      id: outputId, name: itemName,
+      cat: "Crafting", skill: "Crafting", subCat: "Gem cutting",
+      level, xp, ticks: GEM_CUT_XP_TICKS,
+      components: [{ id: inputId, qty: 1 }],
+    });
+  }
+  return recipes;
+}
+
 async function main() {
   const mapping = await fetchMapping();
   const nameToId = new Map();
@@ -356,6 +475,8 @@ async function main() {
     ...await scrapeSmithing(nameToId, skipped),
     ...await scrapeCooking(nameToId, skipped),
     ...await scrapeFletching(nameToId, skipped),
+    ...await scrapeHerblore(nameToId, skipped),
+    ...await scrapeCrafting(nameToId, skipped),
   ];
 
   // Stable order: by skill, then level, then name.
