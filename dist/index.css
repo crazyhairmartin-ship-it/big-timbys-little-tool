@@ -1410,9 +1410,11 @@ footer {
 .mode-skilling .view-toggle {
   display: none;
 }
-.history-sidebar-block, .skilling-sidebar-block { display: none; }
+.history-sidebar-block, .skilling-sidebar-block, .skilling-herblore-block { display: none; }
 .mode-history .history-sidebar-block { display: block; }
 .mode-skilling .skilling-sidebar-block { display: block; }
+.mode-skilling .skilling-herblore-block { display: block; }
+.boost-note { color: var(--muted, #9aa0a6); font-size: 0.78rem; }
 
 /* Skilling card layout — a compact stats panel below the head, similar to
    the existing combination-item card but with skilling-specific labels. */

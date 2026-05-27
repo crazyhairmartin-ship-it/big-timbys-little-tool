@@ -660,6 +660,8 @@ const state = {
     skillingSkill: localStorage.getItem("osrs-combo-skilling-skill") || "all",
     skillingSubCats: new Set(JSON.parse(localStorage.getItem("osrs-combo-skilling-subcats") || "[]")),
     skillingTiers: new Set(JSON.parse(localStorage.getItem("osrs-combo-skilling-tiers") || "[]")),
+    herbloreAmulet:  localStorage.getItem("osrs-combo-herblore-amulet")  || "none", // none | chemistry | alchemist
+    herbloreGoggles: localStorage.getItem("osrs-combo-herblore-goggles") === "1",
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -1680,6 +1682,33 @@ function renderSkillingTierChips() {
   );
 }
 
+// Herblore boost modifiers: amulet gives a small chance of +1 dose (4-dose
+// instead of 3-dose) which we model as ~+5%/3 ≈ 1.67% revenue boost (approx,
+// assumes 4-dose price ≈ 4/3 × 3-dose). Goggles save 10% of secondary cost.
+function applyHerbloreModifiers(recipe, calc) {
+  if (recipe.skill !== "Herblore") return calc;
+  let revenueMultiplier = 1.0;
+  if (state.filters.herbloreAmulet === "chemistry") revenueMultiplier = 1 + 0.05 / 3;
+  else if (state.filters.herbloreAmulet === "alchemist") revenueMultiplier = 1 + 0.075 / 3;
+  const secondarySave = state.filters.herbloreGoggles ? 0.10 : 0;
+  if (revenueMultiplier === 1 && secondarySave === 0) return calc;
+
+  // Secondary is component index 1 by Herblore-scraper convention (the unf
+  // is index 0). Discount its contribution to the total cost.
+  let secondaryCost = 0;
+  if (recipe.components.length >= 2) {
+    const secId = recipe.components[1].id;
+    const sp = supplyPrice(state.prices[secId]);
+    if (sp != null) secondaryCost = sp * recipe.components[1].qty;
+  }
+  const secondaryDiscount = secondaryCost * secondarySave;
+  const newRevenue = (calc.revenue || 0) * revenueMultiplier;
+  const newTax = newRevenue * 0.02; // approximation; potions never hit the 5M cap
+  const newCost = (calc.totalCost || 0) - secondaryDiscount;
+  const newMargin = newRevenue - newTax - newCost;
+  return { ...calc, revenue: newRevenue, tax: newTax, totalCost: newCost, margin: newMargin };
+}
+
 function renderSkilling() {
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
@@ -1697,7 +1726,7 @@ function renderSkilling() {
     .filter((r) => subCats.size === 0 || (r.subCat && subCats.has(r.subCat)))
     .filter((r) => tiers.size === 0 || (r.tier && tiers.has(r.tier)))
     .map((r) => {
-      const calc = calcMargin(r);
+      const calc = applyHerbloreModifiers(r, calcMargin(r));
       return { recipe: r, calc, s: skillingStats(r, calc) };
     })
     .filter(({ recipe }) => !search || recipe.name.toLowerCase().includes(search));
@@ -2739,6 +2768,26 @@ async function init() {
   }
   renderSkillingSubCatChips();
   renderSkillingTierChips();
+
+  // Herblore boost controls.
+  for (const radio of document.querySelectorAll('input[name="herblore-amulet"]')) {
+    radio.checked = radio.value === state.filters.herbloreAmulet;
+    radio.addEventListener("change", (ev) => {
+      if (!ev.target.checked) return;
+      state.filters.herbloreAmulet = ev.target.value;
+      localStorage.setItem("osrs-combo-herblore-amulet", ev.target.value);
+      renderGrid();
+    });
+  }
+  const goggles = document.getElementById("herblore-goggles");
+  if (goggles) {
+    goggles.checked = state.filters.herbloreGoggles;
+    goggles.addEventListener("change", (ev) => {
+      state.filters.herbloreGoggles = ev.target.checked;
+      localStorage.setItem("osrs-combo-herblore-goggles", ev.target.checked ? "1" : "0");
+      renderGrid();
+    });
+  }
 
   setMode(state.mode);
   document.getElementById("search").addEventListener("input", (e) => {
