@@ -203,8 +203,72 @@ const COOKING_PAGES = [
   { page: "Calculator:Cooking/Fish",         subCat: "Fish" },
   { page: "Calculator:Cooking/Hunter meats", subCat: "Hunter meats" },
 ];
-async function scrapeCooking(nameToId, skipped) {
+
+// Pie/Pizza Cooking XP isn't in the Calculator wikitable — hard-code by the
+// cooked-pie name. Source: OSRS wiki individual pie/pizza pages.
+const PIE_XP = {
+  "Redberry pie":   78,
+  "Meat pie":       110,
+  "Mud pie":        128,
+  "Apple pie":      130,
+  "Garden pie":     138,
+  "Fish pie":       164,
+  "Botanical pie":  180,
+  "Mushroom pie":   200,
+  "Admiral pie":    210,
+  "Wild pie":       240,
+  "Summer pie":     260,
+  "Dragonfruit pie":220,
+};
+const PIZZA_XP = {
+  "Plain pizza":     143,
+  "Meat pizza":      169,
+  "Anchovy pizza":   182,
+  "Pineapple pizza": 188,
+};
+
+async function scrapeCookingPiesAndPizzas(nameToId, skipped) {
   const recipes = [];
+  const pages = [
+    { page: "Calculator:Cooking/Pies",  subCat: "Pies",   rawCellIdx: 6, xpMap: PIE_XP },
+    { page: "Calculator:Cooking/Pizza", subCat: "Pizzas", rawCellIdx: 6, xpMap: PIZZA_XP },
+  ];
+  for (const { page, subCat, rawCellIdx, xpMap } of pages) {
+    const text = await fetchWikitext(page);
+    if (!text) continue;
+    const m = text.match(/\{\|[^\n]*class="wikitable.*?\n((?:.+\n)+?)\|\}/s);
+    if (!m) continue;
+    const rows = m[1].split("|-").slice(1);
+    for (const row of rows) {
+      const cells = row.split(/\n\|/).map((s) => s.trim()).filter(Boolean);
+      if (cells.length < rawCellIdx + 1) continue;
+      const cookedMatch = cells[0].match(/\{\{plinkt?\|([^|}]+?)(?:\|[^}]*)?\}\}/);
+      const rawMatch    = cells[rawCellIdx].match(/\{\{plinkp\|([^|}]+?)(?:\|[^}]*)?\}\}/);
+      const level = parseInt(cells[1], 10);
+      if (!cookedMatch || !rawMatch || !Number.isFinite(level)) continue;
+      const cookedName = cookedMatch[1];
+      const rawName    = rawMatch[1];
+      const xp = xpMap[cookedName];
+      if (xp == null) { skipped.push(`Cooking: no XP for ${cookedName}`); continue; }
+      const cookedId = nameToId.get(cookedName.toLowerCase());
+      const rawId    = nameToId.get(rawName.toLowerCase());
+      if (!cookedId || !rawId) { skipped.push(`Cooking: ${cookedName} <- ${rawName} (no mapping id)`); continue; }
+      recipes.push({
+        key: `cook-${slugify(cookedName)}`,
+        id: cookedId, name: cookedName,
+        cat: "Cooking", skill: "Cooking", subCat,
+        level, xp,
+        actionsPerHourMax: 3000,
+        components: [{ id: rawId, qty: 1 }],
+      });
+    }
+  }
+  return recipes;
+}
+async function scrapeCooking(nameToId, skipped) {
+  const recipes = [
+    ...await scrapeCookingPiesAndPizzas(nameToId, skipped),
+  ];
   for (const { page, subCat } of COOKING_PAGES) {
     const text = await fetchWikitext(page);
     const m = text.match(/\{\|[^\n]*class="wikitable.*?\n((?:.+\n)+?)\|\}/s);
