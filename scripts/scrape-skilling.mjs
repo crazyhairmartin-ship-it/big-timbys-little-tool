@@ -415,16 +415,61 @@ async function scrapeHerblore(nameToId, skipped) {
 }
 
 /* ---------------- Crafting ----------------
- * Coverage so far:
- *   - Gem cutting (Calculator:Crafting/Gem cutting): uncut gem -> cut gem.
- *
- * Full jewellery/leather/glass/battlestaves coverage is deferred -- those
- * pages use section-headers to switch implicit inputs (e.g. "Sapphire
- * jewellery" section binds Sapphire as a second input for every row), which
- * needs a different parser shape.
+ * Coverage:
+ *   - Gem cutting (Calculator:Crafting/Gem cutting)
+ *   - Jewellery (Calculator:Crafting/Jewellery): section-aware -- each
+ *     ==Section== sets which bar + gem is the implicit input for the rows.
+ *   - Glass blowing (Calculator:Crafting/Glass): molten glass -> glass items.
 ---------------------------------------------------------- */
 const GEM_CUT_XP_TICKS = 3; // Cutting one gem is a 3-tick (1.8s) action.
-async function scrapeCrafting(nameToId, skipped) {
+
+// Section name -> bar + optional gem inputs for jewellery rows.
+const JEWELLERY_SECTIONS = {
+  "Gold jewellery":           { bar: "Gold bar",    gem: null },
+  "Opal jewellery":           { bar: "Silver bar",  gem: "Opal" },
+  "Jade jewellery":           { bar: "Silver bar",  gem: "Jade" },
+  "Topaz jewellery":          { bar: "Silver bar",  gem: "Red topaz" },
+  "Other silver jewellery":   { bar: "Silver bar",  gem: null },
+  "Sapphire jewellery":       { bar: "Gold bar",    gem: "Sapphire" },
+  "Emerald jewellery":        { bar: "Gold bar",    gem: "Emerald" },
+  "Ruby jewellery":           { bar: "Gold bar",    gem: "Ruby" },
+  "Diamond jewellery":        { bar: "Gold bar",    gem: "Diamond" },
+  "Dragonstone jewellery":    { bar: "Gold bar",    gem: "Dragonstone" },
+  "Onyx jewellery":           { bar: "Gold bar",    gem: "Onyx" },
+  "Zenyte jewellery":         { bar: "Gold bar",    gem: "Zenyte" },
+};
+const JEWELLERY_TIER = {
+  "Gold bar": "Gold", "Silver bar": "Silver",
+  Sapphire: "Sapphire", Emerald: "Emerald", Ruby: "Ruby",
+  Diamond: "Diamond", Dragonstone: "Dragonstone", Onyx: "Onyx", Zenyte: "Zenyte",
+  Opal: "Opal", Jade: "Jade", "Red topaz": "Topaz",
+};
+// Extract item name, level, and XP from a Crafting-style wikitable row.
+// Item name is the first {{plink|...}} or {{plinkt|...}}; level and XP are
+// the first and last bare-numeric cells. Returns null if any are missing.
+function parseCraftingRow(row) {
+  const cells = row.split(/\n\|/).map((s) => s.trim()).filter(Boolean);
+  if (cells.length < 4) return null;
+  let itemName = null;
+  for (const c of cells) {
+    const mm = c.match(/\{\{plinkt?\|([^|}]+?)(?:\|[^}]*)?\}\}/);
+    if (mm) { itemName = mm[1]; break; }
+  }
+  if (!itemName) return null;
+  let level = NaN, xp = NaN;
+  let bareNumerics = [];
+  for (const c of cells) {
+    const t = c.replace(/,/g, "").trim();
+    if (/^-?\d+(\.\d+)?$/.test(t)) bareNumerics.push(parseFloat(t));
+  }
+  if (bareNumerics.length < 2) return null;
+  level = bareNumerics[0];
+  xp = bareNumerics[bareNumerics.length - 1];
+  if (!Number.isFinite(level) || !Number.isFinite(xp)) return null;
+  return { itemName, level, xp };
+}
+
+async function scrapeGemCutting(nameToId, skipped) {
   const recipes = [];
   const text = await fetchWikitext("Calculator:Crafting/Gem cutting");
   if (!text) return recipes;
@@ -432,22 +477,9 @@ async function scrapeCrafting(nameToId, skipped) {
   if (!m) return recipes;
   const rows = m[1].split("|-").slice(1);
   for (const row of rows) {
-    const cells = row.split(/\n\|/).map((s) => s.trim()).filter(Boolean);
-    if (cells.length < 5) continue;
-    const itemMatch = cells[0].match(/\{\{plink\|([^|}]+?)(?:\|[^}]*)?\}\}/);
-    if (!itemMatch) continue;
-    const itemName = itemMatch[1];
-    const level = parseInt(cells[1], 10);
-    if (!Number.isFinite(level)) continue;
-    // Take the LAST numeric in the row -- XP (Cut) sits near the end and
-    // higher-tier gems have N/A in the smashed-XP column, so "second numeric"
-    // doesn't work universally.
-    let xp = NaN;
-    for (let i = 2; i < cells.length; i++) {
-      const t = cells[i].replace(/,/g, "").trim();
-      if (/^-?\d+(\.\d+)?$/.test(t)) xp = parseFloat(t);
-    }
-    if (!Number.isFinite(xp)) continue;
+    const parsed = parseCraftingRow(row);
+    if (!parsed) continue;
+    const { itemName, level, xp } = parsed;
     const outputId = nameToId.get(itemName.toLowerCase());
     const inputId = nameToId.get(`uncut ${itemName.toLowerCase()}`);
     if (!outputId || !inputId) {
@@ -463,6 +495,86 @@ async function scrapeCrafting(nameToId, skipped) {
     });
   }
   return recipes;
+}
+
+async function scrapeJewellery(nameToId, skipped) {
+  const recipes = [];
+  const text = await fetchWikitext("Calculator:Crafting/Jewellery");
+  if (!text) return recipes;
+  // Split into sections at level-2 headings (==Section==).
+  const sectionPattern = /^==\s*([^=]+?)\s*==\s*$/gm;
+  const matches = [...text.matchAll(sectionPattern)];
+  for (let i = 0; i < matches.length; i++) {
+    const sectionName = matches[i][1];
+    if (!(sectionName in JEWELLERY_SECTIONS)) continue; // skip Enchanted/etc.
+    const start = matches[i].index + matches[i][0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+    const sectionBody = text.slice(start, end);
+    const tableMatch = sectionBody.match(/\{\|[^\n]*class="wikitable.*?\n((?:.+\n)+?)\|\}/s);
+    if (!tableMatch) continue;
+    const { bar, gem } = JEWELLERY_SECTIONS[sectionName];
+    const barId = nameToId.get(bar.toLowerCase());
+    const gemId = gem ? nameToId.get(gem.toLowerCase()) : null;
+    if (!barId || (gem && !gemId)) {
+      skipped.push(`Crafting: ${sectionName} (missing bar/gem id)`);
+      continue;
+    }
+    const tier = gem ? JEWELLERY_TIER[gem] : JEWELLERY_TIER[bar];
+    const rows = tableMatch[1].split("|-").slice(1);
+    for (const row of rows) {
+      const parsed = parseCraftingRow(row);
+      if (!parsed) continue;
+      const { itemName, level, xp } = parsed;
+      const outputId = nameToId.get(itemName.toLowerCase());
+      if (!outputId) { skipped.push(`Crafting: ${itemName} (no mapping id)`); continue; }
+      const components = [{ id: barId, qty: 1 }];
+      if (gemId) components.push({ id: gemId, qty: 1 });
+      recipes.push({
+        key: `craft-${slugify(itemName)}`,
+        id: outputId, name: itemName,
+        cat: "Crafting", skill: "Crafting", subCat: "Jewellery", tier,
+        level, xp, ticks: 4, // ~2.4s per jewellery craft
+        components,
+      });
+    }
+  }
+  return recipes;
+}
+
+async function scrapeGlass(nameToId, skipped) {
+  const recipes = [];
+  const text = await fetchWikitext("Calculator:Crafting/Glass");
+  if (!text) return recipes;
+  // Only the glass-blowing table (molten glass -> item). The page may also
+  // describe sand+soda+lye for molten glass; ignore that for now.
+  const m = text.match(/\{\|[^\n]*class="wikitable.*?\n((?:.+\n)+?)\|\}/s);
+  if (!m) return recipes;
+  const moltenGlassId = nameToId.get("molten glass");
+  if (!moltenGlassId) return recipes;
+  const rows = m[1].split("|-").slice(1);
+  for (const row of rows) {
+    const parsed = parseCraftingRow(row);
+    if (!parsed) continue;
+    const { itemName, level, xp } = parsed;
+    const outputId = nameToId.get(itemName.toLowerCase());
+    if (!outputId) { skipped.push(`Crafting: ${itemName} (no mapping id)`); continue; }
+    recipes.push({
+      key: `craft-${slugify(itemName)}`,
+      id: outputId, name: itemName,
+      cat: "Crafting", skill: "Crafting", subCat: "Glass",
+      level, xp, ticks: 3,
+      components: [{ id: moltenGlassId, qty: 1 }],
+    });
+  }
+  return recipes;
+}
+
+async function scrapeCrafting(nameToId, skipped) {
+  return [
+    ...await scrapeGemCutting(nameToId, skipped),
+    ...await scrapeJewellery(nameToId, skipped),
+    ...await scrapeGlass(nameToId, skipped),
+  ];
 }
 
 async function main() {
