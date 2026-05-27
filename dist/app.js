@@ -370,23 +370,17 @@ const RECIPES = [
   { key:"oathplate-legs", id:30756, name:"Oathplate legs", cat:"Oathplate", components:[{id:30848,qty:2520},{id:30765,qty:450}] },
 
   // ====================================================================
-  // Skilling recipes — additional optional fields:
-  //   skill       — "Smithing" | "Fletching" | "Herblore" | "Crafting" | "Cooking"
-  //   level       — required level
-  //   xp          — XP gained per action
-  //   ticks       — game ticks per action (1 tick = 0.6s; actions/hr = 3600/(ticks×0.6))
-  //   xpPerHourMax — optional override for methods where wiki publishes a tabulated
-  //                  max XP/hr (e.g. Blast Furnace) that exceeds tick-perfect estimates.
+  // Skilling recipes — optional schema fields:
+  //   skill, level, xp, ticks (and optional xpPerHourMax for methods where
+  //   the wiki publishes a measured rate that exceeds tick-perfect estimates).
+  // Smithing recipes are scraped from the OSRS wiki by
+  // scripts/scrape-smithing.mjs and live in dist/skilling-recipes.js. The
+  // generated array is concatenated below at module load time.
   // ====================================================================
-  // --- Smithing: a few hand-coded entries to verify the schema + UI; the
-  //     rest will land via the wiki scrape in Phase 2.
-  { key:"smith-cannonball",         id:2,     name:"Cannonball",         cat:"Smithing", skill:"Smithing", level:35, xp:25.5, ticks:5,  components:[{id:2353,qty:1}], resultQty:4 },
-  { key:"smith-rune-dart-tip",      id:824,   name:"Rune dart tip",      cat:"Smithing", skill:"Smithing", level:89, xp:75,   ticks:3,  components:[{id:2363,qty:1}], resultQty:10 },
-  { key:"smith-rune-platebody",     id:1127,  name:"Rune platebody",     cat:"Smithing", skill:"Smithing", level:99, xp:375,  ticks:9,  components:[{id:2363,qty:5}] },
-  { key:"smith-adamant-platebody",  id:1123,  name:"Adamant platebody",  cat:"Smithing", skill:"Smithing", level:88, xp:312.5,ticks:9,  components:[{id:2361,qty:5}] },
-  { key:"smith-rune-2h",            id:1319,  name:"Rune 2h sword",      cat:"Smithing", skill:"Smithing", level:99, xp:225,  ticks:9,  components:[{id:2363,qty:3}] },
-  { key:"smith-adamant-2h",         id:1317,  name:"Adamant 2h sword",   cat:"Smithing", skill:"Smithing", level:88, xp:187.5,ticks:9,  components:[{id:2361,qty:3}] },
 ];
+if (typeof SKILLING_RECIPES !== "undefined" && Array.isArray(SKILLING_RECIPES)) {
+  RECIPES.push(...SKILLING_RECIPES);
+}
 
 /* ---------------- Skill requirements ----------------
    Skill level needed to perform the combination, sourced from the OSRS
