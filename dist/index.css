@@ -1403,14 +1403,16 @@ footer {
 .mode-skilling .filter-group:has(#hide-stale-products),
 .mode-skilling .filter-group:has(#hide-stale-components),
 .mode-skilling .filter-group:has(#hide-low-volume),
+.mode-skilling .filter-group:has(#ge-slots),
+.mode-skilling .filter-group:has(#categories),
+.mode-skilling .filter-group.cost-range,
 .mode-skilling .ov-time-filter,
-.mode-skilling .cost-filter,
-.mode-skilling .tag-filter,
 .mode-skilling .view-toggle {
   display: none;
 }
-.history-sidebar-block { display: none; }
+.history-sidebar-block, .skilling-sidebar-block { display: none; }
 .mode-history .history-sidebar-block { display: block; }
+.mode-skilling .skilling-sidebar-block { display: block; }
 
 /* Skilling card layout — a compact stats panel below the head, similar to
    the existing combination-item card but with skilling-specific labels. */

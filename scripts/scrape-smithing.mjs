@@ -32,6 +32,18 @@ function defaultTicksFor(itemName) {
   return 5;
 }
 
+// Group smithable items into a handful of sub-categories so the sidebar can
+// offer "Armor / Weapons / Ammo / Utility" filtering within Smithing. The
+// match order matters — earlier patterns win — because plate(skirt|legs|body)
+// must beat a generic "skirt" match etc.
+function subCatFor(itemName) {
+  const n = itemName.toLowerCase();
+  if (/(platebody|plateskirt|platelegs|chainbody|chain skirt|chainskirt|chaps|kiteshield|kite shield|sq shield|sq.shield|med helm|full helm|helm$|helmet)/.test(n)) return "Armor";
+  if (/(dagger|sword|longsword|2h|two-handed|scimitar|mace|claws|battleaxe|warhammer|spear|hasta|halberd|pickaxe|axe$|knife|knives|hatchet)/.test(n)) return "Weapons";
+  if (/(dart tip|arrowtip|arrow tip|javelin tip|bolts? \(unf\)|bolt tips|cannonball|nails|throwing|limbs)/.test(n)) return "Ammo";
+  return "Utility";
+}
+
 async function fetchWikitext(page) {
   const url = `https://oldschool.runescape.wiki/api.php?action=parse&page=${encodeURIComponent(page)}&format=json&prop=wikitext`;
   const res = await fetch(url, { headers: { "user-agent": "big-timbys-little-tool/skilling-scrape" }});
@@ -98,6 +110,7 @@ async function main() {
         name: item,
         cat: "Smithing",
         skill: "Smithing",
+        subCat: subCatFor(item),
         level,
         xp,
         ticks,
