@@ -662,6 +662,8 @@ const state = {
     skillingTiers: new Set(JSON.parse(localStorage.getItem("osrs-combo-skilling-tiers") || "[]")),
     herbloreAmulet:  localStorage.getItem("osrs-combo-herblore-amulet")  || "none", // none | chemistry | alchemist
     herbloreGoggles: localStorage.getItem("osrs-combo-herblore-goggles") === "1",
+    smithingDoubleMould:    localStorage.getItem("osrs-combo-smithing-double-mould") === "1",
+    smithingAncientFurnace: localStorage.getItem("osrs-combo-smithing-ancient-furnace") === "1",
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -1709,6 +1711,30 @@ function applyHerbloreModifiers(recipe, calc) {
   return { ...calc, revenue: newRevenue, tax: newTax, totalCost: newCost, margin: newMargin };
 }
 
+// Smithing cannonball boosters: both apply only to cannonball recipes.
+//   Double ammo mould: 2 bars -> 8 cannonballs per action (2× output AND
+//     2× input vs the base 1 bar -> 4). XP also doubles per action.
+//   Ancient Furnace (Grimstone Dungeon): 5 ticks per action instead of 10.
+// Combined: 4× GP/hr and XP/hr vs base.
+function applySmithingModifiers(recipe, calc) {
+  if (recipe.skill !== "Smithing") return { recipe, calc };
+  if (!recipe.name.toLowerCase().includes("cannonball")) return { recipe, calc };
+  const dm = state.filters.smithingDoubleMould;
+  const af = state.filters.smithingAncientFurnace;
+  if (!dm && !af) return { recipe, calc };
+  const outMul = dm ? 2 : 1;
+  const ticks = recipe.ticks != null ? (af ? Math.max(1, Math.round(recipe.ticks / 2)) : recipe.ticks) : recipe.ticks;
+  const adjustedRecipe = { ...recipe, xp: recipe.xp * outMul, ticks };
+  const adjustedCalc = {
+    ...calc,
+    revenue: (calc.revenue || 0) * outMul,
+    totalCost: (calc.totalCost || 0) * outMul,
+    tax: (calc.tax || 0) * outMul,
+    margin: calc.margin != null ? calc.margin * outMul : null,
+  };
+  return { recipe: adjustedRecipe, calc: adjustedCalc };
+}
+
 function renderSkilling() {
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
@@ -1726,8 +1752,9 @@ function renderSkilling() {
     .filter((r) => subCats.size === 0 || (r.subCat && subCats.has(r.subCat)))
     .filter((r) => tiers.size === 0 || (r.tier && tiers.has(r.tier)))
     .map((r) => {
-      const calc = applyHerbloreModifiers(r, calcMargin(r));
-      return { recipe: r, calc, s: skillingStats(r, calc) };
+      let calc = applyHerbloreModifiers(r, calcMargin(r));
+      const sm = applySmithingModifiers(r, calc);
+      return { recipe: sm.recipe, calc: sm.calc, s: skillingStats(sm.recipe, sm.calc) };
     })
     .filter(({ recipe }) => !search || recipe.name.toLowerCase().includes(search));
 
@@ -2785,6 +2812,26 @@ async function init() {
     goggles.addEventListener("change", (ev) => {
       state.filters.herbloreGoggles = ev.target.checked;
       localStorage.setItem("osrs-combo-herblore-goggles", ev.target.checked ? "1" : "0");
+      renderGrid();
+    });
+  }
+
+  // Smithing boost controls (cannonball-only).
+  const dmould = document.getElementById("smithing-double-mould");
+  if (dmould) {
+    dmould.checked = state.filters.smithingDoubleMould;
+    dmould.addEventListener("change", (ev) => {
+      state.filters.smithingDoubleMould = ev.target.checked;
+      localStorage.setItem("osrs-combo-smithing-double-mould", ev.target.checked ? "1" : "0");
+      renderGrid();
+    });
+  }
+  const af = document.getElementById("smithing-ancient-furnace");
+  if (af) {
+    af.checked = state.filters.smithingAncientFurnace;
+    af.addEventListener("change", (ev) => {
+      state.filters.smithingAncientFurnace = ev.target.checked;
+      localStorage.setItem("osrs-combo-smithing-ancient-furnace", ev.target.checked ? "1" : "0");
       renderGrid();
     });
   }
