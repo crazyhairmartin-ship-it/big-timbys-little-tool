@@ -1415,7 +1415,8 @@ footer {
 .skilling-herblore-block,
 .skilling-smithing-block,
 .skilling-fletching-block,
-.skilling-cooking-block { display: none; }
+.skilling-cooking-block,
+.skilling-runecrafting-block { display: none; }
 .mode-history .history-sidebar-block { display: block; }
 .mode-skilling .skilling-sidebar-block { display: block; }
 /* Per-skill boost blocks only show when that skill is selected (or "all"). */
@@ -1426,7 +1427,9 @@ footer {
 .mode-skilling[data-skilling-skill="all"] .skilling-fletching-block,
 .mode-skilling[data-skilling-skill="Fletching"] .skilling-fletching-block,
 .mode-skilling[data-skilling-skill="all"] .skilling-cooking-block,
-.mode-skilling[data-skilling-skill="Cooking"] .skilling-cooking-block {
+.mode-skilling[data-skilling-skill="Cooking"] .skilling-cooking-block,
+.mode-skilling[data-skilling-skill="all"] .skilling-runecrafting-block,
+.mode-skilling[data-skilling-skill="Runecrafting"] .skilling-runecrafting-block {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1435,7 +1438,8 @@ footer {
 .skilling-herblore-block .toggle,
 .skilling-smithing-block .toggle,
 .skilling-fletching-block .toggle,
-.skilling-cooking-block .toggle {
+.skilling-cooking-block .toggle,
+.skilling-runecrafting-block .toggle {
   display: flex;
   align-items: flex-start;
   width: 100%;

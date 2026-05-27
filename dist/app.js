@@ -670,6 +670,9 @@ const state = {
     cookingMethod:          localStorage.getItem("osrs-combo-cooking-method") || "range",
     cookingGauntlets:       localStorage.getItem("osrs-combo-cooking-gauntlets") === "1",
     cookingCape:            localStorage.getItem("osrs-combo-cooking-cape") === "1",
+    runecraftingLevel:      parseInt(localStorage.getItem("osrs-combo-runecrafting-level") || "99", 10),
+    runecraftingEssence:    localStorage.getItem("osrs-combo-runecrafting-essence") || "pure",
+    runecraftingRaiments:   parseInt(localStorage.getItem("osrs-combo-runecrafting-raiments") || "0", 10),
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -1824,6 +1827,66 @@ function applySmithingModifiers(recipe, calc) {
   return { recipe: adjustedRecipe, calc: adjustedCalc };
 }
 
+// Runecrafting boosts:
+//   Level — picks the rune multiplier (1x-10x) from recipe.multiplierBreakpoints.
+//     The breakpoints array is the player level needed for 1x, 2x, 3x...  We
+//     count how many entries are <= current level. Below the first entry, the
+//     recipe is unreachable but we still display a 1x estimate so the card
+//     doesn't disappear.
+//   Raiments of the Eye — +10% bonus runes per piece, +20% set bonus on top
+//     of the 40% from 4 pieces (total +60% with full set). Output only — XP
+//     unaffected.
+//   Daeyalt essence — +50% XP, swaps pure-essence cost for daeyalt-essence
+//     cost. Doesn't affect dense-essence (Blood/Soul) recipes.
+const DAEYALT_ESSENCE_ID = 24704;
+function runecraftMultiplier(recipe, level) {
+  const bps = recipe.multiplierBreakpoints;
+  if (!bps || !bps.length) return 1;
+  let m = 0;
+  for (const lvl of bps) { if (level >= lvl) m++; else break; }
+  return Math.max(1, m);
+}
+function raimentsBonus(pieces) {
+  if (pieces <= 0) return 0;
+  if (pieces >= 4) return 0.60; // 40% from 4 pieces + 20% set bonus
+  return pieces * 0.10;
+}
+function applyRunecraftingModifiers(recipe, calc) {
+  if (recipe.skill !== "Runecrafting") return { recipe, calc };
+  const level = state.filters.runecraftingLevel || 99;
+  const mult = runecraftMultiplier(recipe, level);
+  const raiments = raimentsBonus(state.filters.runecraftingRaiments || 0);
+  const useDaeyalt = state.filters.runecraftingEssence === "daeyalt"
+    && recipe.essenceType === "pure";
+
+  const outputScale = mult * (1 + raiments);
+  const xpScale = useDaeyalt ? 1.5 : 1;
+  let adjustedRecipe = { ...recipe, xp: recipe.xp * xpScale };
+  let adjustedCalc = calc;
+
+  // Scale revenue / tax / margin by extra runes produced.
+  if (outputScale !== 1) {
+    const newRevenue = (calc.revenue || 0) * outputScale;
+    const newTax = (calc.tax || 0) * outputScale;
+    const newMargin = newRevenue - newTax - (calc.totalCost || 0);
+    adjustedCalc = { ...adjustedCalc, revenue: newRevenue, tax: newTax, margin: newMargin };
+  }
+
+  // Daeyalt essence costs more than pure — swap the supply cost.
+  if (useDaeyalt && recipe.components.length === 1) {
+    const daeyaltPrice = supplyPrice(state.prices[DAEYALT_ESSENCE_ID]);
+    if (daeyaltPrice != null) {
+      const pureId = recipe.components[0].id;
+      const purePrice = supplyPrice(state.prices[pureId]);
+      const delta = (daeyaltPrice - (purePrice || 0)) * recipe.components[0].qty;
+      const newCost = (adjustedCalc.totalCost || 0) + delta;
+      const newMargin = (adjustedCalc.revenue || 0) - (adjustedCalc.tax || 0) - newCost;
+      adjustedCalc = { ...adjustedCalc, totalCost: newCost, margin: newMargin };
+    }
+  }
+  return { recipe: adjustedRecipe, calc: adjustedCalc };
+}
+
 function renderSkilling() {
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
@@ -1845,7 +1908,8 @@ function renderSkilling() {
       calc = applyCookingModifiers(r, calc);
       const sm = applySmithingModifiers(r, calc);
       const fl = applyFletchingModifiers(sm.recipe, sm.calc);
-      return { recipe: fl.recipe, calc: fl.calc, s: skillingStats(fl.recipe, fl.calc) };
+      const rc = applyRunecraftingModifiers(fl.recipe, fl.calc);
+      return { recipe: rc.recipe, calc: rc.calc, s: skillingStats(rc.recipe, rc.calc) };
     })
     .filter(({ recipe }) => !search || recipe.name.toLowerCase().includes(search));
 
@@ -2985,6 +3049,37 @@ async function init() {
     fknife.addEventListener("change", (ev) => {
       state.filters.fletchingKnife = ev.target.checked;
       localStorage.setItem("osrs-combo-fletching-knife", ev.target.checked ? "1" : "0");
+      renderGrid();
+    });
+  }
+
+  // Runecrafting setup controls.
+  const rcLevel = document.getElementById("runecrafting-level");
+  if (rcLevel) {
+    rcLevel.value = state.filters.runecraftingLevel;
+    rcLevel.addEventListener("input", (ev) => {
+      const v = Math.max(1, Math.min(99, parseInt(ev.target.value, 10) || 99));
+      state.filters.runecraftingLevel = v;
+      localStorage.setItem("osrs-combo-runecrafting-level", String(v));
+      renderGrid();
+    });
+  }
+  const rcEssence = document.getElementById("runecrafting-essence");
+  if (rcEssence) {
+    rcEssence.value = state.filters.runecraftingEssence;
+    rcEssence.addEventListener("change", (ev) => {
+      state.filters.runecraftingEssence = ev.target.value;
+      localStorage.setItem("osrs-combo-runecrafting-essence", ev.target.value);
+      renderGrid();
+    });
+  }
+  const rcRaiments = document.getElementById("runecrafting-raiments");
+  if (rcRaiments) {
+    rcRaiments.value = String(state.filters.runecraftingRaiments);
+    rcRaiments.addEventListener("change", (ev) => {
+      const v = parseInt(ev.target.value, 10) || 0;
+      state.filters.runecraftingRaiments = v;
+      localStorage.setItem("osrs-combo-runecrafting-raiments", String(v));
       renderGrid();
     });
   }
