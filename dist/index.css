@@ -1410,12 +1410,33 @@ footer {
 .mode-skilling .view-toggle {
   display: none;
 }
-.history-sidebar-block, .skilling-sidebar-block, .skilling-herblore-block, .skilling-smithing-block { display: none; }
+.history-sidebar-block,
+.skilling-sidebar-block,
+.skilling-herblore-block,
+.skilling-smithing-block,
+.skilling-fletching-block { display: none; }
 .mode-history .history-sidebar-block { display: block; }
 .mode-skilling .skilling-sidebar-block { display: block; }
-.mode-skilling .skilling-herblore-block { display: block; }
-.mode-skilling .skilling-smithing-block { display: block; }
-.boost-note { color: var(--muted, #9aa0a6); font-size: 0.78rem; }
+/* Per-skill boost blocks only show when that skill is selected (or "all"). */
+.mode-skilling[data-skilling-skill="all"] .skilling-smithing-block,
+.mode-skilling[data-skilling-skill="Smithing"] .skilling-smithing-block,
+.mode-skilling[data-skilling-skill="all"] .skilling-herblore-block,
+.mode-skilling[data-skilling-skill="Herblore"] .skilling-herblore-block,
+.mode-skilling[data-skilling-skill="all"] .skilling-fletching-block,
+.mode-skilling[data-skilling-skill="Fletching"] .skilling-fletching-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Boost-block toggle rows: each on its own line, no inline-flow wrap. */
+.skilling-herblore-block .toggle,
+.skilling-smithing-block .toggle,
+.skilling-fletching-block .toggle {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+.boost-note { color: var(--muted, #9aa0a6); font-size: 0.78rem; margin-left: auto; }
 
 /* Skilling card layout — a compact stats panel below the head, similar to
    the existing combination-item card but with skilling-specific labels. */
