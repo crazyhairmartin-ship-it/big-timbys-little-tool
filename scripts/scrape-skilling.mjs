@@ -248,6 +248,104 @@ async function scrapeCooking(nameToId, skipped) {
   return recipes;
 }
 
+/* ---------------- Fletching ----------------
+ * Source: Template:Table/Fletching/<X> pages. Each row has columns:
+ *   level | {{plinkt|Item|txt=...}} | {{plinkp|Mat1}}{{plinkp|Mat2}} |
+ *   xp/item | xp/h | gp/material | profit/item | gp/xp
+ *
+ * The wiki publishes xp/h directly per row; actions/hr = xp/h ÷ xp/item.
+ * Each "action" in our model produces ONE item (cleaner than batch-of-N math
+ * for the user; the underlying 15-arrows-per-click cancels out cleanly).
+---------------------------------------------------------- */
+const FLETCHING_PAGES = [
+  { tpl: "Table/Fletching/Arrows",            subCat: "Arrows" },
+  { tpl: "Table/Fletching/Bolts",             subCat: "Bolts" },
+  { tpl: "Table/Fletching/Bolt tips",         subCat: "Bolt tips" },
+  { tpl: "Table/Fletching/Tipped bolts",      subCat: "Tipped bolts" },
+  { tpl: "Table/Fletching/Tipped dragon bolts", subCat: "Tipped bolts" },
+  { tpl: "Table/Fletching/Darts",             subCat: "Darts" },
+  { tpl: "Table/Fletching/Javelins",          subCat: "Javelins" },
+  { tpl: "Table/Fletching/Shields",           subCat: "Shields" },
+  { tpl: "Table/Fletching/Crossbows",         subCat: "Crossbows" },
+  { tpl: "Table/Fletching/Blowpipes",         subCat: "Blowpipes" },
+  { tpl: "Table/Fletching/Ogre arrows",       subCat: "Arrows" },
+  { tpl: "Table/Fletching/Mith grapple",      subCat: "Other" },
+];
+
+function findFirstNumeric(cells, startIdx) {
+  for (let i = startIdx; i < cells.length; i++) {
+    const t = cells[i].replace(/,/g, "").trim();
+    if (/^-?\d+(\.\d+)?$/.test(t)) return parseFloat(t);
+  }
+  return NaN;
+}
+
+async function scrapeFletching(nameToId, skipped) {
+  const recipes = [];
+  for (const { tpl, subCat } of FLETCHING_PAGES) {
+    const text = await fetchWikitext(`Template:${tpl}`);
+    if (!text) continue;
+    // Strip the table wrapper to leave just the rows
+    const m = text.match(/\{\|[^\n]*?\n((?:.+\n)+?)\|\}/s);
+    if (!m) continue;
+    const rows = m[1].split("|-").slice(1);
+    for (const row of rows) {
+      const cells = row.split(/\n\|/).map((s) => s.trim()).filter(Boolean);
+      if (cells.length < 4) continue;
+      // Strip <ref>...</ref> footnotes inline
+      const clean = cells.map((c) => c.replace(/<ref[^>]*>.*?<\/ref>/gs, "").replace(/<ref[^>]*\/>/g, "").trim());
+      const level = parseInt(clean[0], 10);
+      if (!Number.isFinite(level)) continue;
+      // The item cell sometimes appears in clean[1] but the plinkt may live
+      // alongside other markup -- look in the first 3 cells for the first plinkt.
+      let itemName = null;
+      let itemCellIdx = -1;
+      for (let i = 1; i < Math.min(clean.length, 4); i++) {
+        const mm = clean[i].match(/\{\{plinkt\|([^|}]+?)(?:\|[^}]*)?\}\}/);
+        if (mm) { itemName = mm[1]; itemCellIdx = i; break; }
+      }
+      if (!itemName) continue;
+      // Materials: next cell after item is usually the plinkp list.
+      const matCellIdx = itemCellIdx + 1;
+      const matsRaw = clean[matCellIdx] || "";
+      const matNames = [...matsRaw.matchAll(/\{\{plinkp\|([^|}]+?)(?:\|[^}]*)?\}\}/g)].map((mm) => mm[1]);
+      if (matNames.length === 0) continue;
+      // Find xp/item (first numeric after materials) and xp/h (next numeric).
+      const xpIdx = matCellIdx + 1;
+      let xp = NaN, xpHr = NaN;
+      for (let i = xpIdx; i < clean.length; i++) {
+        const t = clean[i].replace(/,/g, "").trim();
+        if (/^\d+(\.\d+)?$/.test(t)) {
+          if (isNaN(xp)) xp = parseFloat(t);
+          else { xpHr = parseFloat(t); break; }
+        }
+      }
+      if (!Number.isFinite(xp) || !Number.isFinite(xpHr) || xp <= 0) continue;
+
+      const itemId = nameToId.get(itemName.toLowerCase());
+      if (!itemId) { skipped.push(`Fletching: ${itemName} (no mapping id)`); continue; }
+      const components = [];
+      let materialOK = true;
+      for (const m of matNames) {
+        const id = nameToId.get(m.toLowerCase());
+        if (!id) { materialOK = false; break; }
+        components.push({ id, qty: 1 });
+      }
+      if (!materialOK) { skipped.push(`Fletching: ${itemName} (material id missing)`); continue; }
+
+      recipes.push({
+        key: `fletch-${slugify(itemName)}`,
+        id: itemId, name: itemName,
+        cat: "Fletching", skill: "Fletching", subCat,
+        level, xp,
+        actionsPerHourMax: Math.round(xpHr / xp),
+        components,
+      });
+    }
+  }
+  return recipes;
+}
+
 async function main() {
   const mapping = await fetchMapping();
   const nameToId = new Map();
@@ -257,6 +355,7 @@ async function main() {
   const recipes = [
     ...await scrapeSmithing(nameToId, skipped),
     ...await scrapeCooking(nameToId, skipped),
+    ...await scrapeFletching(nameToId, skipped),
   ];
 
   // Stable order: by skill, then level, then name.
