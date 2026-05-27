@@ -280,8 +280,57 @@ function findFirstNumeric(cells, startIdx) {
   return NaN;
 }
 
-async function scrapeFletching(nameToId, skipped) {
+// Bows aren't in the Table/Fletching/* templates — they live on
+// Calculator:Fletching/Weapons as `{{/Template1|Name|Level|XP|Log}}` (unstrung)
+// and `{{/Template2|Name|Level|XP|Log}}` (stringing). Parse both as separate
+// recipes; combined-craft (/Template3) is just T1+T2 and we'd double-count.
+async function scrapeFletchingBows(nameToId, skipped) {
   const recipes = [];
+  const text = await fetchWikitext("Calculator:Fletching/Weapons");
+  if (!text) return recipes;
+  const bowStringId = nameToId.get("bow string");
+  for (const m of text.matchAll(/\{\{\/Template(1|2)\|([^}]+)\}\}/g)) {
+    const which = m[1];
+    const parts = m[2].split("|").map((s) => s.trim());
+    if (parts.length < 4) continue;
+    const [bowBase, levelStr, xpStr, logName] = parts;
+    const level = parseInt(levelStr, 10);
+    const xp = parseFloat(xpStr);
+    if (!Number.isFinite(level) || !Number.isFinite(xp)) continue;
+    if (which === "1") {
+      const outputName = `${bowBase} (u)`;
+      const outputId = nameToId.get(outputName.toLowerCase());
+      const logId = nameToId.get(logName.toLowerCase());
+      if (!outputId || !logId) { skipped.push(`Fletching: ${outputName} (no mapping id)`); continue; }
+      recipes.push({
+        key: `fletch-${slugify(outputName)}`,
+        id: outputId, name: outputName,
+        cat: "Fletching", skill: "Fletching", subCat: "Bows (u)",
+        level, xp, actionsPerHourMax: 1500,
+        components: [{ id: logId, qty: 1 }],
+      });
+    } else if (which === "2") {
+      const outputName = bowBase;
+      const inputName = `${bowBase} (u)`;
+      const outputId = nameToId.get(outputName.toLowerCase());
+      const inputId = nameToId.get(inputName.toLowerCase());
+      if (!outputId || !inputId || !bowStringId) { skipped.push(`Fletching: string ${outputName} (no mapping id)`); continue; }
+      recipes.push({
+        key: `fletch-string-${slugify(outputName)}`,
+        id: outputId, name: `${outputName} (strung)`,
+        cat: "Fletching", skill: "Fletching", subCat: "Bows (strung)",
+        level, xp, actionsPerHourMax: 1500,
+        components: [{ id: inputId, qty: 1 }, { id: bowStringId, qty: 1 }],
+      });
+    }
+  }
+  return recipes;
+}
+
+async function scrapeFletching(nameToId, skipped) {
+  const recipes = [
+    ...await scrapeFletchingBows(nameToId, skipped),
+  ];
   for (const { tpl, subCat } of FLETCHING_PAGES) {
     const text = await fetchWikitext(`Template:${tpl}`);
     if (!text) continue;
@@ -569,12 +618,66 @@ async function scrapeGlass(nameToId, skipped) {
   return recipes;
 }
 
+// Hand-coded common methods that don't sit cleanly in a single wikitable.
+// Battlestaves: attaching an elemental orb to a regular battlestaff. The
+// Calculator:Crafting/Battlestaves page wraps the recipe rows in too much
+// preamble for the generic parser; the recipes themselves are short.
+const HARDCODED_BATTLESTAVES = [
+  { name: "Water battlestaff", level: 54, xp: 100,   bs: "Battlestaff", orb: "Water orb" },
+  { name: "Earth battlestaff", level: 58, xp: 112.5, bs: "Battlestaff", orb: "Earth orb" },
+  { name: "Fire battlestaff",  level: 62, xp: 125,   bs: "Battlestaff", orb: "Fire orb" },
+  { name: "Air battlestaff",   level: 66, xp: 137.5, bs: "Battlestaff", orb: "Air orb" },
+];
+// Dragonhide armor: assembled from tanned dragon leather at varying counts.
+const HARDCODED_DHIDE = [
+  { name: "Green d'hide vambraces", level: 57, xp: 62,    leather: "Green dragon leather",    qty: 1 },
+  { name: "Green d'hide chaps",     level: 60, xp: 124,   leather: "Green dragon leather",    qty: 2 },
+  { name: "Green d'hide body",      level: 63, xp: 186,   leather: "Green dragon leather",    qty: 3 },
+  { name: "Blue d'hide vambraces",  level: 66, xp: 70,    leather: "Blue dragon leather",     qty: 1 },
+  { name: "Blue d'hide chaps",      level: 68, xp: 140,   leather: "Blue dragon leather",     qty: 2 },
+  { name: "Blue d'hide body",       level: 71, xp: 210,   leather: "Blue dragon leather",     qty: 3 },
+  { name: "Red d'hide vambraces",   level: 73, xp: 78,    leather: "Red dragon leather",      qty: 1 },
+  { name: "Red d'hide chaps",       level: 75, xp: 156,   leather: "Red dragon leather",      qty: 2 },
+  { name: "Red d'hide body",        level: 77, xp: 234,   leather: "Red dragon leather",      qty: 3 },
+  { name: "Black d'hide vambraces", level: 79, xp: 86,    leather: "Black dragon leather",    qty: 1 },
+  { name: "Black d'hide chaps",     level: 82, xp: 172,   leather: "Black dragon leather",    qty: 2 },
+  { name: "Black d'hide body",      level: 84, xp: 258,   leather: "Black dragon leather",    qty: 3 },
+];
+
 async function scrapeCrafting(nameToId, skipped) {
-  return [
+  const recipes = [
     ...await scrapeGemCutting(nameToId, skipped),
     ...await scrapeJewellery(nameToId, skipped),
     ...await scrapeGlass(nameToId, skipped),
   ];
+  // Battlestaves
+  for (const b of HARDCODED_BATTLESTAVES) {
+    const outputId = nameToId.get(b.name.toLowerCase());
+    const bsId = nameToId.get(b.bs.toLowerCase());
+    const orbId = nameToId.get(b.orb.toLowerCase());
+    if (!outputId || !bsId || !orbId) { skipped.push(`Crafting: ${b.name} (id missing)`); continue; }
+    recipes.push({
+      key: `craft-${slugify(b.name)}`,
+      id: outputId, name: b.name,
+      cat: "Crafting", skill: "Crafting", subCat: "Battlestaves",
+      level: b.level, xp: b.xp, ticks: 3,
+      components: [{ id: bsId, qty: 1 }, { id: orbId, qty: 1 }],
+    });
+  }
+  // Dragonhide armor (assembled from tanned dragon leather)
+  for (const d of HARDCODED_DHIDE) {
+    const outputId = nameToId.get(d.name.toLowerCase());
+    const leatherId = nameToId.get(d.leather.toLowerCase());
+    if (!outputId || !leatherId) { skipped.push(`Crafting: ${d.name} (id missing)`); continue; }
+    recipes.push({
+      key: `craft-${slugify(d.name)}`,
+      id: outputId, name: d.name,
+      cat: "Crafting", skill: "Crafting", subCat: "Dragonhide", tier: d.leather.split(" ")[0],
+      level: d.level, xp: d.xp, ticks: 3,
+      components: [{ id: leatherId, qty: d.qty }],
+    });
+  }
+  return recipes;
 }
 
 async function main() {
