@@ -823,40 +823,51 @@ async function scrapeConstruction(nameToId, skipped) {
  *
  * Each rune is one recipe. resultQty stays 1 — the live multiplier (1x–10x
  * based on level) is computed by applyRunecraftingModifiers in app.js using
- * `multiplierBreakpoints`. `actionsPerHourMax` = realistic essences-per-hour
- * for the canonical training method; these come from the wiki money making
- * guides (rounded). Daeyalt essence / Raiments of the Eye are applied as
- * runtime boosts in app.js, not baked into the recipes.
+ * `multiplierBreakpoints`. Daeyalt essence / Raiments of the Eye / binding
+ * necklace are applied as runtime boosts in app.js, not baked here.
  *
- * Blood/Soul runes are crafted at the Kourend Blood Altar / Arceuus Soul
- * Altar from mined dense essence — no GE input cost. Their actionsPerHourMax
- * is base runes/hour (not essences/hour), since each fragment yields 1 rune.
- * From the wiki MMGs: Blood ~7.5 trips/hr × 204 runes = ~1530/hr;
- * Soul ~8 trips/hr × 204 runes = ~1632/hr.
+ * Throughput (essences/hour) varies hugely by altar, pouch tier, transport
+ * method, and player skill, so per-hour rates aren't modeled — the cards
+ * show per-action margin and XP only. Hourly GP/XP would be misleading.
  *
- * Combination runes (Mist, Dust, Mud, Smoke, Steam, Lava) are intentionally
- * omitted — their 50% failure rate and 2-rune dependencies make them an
- * awkward fit for the recipe shape.
+ * Blood/Soul runes are crafted at the Arceuus altars from mined dense
+ * essence — no GE input cost.
+ *
+ * Combination runes (Mist, Dust, Mud, Smoke, Steam, Lava) have a 50% base
+ * success rate; a Binding necklace makes it 100%. The recipe lists the
+ * inputs needed per *successful* craft; without a necklace, the modifier
+ * doubles the pure-essence cost to account for the wasted essences. Aether
+ * uses the same combo mechanic.
 ---------------------------------------------------------- */
 const RUNES = [
-  // name           lvl    xp      mults                                          ess     essHr  sub
-  { name:"Air rune",    level:1,  xp:5,    mults:[1,11,22,33,44,55,66,77,88,99], ess:"pure", essHr:2400, sub:"Elemental" },
-  { name:"Mind rune",   level:2,  xp:5.5,  mults:[2,14,28,42,56,70,84,98],        ess:"pure", essHr:2300, sub:"Catalytic" },
-  { name:"Water rune",  level:5,  xp:6,    mults:[5,19,38,57,76,95],              ess:"pure", essHr:2200, sub:"Elemental" },
-  { name:"Earth rune",  level:9,  xp:6.5,  mults:[9,26,52,78],                    ess:"pure", essHr:2300, sub:"Elemental" },
-  { name:"Fire rune",   level:14, xp:7,    mults:[14,35,70],                      ess:"pure", essHr:2400, sub:"Elemental" },
-  { name:"Body rune",   level:20, xp:7.5,  mults:[20,46,92],                      ess:"pure", essHr:2200, sub:"Catalytic" },
-  { name:"Cosmic rune", level:27, xp:8,    mults:[27,59],                         ess:"pure", essHr:2000, sub:"Catalytic" },
-  { name:"Sunfire rune",level:33, xp:9,    mults:[33,49,98],                      ess:"pure", essHr:2300, sub:"Elemental" },
-  { name:"Chaos rune",  level:35, xp:8.5,  mults:[35,74],                         ess:"pure", essHr:2100, sub:"Catalytic" },
-  { name:"Astral rune", level:40, xp:8.7,  mults:[40,82],                         ess:"pure", essHr:1900, sub:"Catalytic" },
-  { name:"Nature rune", level:44, xp:9,    mults:[44,91],                         ess:"pure", essHr:1800, sub:"Catalytic" },
-  { name:"Law rune",    level:54, xp:9.5,  mults:[54,95],                         ess:"pure", essHr:1700, sub:"Catalytic" },
-  { name:"Death rune",  level:65, xp:10,   mults:[65,99],                         ess:"pure", essHr:1700, sub:"Catalytic" },
-  { name:"Blood rune",  level:77, xp:23.8, mults:[77],                            ess:"dense", essHr:1530, sub:"Dark"      },
-  { name:"Soul rune",   level:90, xp:29.7, mults:[90],                            ess:"dense", essHr:1632, sub:"Dark"      },
-  { name:"Aether rune", level:90, xp:20,   mults:[90],                            ess:"pure", essHr:1500, sub:"Catalytic" },
-  { name:"Wrath rune",  level:95, xp:8,    mults:[95],                            ess:"pure", essHr:1700, sub:"Catalytic" },
+  // Basic runes — pure essence in, 1+ rune out (scales with level).
+  { name:"Air rune",    level:1,  xp:5,    mults:[1,11,22,33,44,55,66,77,88,99], ess:"pure", sub:"Elemental" },
+  { name:"Mind rune",   level:2,  xp:5.5,  mults:[2,14,28,42,56,70,84,98],        ess:"pure", sub:"Catalytic" },
+  { name:"Water rune",  level:5,  xp:6,    mults:[5,19,38,57,76,95],              ess:"pure", sub:"Elemental" },
+  { name:"Earth rune",  level:9,  xp:6.5,  mults:[9,26,52,78],                    ess:"pure", sub:"Elemental" },
+  { name:"Fire rune",   level:14, xp:7,    mults:[14,35,70],                      ess:"pure", sub:"Elemental" },
+  { name:"Body rune",   level:20, xp:7.5,  mults:[20,46,92],                      ess:"pure", sub:"Catalytic" },
+  { name:"Cosmic rune", level:27, xp:8,    mults:[27,59],                         ess:"pure", sub:"Catalytic" },
+  { name:"Sunfire rune",level:33, xp:9,    mults:[33,49,98],                      ess:"pure", sub:"Elemental",
+    supplies:[{name:"Fire rune",qty:1},{name:"Sunfire splinters",qty:1}] },
+  { name:"Chaos rune",  level:35, xp:8.5,  mults:[35,74],                         ess:"pure", sub:"Catalytic" },
+  { name:"Astral rune", level:40, xp:8.7,  mults:[40,82],                         ess:"pure", sub:"Catalytic" },
+  { name:"Nature rune", level:44, xp:9,    mults:[44,91],                         ess:"pure", sub:"Catalytic" },
+  { name:"Law rune",    level:54, xp:9.5,  mults:[54,95],                         ess:"pure", sub:"Catalytic" },
+  { name:"Death rune",  level:65, xp:10,   mults:[65,99],                         ess:"pure", sub:"Catalytic" },
+  { name:"Blood rune",  level:77, xp:23.8, mults:[77],                            ess:"dense", sub:"Dark"     },
+  { name:"Soul rune",   level:90, xp:29.7, mults:[90],                            ess:"dense", sub:"Dark"     },
+  { name:"Wrath rune",  level:95, xp:8,    mults:[95],                            ess:"pure", sub:"Catalytic" },
+  // Combination runes — 50% success without binding necklace.
+  { name:"Mist rune",   level:6,  xp:8,    mults:[6],  ess:"pure", sub:"Combination", combo:true, supplies:[{name:"Water rune",qty:1}] },
+  { name:"Dust rune",   level:10, xp:8.3,  mults:[10], ess:"pure", sub:"Combination", combo:true, supplies:[{name:"Earth rune",qty:1}] },
+  { name:"Mud rune",    level:13, xp:9.3,  mults:[13], ess:"pure", sub:"Combination", combo:true, supplies:[{name:"Earth rune",qty:1}] },
+  { name:"Smoke rune",  level:15, xp:8.5,  mults:[15], ess:"pure", sub:"Combination", combo:true, supplies:[{name:"Fire rune",qty:1}]  },
+  { name:"Steam rune",  level:19, xp:9.3,  mults:[19], ess:"pure", sub:"Combination", combo:true, supplies:[{name:"Fire rune",qty:1}]  },
+  { name:"Lava rune",   level:23, xp:10,   mults:[23], ess:"pure", sub:"Combination", combo:true, supplies:[{name:"Fire rune",qty:1}]  },
+  // Aether — combo-style (50% success, soul rune + catalyst as inputs).
+  { name:"Aether rune", level:90, xp:20,   mults:[90], ess:"pure", sub:"Catalytic",  combo:true,
+    supplies:[{name:"Soul rune",qty:1},{name:"Aether catalyst",qty:1}] },
 ];
 
 async function scrapeRunecrafting(nameToId, skipped) {
@@ -871,6 +882,21 @@ async function scrapeRunecrafting(nameToId, skipped) {
     if (!runeId) { skipped.push(`Runecrafting: ${r.name} (id missing)`); continue; }
     const isDense = r.ess === "dense";
     const displayName = isDense ? `${r.name} (Arceuus altar)` : r.name;
+
+    // Look up extra supply ids; bail if any are missing rather than emit a
+    // broken recipe that would silently miscalculate.
+    let supplies;
+    if (r.supplies) {
+      supplies = [];
+      let ok = true;
+      for (const s of r.supplies) {
+        const sid = nameToId.get(s.name.toLowerCase());
+        if (!sid) { skipped.push(`Runecrafting: ${r.name} — supply '${s.name}' id missing`); ok = false; break; }
+        supplies.push({ id: sid, qty: s.qty });
+      }
+      if (!ok) continue;
+    }
+
     recipes.push({
       key: `rc-${slugify(r.name)}`,
       id: runeId, name: displayName,
@@ -878,10 +904,13 @@ async function scrapeRunecrafting(nameToId, skipped) {
       level: r.level, xp: r.xp,
       // Dense-essence methods have no GE input — player mines their own.
       components: isDense ? [] : [{ id: pureId, qty: 1 }],
+      supplies,
       resultQty: 1,
       multiplierBreakpoints: r.mults,
       essenceType: r.ess,
-      actionsPerHourMax: r.essHr,
+      combo: r.combo || undefined,
+      // No actionsPerHourMax — Runecrafting throughput varies too much by
+      // method/pouches/transport to model meaningfully.
     });
   }
   return recipes;

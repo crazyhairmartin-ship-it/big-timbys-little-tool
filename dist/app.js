@@ -670,9 +670,11 @@ const state = {
     cookingMethod:          localStorage.getItem("osrs-combo-cooking-method") || "range",
     cookingGauntlets:       localStorage.getItem("osrs-combo-cooking-gauntlets") === "1",
     cookingCape:            localStorage.getItem("osrs-combo-cooking-cape") === "1",
-    runecraftingLevel:      parseInt(localStorage.getItem("osrs-combo-runecrafting-level") || "99", 10),
-    runecraftingEssence:    localStorage.getItem("osrs-combo-runecrafting-essence") || "pure",
-    runecraftingRaiments:   parseInt(localStorage.getItem("osrs-combo-runecrafting-raiments") || "0", 10),
+    runecraftingLevel:           parseInt(localStorage.getItem("osrs-combo-runecrafting-level") || "99", 10),
+    runecraftingEssence:         localStorage.getItem("osrs-combo-runecrafting-essence") || "pure",
+    runecraftingRaiments:        parseInt(localStorage.getItem("osrs-combo-runecrafting-raiments") || "0", 10),
+    runecraftingBindingNecklace: localStorage.getItem("osrs-combo-runecrafting-binding") === "1",
+    runecraftingMagicImbue:      localStorage.getItem("osrs-combo-runecrafting-imbue") === "1",
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -1858,31 +1860,52 @@ function applyRunecraftingModifiers(recipe, calc) {
   const raiments = raimentsBonus(state.filters.runecraftingRaiments || 0);
   const useDaeyalt = state.filters.runecraftingEssence === "daeyalt"
     && recipe.essenceType === "pure";
+  const noNecklace = recipe.combo && !state.filters.runecraftingBindingNecklace;
 
   const outputScale = mult * (1 + raiments);
   const xpScale = useDaeyalt ? 1.5 : 1;
   let adjustedRecipe = { ...recipe, xp: recipe.xp * xpScale };
   let adjustedCalc = calc;
 
-  // Scale revenue / tax / margin by extra runes produced.
+  // Scale revenue / tax / margin by extra runes produced. NB: calcMargin
+  // returns the tax field as `geTax`, not `tax`.
   if (outputScale !== 1) {
     const newRevenue = (calc.revenue || 0) * outputScale;
-    const newTax = (calc.tax || 0) * outputScale;
-    const newMargin = newRevenue - newTax - (calc.totalCost || 0);
-    adjustedCalc = { ...adjustedCalc, revenue: newRevenue, tax: newTax, margin: newMargin };
+    const newGeTax = (calc.geTax || 0) * outputScale;
+    const newMargin = newRevenue - newGeTax - (calc.totalCost || 0);
+    adjustedCalc = { ...adjustedCalc, revenue: newRevenue, geTax: newGeTax, margin: newMargin };
   }
 
+  // Effective per-essence cost depends on which essence type is selected.
+  // We compute this once so both the daeyalt swap and the combo-failure
+  // surcharge add the right thing.
+  const essComp = recipe.components[0];
+  const essPrice = essComp
+    ? (useDaeyalt
+        ? supplyPrice(state.prices[DAEYALT_ESSENCE_ID])
+        : supplyPrice(state.prices[essComp.id]))
+    : null;
+
   // Daeyalt essence costs more than pure — swap the supply cost.
-  if (useDaeyalt && recipe.components.length === 1) {
-    const daeyaltPrice = supplyPrice(state.prices[DAEYALT_ESSENCE_ID]);
-    if (daeyaltPrice != null) {
-      const pureId = recipe.components[0].id;
-      const purePrice = supplyPrice(state.prices[pureId]);
-      const delta = (daeyaltPrice - (purePrice || 0)) * recipe.components[0].qty;
+  if (useDaeyalt && essComp) {
+    const purePrice = supplyPrice(state.prices[essComp.id]);
+    if (essPrice != null) {
+      const delta = (essPrice - (purePrice || 0)) * essComp.qty;
       const newCost = (adjustedCalc.totalCost || 0) + delta;
-      const newMargin = (adjustedCalc.revenue || 0) - (adjustedCalc.tax || 0) - newCost;
+      const newMargin = (adjustedCalc.revenue || 0) - (adjustedCalc.geTax || 0) - newCost;
       adjustedCalc = { ...adjustedCalc, totalCost: newCost, margin: newMargin };
     }
+  }
+
+  // Combo runes without a binding necklace: 50% of essences are wasted on
+  // failed crafts (the base rune isn't consumed on failure, only the
+  // essence). Per successful craft, that averages out to 2 essences spent,
+  // so we add one extra essence's worth to the cost.
+  if (noNecklace && essComp && essPrice != null) {
+    const extraCost = essPrice * essComp.qty;
+    const newCost = (adjustedCalc.totalCost || 0) + extraCost;
+    const newMargin = (adjustedCalc.revenue || 0) - (adjustedCalc.geTax || 0) - newCost;
+    adjustedCalc = { ...adjustedCalc, totalCost: newCost, margin: newMargin };
   }
   return { recipe: adjustedRecipe, calc: adjustedCalc };
 }
@@ -3080,6 +3103,24 @@ async function init() {
       const v = parseInt(ev.target.value, 10) || 0;
       state.filters.runecraftingRaiments = v;
       localStorage.setItem("osrs-combo-runecrafting-raiments", String(v));
+      renderGrid();
+    });
+  }
+  const rcBinding = document.getElementById("runecrafting-binding-necklace");
+  if (rcBinding) {
+    rcBinding.checked = state.filters.runecraftingBindingNecklace;
+    rcBinding.addEventListener("change", (ev) => {
+      state.filters.runecraftingBindingNecklace = ev.target.checked;
+      localStorage.setItem("osrs-combo-runecrafting-binding", ev.target.checked ? "1" : "0");
+      renderGrid();
+    });
+  }
+  const rcImbue = document.getElementById("runecrafting-magic-imbue");
+  if (rcImbue) {
+    rcImbue.checked = state.filters.runecraftingMagicImbue;
+    rcImbue.addEventListener("change", (ev) => {
+      state.filters.runecraftingMagicImbue = ev.target.checked;
+      localStorage.setItem("osrs-combo-runecrafting-imbue", ev.target.checked ? "1" : "0");
       renderGrid();
     });
   }
