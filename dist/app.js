@@ -1612,6 +1612,15 @@ function renderSkillingCard(recipe, calc, s) {
       fmtGp(Math.round(s.gpPerXp * 10) / 10),
       s.gpPerXp > 0 ? "v-good" : s.gpPerXp < 0 ? "v-bad" : ""));
   }
+  // Trade volume: 24h volume of the output, plus a hint about whether the
+  // most-constrained component might bottleneck supply.
+  if (calc.resultVol != null) {
+    stats.appendChild(row("Vol (24h)", fmtVol(calc.resultVol)));
+  }
+  const minCompVol = calc.compVols ? Math.min(...Object.values(calc.compVols).filter((v) => v != null)) : null;
+  if (Number.isFinite(minCompVol)) {
+    stats.appendChild(row("Min input vol", fmtVol(minCompVol)));
+  }
   card.appendChild(stats);
   return card;
 }
