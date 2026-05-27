@@ -1437,6 +1437,8 @@ footer {
   width: 100%;
 }
 .boost-note { color: var(--muted, #9aa0a6); font-size: 0.78rem; margin-left: auto; }
+.boost-select { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.boost-select select { width: 100%; }
 
 /* Skilling card layout — a compact stats panel below the head, similar to
    the existing combination-item card but with skilling-specific labels. */
