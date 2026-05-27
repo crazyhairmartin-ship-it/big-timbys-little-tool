@@ -775,6 +775,49 @@ const HARDCODED_DHIDE = [
   { name: "Black d'hide body",      level: 84, xp: 258,   leather: "Black dragon leather",    qty: 3 },
 ];
 
+/* ---------------- Construction ----------------
+ * Coverage: boat repair kits used by Sailing. Recipes are stable and small
+ * (7 tiers), and the wiki keeps each one's Recipe template at <kit name>.
+ * Hardcoded from those templates since one-off scraping per page would be
+ * overkill.
+---------------------------------------------------------- */
+const REPAIR_KITS = [
+  { name: "Repair kit",          tier: "Wooden",   level: 1,  xp: 43.5, plank: "Plank",          plankQty: 2, nails: "Bronze nails",     output: 2 },
+  { name: "Oak repair kit",      tier: "Oak",      level: 19, xp: 90,   plank: "Oak plank",      plankQty: 2, nails: "Iron nails",       output: 2 },
+  { name: "Teak repair kit",     tier: "Teak",     level: 30, xp: 135,  plank: "Teak plank",     plankQty: 2, nails: "Steel nails",      output: 2 },
+  { name: "Mahogany repair kit", tier: "Mahogany", level: 47, xp: 210,  plank: "Mahogany plank", plankQty: 2, nails: "Mithril nails",    output: 2 },
+  { name: "Camphor repair kit",  tier: "Camphor",  level: 66, xp: 255,  plank: "Camphor plank",  plankQty: 2, nails: "Adamantite nails", output: 2 },
+  { name: "Ironwood repair kit", tier: "Ironwood", level: 80, xp: 300,  plank: "Ironwood plank", plankQty: 1, nails: "Rune nails",       output: 3 },
+  { name: "Rosewood repair kit", tier: "Rosewood", level: 92, xp: 330,  plank: "Rosewood plank", plankQty: 1, nails: "Dragon nails",     output: 3 },
+];
+async function scrapeConstruction(nameToId, skipped) {
+  const recipes = [];
+  const pasteId = nameToId.get("swamp paste");
+  for (const kit of REPAIR_KITS) {
+    const productId = nameToId.get(kit.name.toLowerCase());
+    const plankId = nameToId.get(kit.plank.toLowerCase());
+    const nailsId = nameToId.get(kit.nails.toLowerCase());
+    if (!productId || !plankId || !nailsId || !pasteId) {
+      skipped.push(`Construction: ${kit.name} (missing item id)`);
+      continue;
+    }
+    recipes.push({
+      key: `cons-${slugify(kit.name)}`,
+      id: productId, name: kit.name,
+      cat: "Construction", skill: "Construction", subCat: "Repair kits",
+      tier: kit.tier,
+      level: kit.level, xp: kit.xp, ticks: 4,
+      components: [
+        { id: plankId, qty: kit.plankQty },
+        { id: nailsId, qty: 10 },
+        { id: pasteId, qty: 5 },
+      ],
+      resultQty: kit.output,
+    });
+  }
+  return recipes;
+}
+
 async function scrapeCrafting(nameToId, skipped) {
   const recipes = [
     ...await scrapeGemCutting(nameToId, skipped),
@@ -823,6 +866,7 @@ async function main() {
     ...await scrapeFletching(nameToId, skipped),
     ...await scrapeHerblore(nameToId, skipped),
     ...await scrapeCrafting(nameToId, skipped),
+    ...await scrapeConstruction(nameToId, skipped),
   ];
 
   // Stable order: by skill, then level, then name.
