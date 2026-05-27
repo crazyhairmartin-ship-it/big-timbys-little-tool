@@ -1,15 +1,14 @@
 #!/usr/bin/env node
-/* Scrape smithable items from the OSRS wiki and emit dist/skilling-recipes.js.
+/* Scrape skilling recipes from the OSRS wiki and emit dist/skilling-recipes.js.
  *
- * Data source: Template:Smithing/<Tier> bar pages (one per metal tier), each
- * full of {{SmithingTableRow|item=...|level=...|bars=N|qty=M|xp=Q|...}} rows.
- * Per-row XP defaults to (tier_xp_per_bar × bars) when xp= isn't explicit.
+ * Currently covers: Smithing (smithable items + bar smelting + Blast Furnace),
+ * Cooking (raw -> cooked from Calculator:Cooking/Fish). Each skill adds a
+ * function `scrapeX()` that returns recipe objects; main() concatenates and
+ * writes the result.
  *
- * Item IDs come from prices.runescape.wiki/api/v1/osrs/mapping; bar IDs are
- * hard-coded (small fixed set). Rows whose product name doesn't resolve to a
- * mapping ID get skipped with a warning.
+ * Item IDs come from prices.runescape.wiki/api/v1/osrs/mapping.
  *
- * Run: node scripts/scrape-smithing.mjs
+ * Run: node scripts/scrape-skilling.mjs
  */
 import fs from "node:fs/promises";
 
@@ -138,14 +137,8 @@ function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-async function main() {
-  const mapping = await fetchMapping();
-  const nameToId = new Map();
-  for (const item of mapping) nameToId.set(item.name.toLowerCase(), item.id);
-
+async function scrapeSmithing(nameToId, skipped) {
   const recipes = [];
-  const skipped = [];
-
   for (const tier of TIERS) {
     const text = await fetchWikitext(`Template:${tier.tpl}`);
     const rows = text.match(/\{\{SmithingTableRow\|[^}]+(?:\}[^}]+)*\}\}/g) || [];
@@ -158,7 +151,7 @@ async function main() {
       const qty = +params.qty || 1;
       const xp = params.xp != null ? +params.xp : tier.xpPerBar * bars;
       const itemId = nameToId.get(item.toLowerCase());
-      if (!itemId) { skipped.push(`${item} (no mapping id)`); continue; }
+      if (!itemId) { skipped.push(`Smithing: ${item} (no mapping id)`); continue; }
       const ticks = defaultTicksFor(item);
       recipes.push({
         key: `smith-${slugify(item)}`,
@@ -168,61 +161,120 @@ async function main() {
         skill: "Smithing",
         subCat: subCatFor(item),
         tier: tier.barName,
-        level,
-        xp,
-        ticks,
+        level, xp, ticks,
         components: [{ id: tier.barId, qty: bars }],
         ...(qty !== 1 ? { resultQty: qty } : {}),
       });
     }
   }
-
-  // Gold bar items, hand-coded.
+  // Gold-bar items (different wiki format -- hand-coded).
   for (const g of HARDCODED_GOLD) {
     recipes.push({
       key: `smith-${slugify(g.name)}`,
-      id: g.id,
-      name: g.name,
-      cat: "Smithing",
-      skill: "Smithing",
-      subCat: subCatFor(g.name),
-      tier: "Gold",
-      level: g.level,
-      xp: g.xp,
-      ticks: 5,
+      id: g.id, name: g.name,
+      cat: "Smithing", skill: "Smithing", subCat: subCatFor(g.name), tier: "Gold",
+      level: g.level, xp: g.xp, ticks: 5,
       components: [{ id: 2357, qty: g.bars }],
     });
   }
-
-  // Bar smelting (regular furnace, Blast Furnace, Goldsmith gauntlets).
+  // Bar smelting (regular + Blast Furnace + Goldsmith gauntlets).
   for (const b of HARDCODED_BARS) {
     recipes.push({
       key: `smelt-${slugify(b.name)}`,
-      id: b.id,
-      name: b.name,
-      cat: "Smithing",
-      skill: "Smithing",
-      subCat: "Bars",
-      tier: b.tier,
-      level: b.level,
-      xp: b.xp,
+      id: b.id, name: b.name,
+      cat: "Smithing", skill: "Smithing", subCat: "Bars", tier: b.tier,
+      level: b.level, xp: b.xp,
       ...(b.ticks != null ? { ticks: b.ticks } : {}),
       ...(b.actionsPerHourMax != null ? { actionsPerHourMax: b.actionsPerHourMax } : {}),
       components: b.comps,
     });
   }
+  return recipes;
+}
 
-  // Stable order: by skill level then name.
-  recipes.sort((a, b) => (a.level - b.level) || a.name.localeCompare(b.name));
+/* ---------------- Cooking ----------------
+ * Source: Calculator:Cooking/Fish. Each row is 10 wikitable cells:
+ *   level | {{plink|Raw X}} | GE price | {{plink|Cooked X}} | GE price |
+ *   profit | profit-after-tax | xp | gp/xp | members
+ * The wiki publishes XP/hr assuming 3000 actions/hour; we use the same as
+ * `actionsPerHourMax` so the displayed GP/hr matches the wiki's tables.
+---------------------------------------------------------- */
+const COOKING_PAGES = [
+  { page: "Calculator:Cooking/Fish",         subCat: "Fish" },
+  { page: "Calculator:Cooking/Hunter meats", subCat: "Hunter meats" },
+];
+async function scrapeCooking(nameToId, skipped) {
+  const recipes = [];
+  for (const { page, subCat } of COOKING_PAGES) {
+    const text = await fetchWikitext(page);
+    const m = text.match(/\{\|[^\n]*class="wikitable.*?\n((?:.+\n)+?)\|\}/s);
+    if (!m) continue;
+    const body = m[1];
+    const rows = body.split("|-").slice(1); // skip the header
+    for (const row of rows) {
+      const cells = row.split(/\n\|/).map((s) => s.trim()).filter(Boolean);
+      if (cells.length < 6) continue;
+      const level = parseInt(cells[0], 10);
+      const inputMatch = cells[1]?.match(/\{\{plink\|([^|}]+?)(?:\|[^}]*)?\}\}/);
+      const outputMatch = cells[3]?.match(/\{\{plink\|([^|}]+?)(?:\|[^}]*)?\}\}/);
+      // XP column index varies by page (Fish has a profit-after-tax column,
+      // Hunter meats doesn't). Find the first cell after the cooked item that
+      // is a bare number.
+      let xp = NaN;
+      for (let i = 4; i < cells.length; i++) {
+        const n = parseFloat(cells[i]);
+        if (Number.isFinite(n) && /^\d+(\.\d+)?$/.test(cells[i].trim())) { xp = n; break; }
+      }
+      if (isNaN(level) || !inputMatch || !outputMatch || isNaN(xp)) continue;
+      const inputName = inputMatch[1];
+      const outputName = outputMatch[1];
+      const inputId = nameToId.get(inputName.toLowerCase());
+      const outputId = nameToId.get(outputName.toLowerCase());
+      if (!inputId || !outputId) {
+        skipped.push(`Cooking: ${inputName} -> ${outputName} (no mapping id)`);
+        continue;
+      }
+      recipes.push({
+        key: `cook-${slugify(outputName)}`,
+        id: outputId, name: outputName,
+        cat: "Cooking", skill: "Cooking",
+        subCat,
+        level, xp,
+        actionsPerHourMax: 3000, // wiki standard for fish/meat cooking
+        components: [{ id: inputId, qty: 1 }],
+      });
+    }
+  }
+  return recipes;
+}
+
+async function main() {
+  const mapping = await fetchMapping();
+  const nameToId = new Map();
+  for (const item of mapping) nameToId.set(item.name.toLowerCase(), item.id);
+
+  const skipped = [];
+  const recipes = [
+    ...await scrapeSmithing(nameToId, skipped),
+    ...await scrapeCooking(nameToId, skipped),
+  ];
+
+  // Stable order: by skill, then level, then name.
+  recipes.sort((a, b) =>
+    a.skill.localeCompare(b.skill) ||
+    (a.level - b.level) ||
+    a.name.localeCompare(b.name)
+  );
 
   const banner =
-    "// AUTO-GENERATED by scripts/scrape-smithing.mjs — do not hand-edit.\n" +
-    `// Source: OSRS wiki Template:Smithing/<tier> bar pages. Generated ${new Date().toISOString()}.\n`;
+    "// AUTO-GENERATED by scripts/scrape-skilling.mjs — do not hand-edit.\n" +
+    `// Sources: OSRS wiki Smithing tier templates, Calculator:Cooking/*. Generated ${new Date().toISOString()}.\n`;
   const body = "const SKILLING_RECIPES = " + JSON.stringify(recipes, null, 2) + ";\n";
   await fs.writeFile("dist/skilling-recipes.js", banner + body);
 
-  console.log(`Wrote ${recipes.length} skilling recipes to dist/skilling-recipes.js`);
-  if (skipped.length) console.warn(`Skipped ${skipped.length}: ${skipped.slice(0, 5).join(", ")}${skipped.length > 5 ? "…" : ""}`);
+  const bySkill = recipes.reduce((acc, r) => { acc[r.skill] = (acc[r.skill] || 0) + 1; return acc; }, {});
+  console.log(`Wrote ${recipes.length} skilling recipes (${Object.entries(bySkill).map(([k,v]) => `${k}: ${v}`).join(", ")})`);
+  if (skipped.length) console.warn(`Skipped ${skipped.length}: ${skipped.slice(0, 5).join("; ")}${skipped.length > 5 ? "…" : ""}`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
