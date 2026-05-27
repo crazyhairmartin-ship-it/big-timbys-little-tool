@@ -664,6 +664,7 @@ const state = {
     herbloreGoggles: localStorage.getItem("osrs-combo-herblore-goggles") === "1",
     smithingDoubleMould:    localStorage.getItem("osrs-combo-smithing-double-mould") === "1",
     smithingAncientFurnace: localStorage.getItem("osrs-combo-smithing-ancient-furnace") === "1",
+    fletchingKnife:         localStorage.getItem("osrs-combo-fletching-knife") === "1",
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -1711,6 +1712,26 @@ function applyHerbloreModifiers(recipe, calc) {
   return { ...calc, revenue: newRevenue, tax: newTax, totalCost: newCost, margin: newMargin };
 }
 
+// Fletching knife (Vale Totems reward, July 2025): -1 tick per fletching
+// action (after the first item in a batch). For batch-style actions
+// (arrows/bolts/darts at ~3 ticks/click), this is roughly a 1.5x speed
+// boost; for bows at ~3 ticks/cut, similar. We just multiply
+// actionsPerHourMax by 1.5 as the approximation.
+function applyFletchingModifiers(recipe, calc) {
+  if (recipe.skill !== "Fletching") return { recipe, calc };
+  if (!state.filters.fletchingKnife) return { recipe, calc };
+  const factor = 1.5;
+  const adjustedRecipe = {
+    ...recipe,
+    actionsPerHourMax: (recipe.actionsPerHourMax || 0) * factor,
+    ticks: recipe.ticks ? Math.max(1, Math.round(recipe.ticks / factor)) : recipe.ticks,
+  };
+  // Per-action revenue/cost/margin don't change — only the rate. Card numbers
+  // (GP/hr, XP/hr) derive in skillingStats from the recipe's actions/hr, so
+  // no calc adjustment is needed here.
+  return { recipe: adjustedRecipe, calc };
+}
+
 // Smithing cannonball boosters: both apply only to cannonball recipes.
 //   Double ammo mould: 2 bars -> 8 cannonballs per action (2× output AND
 //     2× input vs the base 1 bar -> 4). XP also doubles per action.
@@ -1754,7 +1775,8 @@ function renderSkilling() {
     .map((r) => {
       let calc = applyHerbloreModifiers(r, calcMargin(r));
       const sm = applySmithingModifiers(r, calc);
-      return { recipe: sm.recipe, calc: sm.calc, s: skillingStats(sm.recipe, sm.calc) };
+      const fl = applyFletchingModifiers(sm.recipe, sm.calc);
+      return { recipe: fl.recipe, calc: fl.calc, s: skillingStats(fl.recipe, fl.calc) };
     })
     .filter(({ recipe }) => !search || recipe.name.toLowerCase().includes(search));
 
@@ -2778,11 +2800,16 @@ async function init() {
 
   // Skilling sidebar wiring.
   const skillSel = document.getElementById("skilling-skill");
+  const setLayoutSkillAttr = () => {
+    document.getElementById("layout").dataset.skillingSkill = state.filters.skillingSkill;
+  };
+  setLayoutSkillAttr();
   if (skillSel) {
     skillSel.value = state.filters.skillingSkill;
     skillSel.addEventListener("change", (ev) => {
       state.filters.skillingSkill = ev.target.value;
       localStorage.setItem("osrs-combo-skilling-skill", state.filters.skillingSkill);
+      setLayoutSkillAttr();
       // Switching skills invalidates both sub-filters — labels won't carry across.
       state.filters.skillingSubCats.clear();
       state.filters.skillingTiers.clear();
@@ -2832,6 +2859,15 @@ async function init() {
     af.addEventListener("change", (ev) => {
       state.filters.smithingAncientFurnace = ev.target.checked;
       localStorage.setItem("osrs-combo-smithing-ancient-furnace", ev.target.checked ? "1" : "0");
+      renderGrid();
+    });
+  }
+  const fknife = document.getElementById("fletching-knife");
+  if (fknife) {
+    fknife.checked = state.filters.fletchingKnife;
+    fknife.addEventListener("change", (ev) => {
+      state.filters.fletchingKnife = ev.target.checked;
+      localStorage.setItem("osrs-combo-fletching-knife", ev.target.checked ? "1" : "0");
       renderGrid();
     });
   }
