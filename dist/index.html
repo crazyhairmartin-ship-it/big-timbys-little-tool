@@ -135,6 +135,7 @@
         <option value="Crafting">Crafting</option>
         <option value="Cooking">Cooking</option>
         <option value="Construction">Construction</option>
+        <option value="Runecrafting">Runecrafting</option>
       </select>
     </div>
     <div class="filter-group skilling-sidebar-block">
@@ -186,6 +187,30 @@
       <label class="toggle"><input type="radio" name="herblore-amulet" value="chemistry"> Amulet of chemistry <span class="boost-note">(5% +1 dose)</span></label>
       <label class="toggle"><input type="radio" name="herblore-amulet" value="alchemist"> Alchemist's amulet <span class="boost-note">(7.5% +1 dose)</span></label>
       <label class="toggle"><input type="checkbox" id="herblore-goggles"> Prescription goggles <span class="boost-note">(10% secondary save)</span></label>
+    </div>
+    <div class="filter-group skilling-runecrafting-block">
+      <label>Runecrafting setup</label>
+      <label class="boost-select">
+        Runecrafting level
+        <input type="number" id="runecrafting-level" min="1" max="99" />
+      </label>
+      <label class="boost-select">
+        Essence
+        <select id="runecrafting-essence">
+          <option value="pure">Pure essence</option>
+          <option value="daeyalt">Daeyalt essence (+50% XP)</option>
+        </select>
+      </label>
+      <label class="boost-select">
+        Raiments of the Eye
+        <select id="runecrafting-raiments">
+          <option value="0">None</option>
+          <option value="1">1 piece (+10%)</option>
+          <option value="2">2 pieces (+20%)</option>
+          <option value="3">3 pieces (+30%)</option>
+          <option value="4">Full set (+60%)</option>
+        </select>
+      </label>
     </div>
     <div class="filter-group history-sidebar-block">
       <label for="history-range">Time range</label>

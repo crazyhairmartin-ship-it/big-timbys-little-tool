@@ -818,6 +818,75 @@ async function scrapeConstruction(nameToId, skipped) {
   return recipes;
 }
 
+/* ----------------------------------------------------------
+ * Runecrafting.
+ *
+ * Each rune is one recipe. resultQty stays 1 — the live multiplier (1x–10x
+ * based on level) is computed by applyRunecraftingModifiers in app.js using
+ * `multiplierBreakpoints`. `actionsPerHourMax` = realistic essences-per-hour
+ * for the canonical training method; these come from the wiki money making
+ * guides (rounded). Daeyalt essence / Raiments of the Eye are applied as
+ * runtime boosts in app.js, not baked into the recipes.
+ *
+ * Blood/Soul runes are crafted at the Kourend Blood Altar / Arceuus Soul
+ * Altar from mined dense essence — no GE input cost. Their actionsPerHourMax
+ * is base runes/hour (not essences/hour), since each fragment yields 1 rune.
+ * From the wiki MMGs: Blood ~7.5 trips/hr × 204 runes = ~1530/hr;
+ * Soul ~8 trips/hr × 204 runes = ~1632/hr.
+ *
+ * Combination runes (Mist, Dust, Mud, Smoke, Steam, Lava) are intentionally
+ * omitted — their 50% failure rate and 2-rune dependencies make them an
+ * awkward fit for the recipe shape.
+---------------------------------------------------------- */
+const RUNES = [
+  // name           lvl    xp      mults                                          ess     essHr  sub
+  { name:"Air rune",    level:1,  xp:5,    mults:[1,11,22,33,44,55,66,77,88,99], ess:"pure", essHr:2400, sub:"Elemental" },
+  { name:"Mind rune",   level:2,  xp:5.5,  mults:[2,14,28,42,56,70,84,98],        ess:"pure", essHr:2300, sub:"Catalytic" },
+  { name:"Water rune",  level:5,  xp:6,    mults:[5,19,38,57,76,95],              ess:"pure", essHr:2200, sub:"Elemental" },
+  { name:"Earth rune",  level:9,  xp:6.5,  mults:[9,26,52,78],                    ess:"pure", essHr:2300, sub:"Elemental" },
+  { name:"Fire rune",   level:14, xp:7,    mults:[14,35,70],                      ess:"pure", essHr:2400, sub:"Elemental" },
+  { name:"Body rune",   level:20, xp:7.5,  mults:[20,46,92],                      ess:"pure", essHr:2200, sub:"Catalytic" },
+  { name:"Cosmic rune", level:27, xp:8,    mults:[27,59],                         ess:"pure", essHr:2000, sub:"Catalytic" },
+  { name:"Sunfire rune",level:33, xp:9,    mults:[33,49,98],                      ess:"pure", essHr:2300, sub:"Elemental" },
+  { name:"Chaos rune",  level:35, xp:8.5,  mults:[35,74],                         ess:"pure", essHr:2100, sub:"Catalytic" },
+  { name:"Astral rune", level:40, xp:8.7,  mults:[40,82],                         ess:"pure", essHr:1900, sub:"Catalytic" },
+  { name:"Nature rune", level:44, xp:9,    mults:[44,91],                         ess:"pure", essHr:1800, sub:"Catalytic" },
+  { name:"Law rune",    level:54, xp:9.5,  mults:[54,95],                         ess:"pure", essHr:1700, sub:"Catalytic" },
+  { name:"Death rune",  level:65, xp:10,   mults:[65,99],                         ess:"pure", essHr:1700, sub:"Catalytic" },
+  { name:"Blood rune",  level:77, xp:23.8, mults:[77],                            ess:"dense", essHr:1530, sub:"Dark"      },
+  { name:"Soul rune",   level:90, xp:29.7, mults:[90],                            ess:"dense", essHr:1632, sub:"Dark"      },
+  { name:"Aether rune", level:90, xp:20,   mults:[90],                            ess:"pure", essHr:1500, sub:"Catalytic" },
+  { name:"Wrath rune",  level:95, xp:8,    mults:[95],                            ess:"pure", essHr:1700, sub:"Catalytic" },
+];
+
+async function scrapeRunecrafting(nameToId, skipped) {
+  const pureId = nameToId.get("pure essence");
+  if (!pureId) {
+    skipped.push(`Runecrafting: pure essence id missing`);
+    return [];
+  }
+  const recipes = [];
+  for (const r of RUNES) {
+    const runeId = nameToId.get(r.name.toLowerCase());
+    if (!runeId) { skipped.push(`Runecrafting: ${r.name} (id missing)`); continue; }
+    const isDense = r.ess === "dense";
+    const displayName = isDense ? `${r.name} (Arceuus altar)` : r.name;
+    recipes.push({
+      key: `rc-${slugify(r.name)}`,
+      id: runeId, name: displayName,
+      cat: "Runecrafting", skill: "Runecrafting", subCat: r.sub,
+      level: r.level, xp: r.xp,
+      // Dense-essence methods have no GE input — player mines their own.
+      components: isDense ? [] : [{ id: pureId, qty: 1 }],
+      resultQty: 1,
+      multiplierBreakpoints: r.mults,
+      essenceType: r.ess,
+      actionsPerHourMax: r.essHr,
+    });
+  }
+  return recipes;
+}
+
 async function scrapeCrafting(nameToId, skipped) {
   const recipes = [
     ...await scrapeGemCutting(nameToId, skipped),
@@ -867,6 +936,7 @@ async function main() {
     ...await scrapeHerblore(nameToId, skipped),
     ...await scrapeCrafting(nameToId, skipped),
     ...await scrapeConstruction(nameToId, skipped),
+    ...await scrapeRunecrafting(nameToId, skipped),
   ];
 
   // Stable order: by skill, then level, then name.
