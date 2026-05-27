@@ -1399,11 +1399,44 @@ footer {
 .mode-history .filter-group:has(#hide-stale-products),
 .mode-history .filter-group:has(#hide-stale-components),
 .mode-history .filter-group:has(#hide-low-volume),
-.mode-history .ov-time-filter {
+.mode-history .ov-time-filter,
+.mode-skilling .filter-group:has(#hide-stale-products),
+.mode-skilling .filter-group:has(#hide-stale-components),
+.mode-skilling .filter-group:has(#hide-low-volume),
+.mode-skilling .ov-time-filter,
+.mode-skilling .cost-filter,
+.mode-skilling .tag-filter,
+.mode-skilling .view-toggle {
   display: none;
 }
 .history-sidebar-block { display: none; }
 .mode-history .history-sidebar-block { display: block; }
+
+/* Skilling card layout — a compact stats panel below the head, similar to
+   the existing combination-item card but with skilling-specific labels. */
+.skilling-card .skilling-stats {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  padding: 10px 14px 12px;
+  font-size: 0.86rem;
+}
+.skilling-card .stat-row { display: contents; }
+.skilling-card .stat-label { color: var(--muted, #9aa0a6); }
+.skilling-card .stat-value { text-align: right; font-variant-numeric: tabular-nums; }
+.skilling-card .stat-row.v-good .stat-value { color: var(--green, #4ade80); }
+.skilling-card .stat-row.v-bad  .stat-value { color: var(--red,   #f87171); }
+.skill-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
+  background: rgba(96, 165, 250, 0.15);
+  color: #93c5fd;
+}
 
 .history-empty {
   display: flex;
