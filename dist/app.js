@@ -1525,8 +1525,13 @@ function applyFilters(items) {
 ---------------------------------------------------- */
 const TICK_MS = 600;
 function skillingStats(recipe, calc) {
-  const ticks = recipe.ticks ?? null;
-  const actionsPerHour = ticks ? 3600_000 / (ticks * TICK_MS) : null;
+  // Methods like Blast Furnace publish a measured throughput that beats any
+  // tick-perfect estimate because of multi-stage parallelism. When a recipe
+  // sets `actionsPerHourMax`, use it directly; otherwise derive from ticks.
+  let actionsPerHour;
+  if (recipe.actionsPerHourMax != null) actionsPerHour = recipe.actionsPerHourMax;
+  else if (recipe.ticks) actionsPerHour = 3600_000 / (recipe.ticks * TICK_MS);
+  else actionsPerHour = null;
   const gpPerHour = (actionsPerHour != null && calc.margin != null) ? calc.margin * actionsPerHour : null;
   let xpPerHour = null;
   if (recipe.xpPerHourMax != null) xpPerHour = recipe.xpPerHourMax;
@@ -1610,7 +1615,7 @@ function renderSkillingCard(recipe, calc, s) {
 }
 
 // Stable tier ordering across skills — alphabetical would put Adamant first.
-const TIER_ORDER = ["Bronze", "Iron", "Steel", "Mithril", "Adamant", "Rune", "Gold"];
+const TIER_ORDER = ["Bronze", "Iron", "Silver", "Steel", "Gold", "Mithril", "Adamant", "Rune"];
 
 function renderSkillingChipGroup(hostId, field, activeSet, storageKey, customOrder) {
   const host = document.getElementById(hostId);

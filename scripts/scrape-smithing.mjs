@@ -32,6 +32,53 @@ const HARDCODED_GOLD = [
   { name: "Gold bowl",   id: 6892, level: 50, xp: 30, bars: 2 },
 ];
 
+// Ore item IDs (OSRS GE).
+const ORE = {
+  copper:    436,
+  tin:       438,
+  iron:      440,
+  silver:    442,
+  coal:      453,
+  gold:      444,
+  mithril:   447,
+  adamantite:449,
+  runite:    451,
+};
+const BAR = {
+  bronze:  2349,
+  iron:    2351,
+  silver:  2355,
+  steel:   2353,
+  gold:    2357,
+  mithril: 2359,
+  adamant: 2361,
+  rune:    2363,
+};
+
+// Smelting recipes. Regular furnace defaults to 5 ticks (3s per smelt loop).
+// Blast Furnace uses half coal (steel and up) and is much faster — measured
+// throughput from the wiki is used via actionsPerHourMax. Goldsmith gauntlets
+// boost gold-bar XP from 22.5 to 56.2 (no speed change at a normal furnace,
+// but ~8000 bars/hr at the Blast Furnace).
+const HARDCODED_BARS = [
+  // --- Regular furnace ---
+  { name:"Bronze bar",                       id:BAR.bronze,  level:1,  xp:6.25,  ticks:5, comps:[{id:ORE.copper,qty:1},{id:ORE.tin,qty:1}],         tier:"Bronze"  },
+  { name:"Iron bar",                         id:BAR.iron,    level:15, xp:12.5,  ticks:5, comps:[{id:ORE.iron,qty:1}],                              tier:"Iron"    },
+  { name:"Silver bar",                       id:BAR.silver,  level:20, xp:13.67, ticks:5, comps:[{id:ORE.silver,qty:1}],                            tier:"Silver"  },
+  { name:"Steel bar",                        id:BAR.steel,   level:30, xp:17.5,  ticks:5, comps:[{id:ORE.iron,qty:1},{id:ORE.coal,qty:2}],          tier:"Steel"   },
+  { name:"Gold bar",                         id:BAR.gold,    level:40, xp:22.5,  ticks:5, comps:[{id:ORE.gold,qty:1}],                              tier:"Gold"    },
+  { name:"Gold bar (Goldsmith gauntlets)",   id:BAR.gold,    level:40, xp:56.2,  ticks:5, comps:[{id:ORE.gold,qty:1}],                              tier:"Gold"    },
+  { name:"Mithril bar",                      id:BAR.mithril, level:50, xp:30,    ticks:5, comps:[{id:ORE.mithril,qty:1},{id:ORE.coal,qty:4}],       tier:"Mithril" },
+  { name:"Adamantite bar",                   id:BAR.adamant, level:70, xp:37.5,  ticks:5, comps:[{id:ORE.adamantite,qty:1},{id:ORE.coal,qty:6}],    tier:"Adamant" },
+  { name:"Runite bar",                       id:BAR.rune,    level:85, xp:50,    ticks:5, comps:[{id:ORE.runite,qty:1},{id:ORE.coal,qty:8}],        tier:"Rune"    },
+  // --- Blast Furnace (half coal; published throughput rates) ---
+  { name:"Steel bar (Blast Furnace)",        id:BAR.steel,   level:30, xp:17.5,  comps:[{id:ORE.iron,qty:1},{id:ORE.coal,qty:1}],                   tier:"Steel",   actionsPerHourMax:7200 },
+  { name:"Mithril bar (Blast Furnace)",      id:BAR.mithril, level:50, xp:30,    comps:[{id:ORE.mithril,qty:1},{id:ORE.coal,qty:2}],                tier:"Mithril", actionsPerHourMax:6500 },
+  { name:"Adamantite bar (Blast Furnace)",   id:BAR.adamant, level:70, xp:37.5,  comps:[{id:ORE.adamantite,qty:1},{id:ORE.coal,qty:3}],             tier:"Adamant", actionsPerHourMax:6500 },
+  { name:"Runite bar (Blast Furnace)",       id:BAR.rune,    level:85, xp:50,    comps:[{id:ORE.runite,qty:1},{id:ORE.coal,qty:4}],                 tier:"Rune",    actionsPerHourMax:5400 },
+  { name:"Gold bar (Blast Furnace + Goldsmith gauntlets)", id:BAR.gold, level:40, xp:56.2, comps:[{id:ORE.gold,qty:1}],                              tier:"Gold",    actionsPerHourMax:8000 },
+];
+
 // Anvil smithing is 3 sec (5 ticks) by default. A few specific items take
 // longer or shorter — the wiki documents these as exceptions. Match by item
 // name (case-insensitive, partial).
@@ -144,6 +191,24 @@ async function main() {
       xp: g.xp,
       ticks: 5,
       components: [{ id: 2357, qty: g.bars }],
+    });
+  }
+
+  // Bar smelting (regular furnace, Blast Furnace, Goldsmith gauntlets).
+  for (const b of HARDCODED_BARS) {
+    recipes.push({
+      key: `smelt-${slugify(b.name)}`,
+      id: b.id,
+      name: b.name,
+      cat: "Smithing",
+      skill: "Smithing",
+      subCat: "Bars",
+      tier: b.tier,
+      level: b.level,
+      xp: b.xp,
+      ...(b.ticks != null ? { ticks: b.ticks } : {}),
+      ...(b.actionsPerHourMax != null ? { actionsPerHourMax: b.actionsPerHourMax } : {}),
+      components: b.comps,
     });
   }
 
