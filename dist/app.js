@@ -368,6 +368,24 @@ const RECIPES = [
   { key:"oathplate-helm", id:30750, name:"Oathplate helm", cat:"Oathplate", components:[{id:30848,qty:2520},{id:30765,qty:450}] },
   { key:"oathplate-chest", id:30753, name:"Oathplate chest", cat:"Oathplate", components:[{id:30848,qty:2520},{id:30765,qty:450}] },
   { key:"oathplate-legs", id:30756, name:"Oathplate legs", cat:"Oathplate", components:[{id:30848,qty:2520},{id:30765,qty:450}] },
+
+  // ====================================================================
+  // Skilling recipes — additional optional fields:
+  //   skill       — "Smithing" | "Fletching" | "Herblore" | "Crafting" | "Cooking"
+  //   level       — required level
+  //   xp          — XP gained per action
+  //   ticks       — game ticks per action (1 tick = 0.6s; actions/hr = 3600/(ticks×0.6))
+  //   xpPerHourMax — optional override for methods where wiki publishes a tabulated
+  //                  max XP/hr (e.g. Blast Furnace) that exceeds tick-perfect estimates.
+  // ====================================================================
+  // --- Smithing: a few hand-coded entries to verify the schema + UI; the
+  //     rest will land via the wiki scrape in Phase 2.
+  { key:"smith-cannonball",         id:2,     name:"Cannonball",         cat:"Smithing", skill:"Smithing", level:35, xp:25.5, ticks:5,  components:[{id:2353,qty:1}], resultQty:4 },
+  { key:"smith-rune-dart-tip",      id:5630,  name:"Rune dart tip",      cat:"Smithing", skill:"Smithing", level:89, xp:75,   ticks:3,  components:[{id:2363,qty:1}], resultQty:10 },
+  { key:"smith-rune-platebody",     id:1127,  name:"Rune platebody",     cat:"Smithing", skill:"Smithing", level:99, xp:375,  ticks:9,  components:[{id:2363,qty:5}] },
+  { key:"smith-adamant-platebody",  id:1123,  name:"Adamant platebody",  cat:"Smithing", skill:"Smithing", level:88, xp:312.5,ticks:9,  components:[{id:2361,qty:5}] },
+  { key:"smith-rune-2h",            id:1319,  name:"Rune 2h sword",      cat:"Smithing", skill:"Smithing", level:99, xp:225,  ticks:9,  components:[{id:2363,qty:3}] },
+  { key:"smith-adamant-2h",         id:1317,  name:"Adamant 2h sword",   cat:"Smithing", skill:"Smithing", level:88, xp:187.5,ticks:9,  components:[{id:2361,qty:3}] },
 ];
 
 /* ---------------- Skill requirements ----------------
@@ -644,6 +662,7 @@ const state = {
     sellHourStart: 0, sellHourEnd: 23,
     maxSlots: null,       // max distinct components per craft; null = no limit
     historySort: localStorage.getItem("osrs-combo-history-sort") || "profit-desc",
+    skillingSort: localStorage.getItem("osrs-combo-skilling-sort") || "gphr-desc",
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
@@ -1500,9 +1519,130 @@ function applyFilters(items) {
   return sortRecipeList(items.filter(({ recipe, calc }) => passesSidebarFilters(recipe, calc)));
 }
 
+/* ---------------- Skilling mode ----------------
+   Recipes flagged with a `skill` field show up here. We compute per-action
+   profit using the same calcMargin pipeline as the Real-time grid, then add
+   XP/hr and GP/hr derived from `ticks` (1 tick = 0.6s) or an optional
+   `xpPerHourMax` override for methods where the wiki publishes a real
+   measured rate (Blast Furnace etc).
+---------------------------------------------------- */
+const TICK_MS = 600;
+function skillingStats(recipe, calc) {
+  const ticks = recipe.ticks ?? null;
+  const actionsPerHour = ticks ? 3600_000 / (ticks * TICK_MS) : null;
+  const gpPerHour = (actionsPerHour != null && calc.margin != null) ? calc.margin * actionsPerHour : null;
+  let xpPerHour = null;
+  if (recipe.xpPerHourMax != null) xpPerHour = recipe.xpPerHourMax;
+  else if (recipe.xp != null && actionsPerHour != null) xpPerHour = recipe.xp * actionsPerHour;
+  const gpPerXp = (calc.margin != null && recipe.xp) ? calc.margin / recipe.xp : null;
+  return { actionsPerHour, gpPerHour, xpPerHour, gpPerXp };
+}
+
+function sortSkillingItems(items) {
+  const key = state.filters.skillingSort || "gphr-desc";
+  const cmp = {
+    "gphr-desc":   (a, b) => (b.s.gpPerHour ?? -Infinity) - (a.s.gpPerHour ?? -Infinity),
+    "xphr-desc":   (a, b) => (b.s.xpPerHour ?? -Infinity) - (a.s.xpPerHour ?? -Infinity),
+    "gpxp-desc":   (a, b) => (b.s.gpPerXp   ?? -Infinity) - (a.s.gpPerXp   ?? -Infinity),
+    "gpxp-asc":    (a, b) => (a.s.gpPerXp   ??  Infinity) - (b.s.gpPerXp   ??  Infinity),
+    "margin-desc": (a, b) => (b.calc.margin ?? -Infinity) - (a.calc.margin ?? -Infinity),
+    "level-asc":   (a, b) => (a.recipe.level ?? Infinity) - (b.recipe.level ?? Infinity),
+    "name-asc":    (a, b) => a.recipe.name.localeCompare(b.recipe.name),
+  }[key];
+  items.sort(cmp || cmp["gphr-desc"]);
+}
+
+function fmtXp(n) {
+  if (n == null || !Number.isFinite(n)) return "—";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "k";
+  return Math.round(n).toLocaleString();
+}
+
+function renderSkillingCard(recipe, calc, s) {
+  const card = el("article", { class: "card skilling-card" });
+  if (calc.margin != null) card.classList.add(calc.margin > 0 ? "profit" : "loss");
+  card.onclick = () => openModal(recipe);
+
+  const iconBox = el("div", { class: "card-icon" });
+  const img = el("img", { attrs: { alt: "", loading: "lazy", src: recipeIcon(recipe) } });
+  img.onerror = () => { img.style.display = "none"; };
+  iconBox.appendChild(img);
+
+  const catRow = el("div", { class: "card-cat-row" },
+    el("span", { class: "card-cat", text: recipe.skill || recipe.cat }),
+  );
+  if (recipe.level != null) catRow.appendChild(el("span", { class: "skill-chip", text: `Lvl ${recipe.level}` }));
+
+  const nameDiv = el("div", { class: "card-name", text: recipe.name });
+  const titleBox = el("div", { class: "card-title" }, nameDiv, catRow);
+  const isFav = state.favorites.has(recipe.key);
+  const star = el("button", {
+    class: "card-star" + (isFav ? " active" : ""),
+    attrs: { title: isFav ? "Remove favorite" : "Add favorite", "aria-label": "Toggle favorite" },
+    text: isFav ? "★" : "☆",
+  });
+  star.onclick = (e) => {
+    e.stopPropagation();
+    if (state.favorites.has(recipe.key)) state.favorites.delete(recipe.key);
+    else state.favorites.add(recipe.key);
+    localStorage.setItem("osrs-combo-favorites", JSON.stringify([...state.favorites]));
+    renderGrid();
+  };
+  const head = el("div", { class: "card-head" }, star, iconBox, titleBox);
+  card.appendChild(head);
+
+  const stats = el("div", { class: "card-stats skilling-stats" });
+  const row = (label, value, cls) => {
+    const r = el("div", { class: "stat-row " + (cls || "") });
+    r.appendChild(el("span", { class: "stat-label", text: label }));
+    r.appendChild(el("span", { class: "stat-value", text: value }));
+    return r;
+  };
+  stats.appendChild(row("Margin / action", calc.margin != null ? fmtGp(calc.margin) : "—",
+    calc.margin != null ? (calc.margin > 0 ? "v-good" : "v-bad") : ""));
+  stats.appendChild(row("GP / hr",  s.gpPerHour != null ? fmtGp(Math.round(s.gpPerHour)) : "—",
+    s.gpPerHour != null ? (s.gpPerHour > 0 ? "v-good" : "v-bad") : ""));
+  stats.appendChild(row("XP / action", recipe.xp != null ? recipe.xp.toLocaleString() : "—"));
+  stats.appendChild(row("XP / hr",  s.xpPerHour != null ? fmtXp(s.xpPerHour) : "—"));
+  if (s.gpPerXp != null) {
+    stats.appendChild(row("GP / XP", fmtGp(Math.round(s.gpPerXp * 10) / 10)));
+  }
+  card.appendChild(stats);
+  return card;
+}
+
+function renderSkilling() {
+  const grid = document.getElementById("grid");
+  const tableWrap = document.getElementById("table-wrap");
+  tableWrap.hidden = true;
+  grid.hidden = false;
+  grid.replaceChildren();
+
+  const search = (state.filters.search || "").toLowerCase().trim();
+  const items = RECIPES
+    .filter((r) => r.skill)
+    .map((r) => {
+      const calc = calcMargin(r);
+      return { recipe: r, calc, s: skillingStats(r, calc) };
+    })
+    .filter(({ recipe }) => !search || recipe.name.toLowerCase().includes(search));
+
+  if (!items.length) {
+    grid.appendChild(el("div", { class: "empty", text: "No skilling methods match the current filters." }));
+    return;
+  }
+
+  sortSkillingItems(items);
+  const frag = document.createDocumentFragment();
+  for (const { recipe, calc, s } of items) frag.appendChild(renderSkillingCard(recipe, calc, s));
+  grid.appendChild(frag);
+}
+
 function renderGrid() {
   if (state.mode === "overnight" && window.Overnight) { window.Overnight.renderOvernight(); return; }
   if (state.mode === "history" && window.Flips) { window.Flips.renderHistory(); return; }
+  if (state.mode === "skilling") { renderSkilling(); return; }
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
   const items = RECIPES.map(r => ({ recipe: r, calc: calcMargin(r) }));
@@ -2443,8 +2583,10 @@ async function init() {
     document.getElementById("mode-realtime").classList.toggle("active", m === "realtime");
     document.getElementById("mode-overnight").classList.toggle("active", m === "overnight");
     document.getElementById("mode-history").classList.toggle("active", m === "history");
+    document.getElementById("mode-skilling").classList.toggle("active", m === "skilling");
     document.getElementById("layout").classList.toggle("mode-overnight", m === "overnight");
     document.getElementById("layout").classList.toggle("mode-history", m === "history");
+    document.getElementById("layout").classList.toggle("mode-skilling", m === "skilling");
     if (prev === "history" && m !== "history" && window.Flips?.onModeExit) {
       window.Flips.onModeExit();
     }
@@ -2457,34 +2599,52 @@ async function init() {
   function rebuildSortOptions(mode) {
     const sel = document.getElementById("sort");
     sel.replaceChildren();
-    const opts = mode === "history" ? [
-      ["profit-desc",      "Realized profit (high → low)"],
-      ["roi-desc",         "ROI % (high → low)"],
-      ["conversions-desc", "Conversions (high → low)"],
-      ["avgprofit-desc",   "Avg profit / conversion"],
-      ["timetoflip-asc",   "Avg time-to-flip (fastest)"],
-      ["winrate-desc",     "Win rate (high → low)"],
-      ["name-asc",         "Name (A→Z)"],
-    ] : [
-      ["recommended",  "Recommended"],
-      ["margin-desc",  "Margin (high → low)"],
-      ["roi-desc",     "ROI % (high → low)"],
-      ["daily-desc",   "Daily potential (high → low)"],
-      ["flips-desc",   "Trades/day (high → low)"],
-      ["cost-asc",     "Cost (low → high)"],
-      ["cost-desc",    "Cost (high → low)"],
-      ["name",         "Name (A→Z)"],
-    ];
+    let opts;
+    if (mode === "history") {
+      opts = [
+        ["profit-desc",      "Realized profit (high → low)"],
+        ["roi-desc",         "ROI % (high → low)"],
+        ["conversions-desc", "Conversions (high → low)"],
+        ["avgprofit-desc",   "Avg profit / conversion"],
+        ["timetoflip-asc",   "Avg time-to-flip (fastest)"],
+        ["winrate-desc",     "Win rate (high → low)"],
+        ["name-asc",         "Name (A→Z)"],
+      ];
+    } else if (mode === "skilling") {
+      opts = [
+        ["gphr-desc",  "GP / hr (high → low)"],
+        ["xphr-desc",  "XP / hr (high → low)"],
+        ["gpxp-desc",  "GP / XP (most profitable XP)"],
+        ["gpxp-asc",   "GP / XP (cheapest XP)"],
+        ["margin-desc","Margin / action (high → low)"],
+        ["level-asc",  "Level requirement (low → high)"],
+        ["name-asc",   "Name (A→Z)"],
+      ];
+    } else {
+      opts = [
+        ["recommended",  "Recommended"],
+        ["margin-desc",  "Margin (high → low)"],
+        ["roi-desc",     "ROI % (high → low)"],
+        ["daily-desc",   "Daily potential (high → low)"],
+        ["flips-desc",   "Trades/day (high → low)"],
+        ["cost-asc",     "Cost (low → high)"],
+        ["cost-desc",    "Cost (high → low)"],
+        ["name",         "Name (A→Z)"],
+      ];
+    }
     for (const [v, label] of opts) {
       const o = document.createElement("option");
       o.value = v; o.textContent = label;
       sel.appendChild(o);
     }
-    sel.value = mode === "history" ? state.filters.historySort : state.filters.sort;
+    if (mode === "history")        sel.value = state.filters.historySort;
+    else if (mode === "skilling")  sel.value = state.filters.skillingSort || "gphr-desc";
+    else                            sel.value = state.filters.sort;
   }
   document.getElementById("mode-realtime").addEventListener("click", () => setMode("realtime"));
   document.getElementById("mode-overnight").addEventListener("click", () => setMode("overnight"));
   document.getElementById("mode-history").addEventListener("click", () => setMode("history"));
+  document.getElementById("mode-skilling").addEventListener("click", () => setMode("skilling"));
   setMode(state.mode);
   document.getElementById("search").addEventListener("input", (e) => {
     state.filters.search = e.target.value;
@@ -2494,6 +2654,12 @@ async function init() {
     if (state.mode === "history") {
       state.filters.historySort = e.target.value;
       localStorage.setItem("osrs-combo-history-sort", state.filters.historySort);
+      renderGrid();
+      return;
+    }
+    if (state.mode === "skilling") {
+      state.filters.skillingSort = e.target.value;
+      localStorage.setItem("osrs-combo-skilling-sort", state.filters.skillingSort);
       renderGrid();
       return;
     }
