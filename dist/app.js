@@ -1608,7 +1608,9 @@ function renderSkillingCard(recipe, calc, s) {
   stats.appendChild(row("XP / action", recipe.xp != null ? recipe.xp.toLocaleString() : "—"));
   stats.appendChild(row("XP / hr",  s.xpPerHour != null ? fmtXp(s.xpPerHour) : "—"));
   if (s.gpPerXp != null) {
-    stats.appendChild(row("GP / XP", fmtGp(Math.round(s.gpPerXp * 10) / 10)));
+    stats.appendChild(row("GP / XP",
+      fmtGp(Math.round(s.gpPerXp * 10) / 10),
+      s.gpPerXp > 0 ? "v-good" : s.gpPerXp < 0 ? "v-bad" : ""));
   }
   card.appendChild(stats);
   return card;
