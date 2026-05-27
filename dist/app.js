@@ -662,6 +662,7 @@ const state = {
     skillingTiers: new Set(JSON.parse(localStorage.getItem("osrs-combo-skilling-tiers") || "[]")),
     herbloreAmulet:  localStorage.getItem("osrs-combo-herblore-amulet")  || "none", // none | chemistry | alchemist
     herbloreGoggles: localStorage.getItem("osrs-combo-herblore-goggles") === "1",
+    smithingOutfitPieces:   parseInt(localStorage.getItem("osrs-combo-smithing-outfit-pieces") || "0", 10),
     smithingDoubleMould:    localStorage.getItem("osrs-combo-smithing-double-mould") === "1",
     smithingAncientFurnace: localStorage.getItem("osrs-combo-smithing-ancient-furnace") === "1",
     fletchingKnife:         localStorage.getItem("osrs-combo-fletching-knife") === "1",
@@ -1732,27 +1733,49 @@ function applyFletchingModifiers(recipe, calc) {
   return { recipe: adjustedRecipe, calc };
 }
 
-// Smithing cannonball boosters: both apply only to cannonball recipes.
-//   Double ammo mould: 2 bars -> 8 cannonballs per action (2× output AND
-//     2× input vs the base 1 bar -> 4). XP also doubles per action.
-//   Ancient Furnace (Grimstone Dungeon): 5 ticks per action instead of 10.
-// Combined: 4× GP/hr and XP/hr vs base.
+// Smithing boosts:
+//   Smith's uniform pieces (0-4): each piece is 20% chance to perform an
+//     anvil-smithing action 1 tick faster. Expected ticks = T - 0.2 × pieces.
+//     Full set always saves a tick. Applies to anvil smithing only --
+//     skipped for "Bars" (smelted at a furnace) and cannonballs (furnace too).
+//   Double ammo mould: 2 bars -> 8 cannonballs per action (cannonballs only).
+//   Ancient Furnace: 5 ticks per action instead of 10 (cannonballs only).
 function applySmithingModifiers(recipe, calc) {
   if (recipe.skill !== "Smithing") return { recipe, calc };
-  if (!recipe.name.toLowerCase().includes("cannonball")) return { recipe, calc };
-  const dm = state.filters.smithingDoubleMould;
-  const af = state.filters.smithingAncientFurnace;
-  if (!dm && !af) return { recipe, calc };
-  const outMul = dm ? 2 : 1;
-  const ticks = recipe.ticks != null ? (af ? Math.max(1, Math.round(recipe.ticks / 2)) : recipe.ticks) : recipe.ticks;
-  const adjustedRecipe = { ...recipe, xp: recipe.xp * outMul, ticks };
-  const adjustedCalc = {
-    ...calc,
-    revenue: (calc.revenue || 0) * outMul,
-    totalCost: (calc.totalCost || 0) * outMul,
-    tax: (calc.tax || 0) * outMul,
-    margin: calc.margin != null ? calc.margin * outMul : null,
-  };
+
+  const isCannonball = recipe.name.toLowerCase().includes("cannonball");
+  const isBar = recipe.subCat === "Bars";
+
+  let adjustedRecipe = recipe;
+  let adjustedCalc = calc;
+
+  // Smith's uniform: anvil-smithed items only (not bars, not cannonballs).
+  const pieces = Math.max(0, Math.min(4, state.filters.smithingOutfitPieces || 0));
+  if (pieces > 0 && !isCannonball && !isBar && recipe.ticks != null) {
+    const expectedTicks = Math.max(1, recipe.ticks - 0.2 * pieces);
+    adjustedRecipe = { ...adjustedRecipe, ticks: expectedTicks };
+  }
+
+  // Cannonball-only stack (double mould + Ancient Furnace).
+  if (isCannonball) {
+    const dm = state.filters.smithingDoubleMould;
+    const af = state.filters.smithingAncientFurnace;
+    if (dm || af) {
+      const outMul = dm ? 2 : 1;
+      const ticks = adjustedRecipe.ticks != null
+        ? (af ? Math.max(1, Math.round(adjustedRecipe.ticks / 2)) : adjustedRecipe.ticks)
+        : adjustedRecipe.ticks;
+      adjustedRecipe = { ...adjustedRecipe, xp: adjustedRecipe.xp * outMul, ticks };
+      adjustedCalc = {
+        ...adjustedCalc,
+        revenue:   (adjustedCalc.revenue   || 0) * outMul,
+        totalCost: (adjustedCalc.totalCost || 0) * outMul,
+        tax:       (adjustedCalc.tax       || 0) * outMul,
+        margin: adjustedCalc.margin != null ? adjustedCalc.margin * outMul : null,
+      };
+    }
+  }
+
   return { recipe: adjustedRecipe, calc: adjustedCalc };
 }
 
@@ -2843,7 +2866,16 @@ async function init() {
     });
   }
 
-  // Smithing boost controls (cannonball-only).
+  // Smithing boost controls.
+  const outfitSel = document.getElementById("smithing-outfit-pieces");
+  if (outfitSel) {
+    outfitSel.value = String(state.filters.smithingOutfitPieces || 0);
+    outfitSel.addEventListener("change", (ev) => {
+      state.filters.smithingOutfitPieces = parseInt(ev.target.value, 10) || 0;
+      localStorage.setItem("osrs-combo-smithing-outfit-pieces", String(state.filters.smithingOutfitPieces));
+      renderGrid();
+    });
+  }
   const dmould = document.getElementById("smithing-double-mould");
   if (dmould) {
     dmould.checked = state.filters.smithingDoubleMould;
