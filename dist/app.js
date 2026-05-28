@@ -1953,7 +1953,12 @@ function renderGrid() {
   if (state.mode === "skilling") { renderSkilling(); return; }
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
-  const items = RECIPES.map(r => ({ recipe: r, calc: calcMargin(r) }));
+  // Skilling recipes live in their own mode — exclude them from the
+  // real-time combo grid so we don't show pure-essence-and-a-rune as a
+  // "combination item".
+  const items = RECIPES
+    .filter(r => !r.skill)
+    .map(r => ({ recipe: r, calc: calcMargin(r) }));
   const visible = applyFilters(items);
   if (state.refreshHistogram) state.refreshHistogram();
 
