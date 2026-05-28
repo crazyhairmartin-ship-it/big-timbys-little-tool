@@ -232,7 +232,7 @@ async function fetchPriceStoreDay(dayIso) {
   return byId;
 }
 
-async function fetchTimeseries(itemId) {
+async function fetchDailyTimeseries(itemId) {
   let p = timeseriesCache.get(itemId);
   if (p) return p;
   p = (async () => {
@@ -251,7 +251,7 @@ async function fetchWikiPriceForDay(itemId, ts) {
   const key = `${itemId}|${dayKey(ts)}`;
   if (wikiPriceCache.has(key)) return wikiPriceCache.get(key);
   let price = 0;
-  const points = await fetchTimeseries(itemId);
+  const points = await fetchDailyTimeseries(itemId);
   const tsSec = Math.floor(ts / 1000);
   let best = null;
   for (const p of points) {
@@ -280,7 +280,7 @@ async function prefetchWikiPrices(needs) {
   async function timeseriesWorker() {
     while (i < itemIds.length) {
       const idx = i++;
-      await fetchTimeseries(itemIds[idx]);
+      await fetchDailyTimeseries(itemIds[idx]);
     }
   }
   await Promise.all(Array.from({ length: CONCURRENCY_TS }, timeseriesWorker));
