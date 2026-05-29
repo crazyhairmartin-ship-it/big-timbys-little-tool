@@ -435,9 +435,26 @@ function overnightVisible() {
   const pm = overnightData.predMap;
   const localHour = (utc) => new Date(Date.UTC(2000, 0, 1, utc)).getHours();
   const inRange = (h, lo, hi) => (lo <= hi ? (h >= lo && h <= hi) : (h >= lo || h <= hi));
+  // Two-tab split: Experimental shows combo recipes, Skilling Predictive
+  // shows the skilling-recipe set (any recipe with a `skill` field). Both
+  // run the same overnight model — only the visible-list filter differs.
+  const wantSkilling = state.mode === "skilling-overnight";
   const out = [];
   for (const recipe of RECIPES) {
-    const calc = calcMargin(recipe, pm);
+    if (wantSkilling !== !!recipe.skill) continue;
+    let calc = calcMargin(recipe, pm);
+    // Apply skilling boost modifiers (Smith's uniform, Cooking burn, etc.)
+    // to the predicted calc so the predicted margin reflects the user's
+    // chosen setup. The realtime Skilling tab does the same chain; we just
+    // reuse it here on predicted prices instead of live ones.
+    if (recipe.skill) {
+      calc = applyHerbloreModifiers(recipe, calc);
+      calc = applyCookingModifiers(recipe, calc);
+      const sm = applySmithingModifiers(recipe, calc);
+      const fl = applyFletchingModifiers(sm.recipe, sm.calc);
+      const rc = applyRunecraftingModifiers(fl.recipe, fl.calc);
+      calc = rc.calc;
+    }
     if (!calc.allPresent || !(calc.margin > 0)) continue;
     if (!passesSidebarFilters(recipe, calc)) continue;
     // Experimental time filter: every component's buy hour must fall in the
