@@ -458,6 +458,10 @@ function overnightVisible() {
     // _dipAgg feeds the Recommended sort's component-dip bonus (scoreRecommended);
     // overnightRecipeCard recomputes its own copy for rendering.
     item._dipAgg = overnightRecipeDip(recipe);
+    // _confidence is the recipe's reliability (min over product + components).
+    // scoreRecommended reads it as a 5th metric on the Experimental grid only —
+    // realtime items have no predictions, so _confidence stays undefined there.
+    item._confidence = overnightRecipeConfidence(recipe);
     out.push(item);
   }
   return sortRecipeList(out);
