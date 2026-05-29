@@ -1428,16 +1428,22 @@ function renderCard(recipe, calc) {
 }
 
 // "Recommended" sort — a balanced composite that rewards items which are
-// profitable AND liquid AND capital-efficient, not just one of those.
-// Four metrics are each rank-normalised to a 0–1 percentile across the
-// visible set (robust to whale outliers that would dominate a raw min-max
-// scale), then weight-blended:
+// profitable AND liquid AND capital-deployable AND (on Experimental) trustworthy,
+// not just one of those.
+// Each metric is rank-normalised to a 0–1 percentile across the visible set
+// (robust to whale outliers that would dominate a raw min-max scale), then
+// weight-blended:
 //   roi   — capital efficiency right now
-//   daily — current absolute profit (margin × realistic trades/day)
+//   daily — current absolute profit (margin × realistic trades/day); this is
+//           the metric that actually rewards "use my GP" because maxFlips is
+//           capped by GE buy limit and 24h volume
 //   hist  — 24h-average margin, so a momentary snapshot spike doesn't win
-//   vol   — liquidity / fill speed; only a light tiebreaker, because `daily`
-//           already encodes volume through its maxFlips bottleneck — a heavier
-//           `vol` weight would double-count liquidity.
+//   vol   — liquidity / fill speed; light tiebreaker, since `daily` already
+//           encodes volume through its maxFlips bottleneck
+//   conf  — Experimental-only: prediction reliability (fraction of days the
+//           buy/sell hour spread held historically). Items without a confidence
+//           score (the realtime grid) skip this metric — the other weights are
+//           renormalised to keep totals consistent.
 // Stale items are demoted, losing/no-data flips sink below everything, and
 // any flip clearing REC_MARGIN_PRIORITY is floated into a top tier.
 const REC_SENTINEL = -1e15;          // stand-in for "no data" — keeps subtraction finite
@@ -1445,6 +1451,10 @@ const REC_MARGIN_PRIORITY = 50_000;  // flips with margin ≥ this are floated t
 function scoreRecommended(items) {
   const n = items.length;
   if (!n) return;
+  // Only score confidence when at least one item carries a prediction; on the
+  // realtime grid no item has `_confidence`, so including it would just be
+  // noise from a 271-way tie.
+  const hasConfidence = items.some(it => it._confidence != null);
   const metrics = {
     roi:   it => (it.calc.allPresent && it.calc.roi != null) ? it.calc.roi : REC_SENTINEL,
     daily: it => (it.calc.allPresent && it.calc.margin != null && it.calc.maxFlips != null)
@@ -1452,6 +1462,9 @@ function scoreRecommended(items) {
     hist:  it => historicalMargin(it.recipe) ?? REC_SENTINEL,
     vol:   it => it.calc.resultVol ?? 0,
   };
+  if (hasConfidence) {
+    metrics.conf = it => it._confidence != null ? it._confidence : REC_SENTINEL;
+  }
   const pct = {};
   for (const key of Object.keys(metrics)) {
     const ranked = [...items].sort((a, b) => metrics[key](a) - metrics[key](b));
@@ -1459,9 +1472,15 @@ function scoreRecommended(items) {
     ranked.forEach((it, i) => m.set(it, n > 1 ? i / (n - 1) : 1));
     pct[key] = m;
   }
+  // Weights sum to 1.0 in each branch. ROI is deliberately small — high-ROI
+  // micro-flips don't help if you can't deploy 100M in them.
+  const w = hasConfidence
+    ? { roi: 0.10, daily: 0.30, hist: 0.25, vol: 0.05, conf: 0.30 }
+    : { roi: 0.10, daily: 0.40, hist: 0.40, vol: 0.10 };
   for (const it of items) {
-    let s = 0.30 * pct.roi.get(it)  + 0.30 * pct.daily.get(it)
-          + 0.30 * pct.hist.get(it) + 0.10 * pct.vol.get(it);
+    let s = w.roi * pct.roi.get(it)  + w.daily * pct.daily.get(it)
+          + w.hist * pct.hist.get(it) + w.vol * pct.vol.get(it);
+    if (hasConfidence) s += w.conf * pct.conf.get(it);
     const stale = isItemStale(it.recipe.id) ||
                   it.recipe.components.some(c => isItemStale(c.id));
     if (stale) s *= 0.2;
