@@ -3226,6 +3226,11 @@ async function init() {
     const staleSec = STALE_MS / 1000;
     const items = [];
     for (const r of RECIPES) {
+      // Match the realtime grid: skilling recipes live in their own mode and
+      // are excluded from the realtime view (see renderGrid). The histogram
+      // is only visible on Realtime, so excluding here keeps its counts and
+      // bar heights in sync with what the grid actually shows.
+      if (r.skill) continue;
       const c = calcMargin(r);
       if (!c.allPresent) continue;
       if (!r._tags.some(t => f.activeCats.has(t))) continue;
