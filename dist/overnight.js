@@ -7,7 +7,7 @@
 
 const OVERNIGHT_MIN_VOLUME = 10;    // skip items trading < 10/24h (too thin to predict)
 const OVERNIGHT_FETCH_CONCURRENCY = 5;
-const OVERNIGHT_CACHE_KEY = "osrs-combo-overnight";
+const OVERNIGHT_CACHE_KEY = "osrs-combo-overnight-v2";
 const OVERNIGHT_CACHE_TTL_MS = 24 * 3600 * 1000;
 const OVERNIGHT_TREND_DISCOUNT = 0.5;  // fraction of a downtrend applied as a sell-price haircut
 // Component-dip "buying opportunity" thresholds (volatility-aware z-scores).
