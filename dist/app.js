@@ -1968,6 +1968,7 @@ function renderSkilling() {
 
 function renderGrid() {
   if (state.mode === "overnight" && window.Overnight) { window.Overnight.renderOvernight(); return; }
+  if (state.mode === "skilling-overnight" && window.Overnight) { window.Overnight.renderOvernight(); return; }
   if (state.mode === "history" && window.Flips) { window.Flips.renderHistory(); return; }
   if (state.mode === "skilling") { renderSkilling(); return; }
   const grid = document.getElementById("grid");
@@ -2916,9 +2917,11 @@ async function init() {
     document.getElementById("mode-overnight").classList.toggle("active", m === "overnight");
     document.getElementById("mode-history").classList.toggle("active", m === "history");
     document.getElementById("mode-skilling").classList.toggle("active", m === "skilling");
+    document.getElementById("mode-skilling-overnight").classList.toggle("active", m === "skilling-overnight");
     document.getElementById("layout").classList.toggle("mode-overnight", m === "overnight");
     document.getElementById("layout").classList.toggle("mode-history", m === "history");
     document.getElementById("layout").classList.toggle("mode-skilling", m === "skilling");
+    document.getElementById("layout").classList.toggle("mode-skilling-overnight", m === "skilling-overnight");
     if (prev === "history" && m !== "history" && window.Flips?.onModeExit) {
       window.Flips.onModeExit();
     }
@@ -2977,6 +2980,7 @@ async function init() {
   document.getElementById("mode-overnight").addEventListener("click", () => setMode("overnight"));
   document.getElementById("mode-history").addEventListener("click", () => setMode("history"));
   document.getElementById("mode-skilling").addEventListener("click", () => setMode("skilling"));
+  document.getElementById("mode-skilling-overnight").addEventListener("click", () => setMode("skilling-overnight"));
 
   // Skilling sidebar wiring.
   const skillSel = document.getElementById("skilling-skill");
