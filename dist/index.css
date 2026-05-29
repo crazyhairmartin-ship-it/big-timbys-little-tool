@@ -1382,7 +1382,33 @@ footer {
 }
 
 #grid > .ov-header,
+#grid > .ov-warning,
 #grid > .ov-empty { grid-column: 1 / -1; }
+
+/* Experimental warning banner — sits above the meta header on both the
+   Predictive and Skilling Predictive grids. Amber so it reads as caution
+   without screaming "error". */
+.ov-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  background: rgba(245, 158, 11, 0.10);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-left: 3px solid #f59e0b;
+  border-radius: 8px;
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.ov-warning-icon {
+  color: #f59e0b;
+  font-size: 16px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+.ov-warning-text { color: var(--text-2); }
 
 .ov-time-filter .time-range {
   display: flex;

@@ -406,12 +406,28 @@ function overnightRecipeCard(recipe, calc) {
 }
 
 // Header strip: freshness + item count + refresh, or a progress bar.
+// Returns a wrapping fragment so paintOvernight can drop both the warning
+// banner and the meta header at the top of the grid in one shot.
 function overnightHeader(progress) {
+  const frag = document.createDocumentFragment();
+
+  // Experimental warning — always visible on both predictive tabs. Predictions
+  // are pattern-matching over historical hour-of-day data; markets shift and
+  // past patterns aren't guarantees. The May 24 backtest had ~20% mean
+  // relative error on the spread; the current sample is closer to ~34%.
+  const warning = el("div", { class: "ov-warning" });
+  warning.appendChild(el("span", { class: "ov-warning-icon", text: "⚠" }));
+  warning.appendChild(el("span", { class: "ov-warning-text",
+    text: "Experimental — predictions use ~25 days of recorded hour-of-day patterns. " +
+          "Past behaviour doesn't guarantee future prices. Use as a directional signal, not a guarantee." }));
+  frag.appendChild(warning);
+
   const bar = el("div", { class: "ov-header" });
   if (progress) {
     bar.appendChild(el("span", { class: "ov-progress",
       text: `Analysing ${progress.done} / ${progress.total} items...` }));
-    return bar;
+    frag.appendChild(bar);
+    return frag;
   }
   const d = overnightData;
   const ageMin = Math.round(window.Overnight.overnightCacheAgeMs() / 60000);
@@ -424,7 +440,8 @@ function overnightHeader(progress) {
     paintOvernight();
   };
   bar.appendChild(refresh);
-  return bar;
+  frag.appendChild(bar);
+  return frag;
 }
 
 // Recipes with a complete, profitable predicted margin, after sidebar filters.
