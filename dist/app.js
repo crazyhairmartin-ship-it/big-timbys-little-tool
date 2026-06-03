@@ -693,6 +693,11 @@ const state = {
     modalTab: localStorage.getItem("osrs-combo-history-modal-tab") || "conversions",
     showFlips: localStorage.getItem("osrs-combo-history-show-flips") === "1",
     profitFilter: localStorage.getItem("osrs-combo-history-profit-filter") || "all", // "all" | "profits" | "losses"
+    // "all" | "combos" | "<SkillName>" (e.g. "Smithing"). Keeps the History
+    // leaderboard split-able the same way the realtime Skilling tab is, since
+    // skilling recipes get matched in matchEvents whenever the CSV contains
+    // matching component→product trades (e.g. ore→bar smelting).
+    skillFilter: localStorage.getItem("osrs-combo-history-skill-filter") || "all",
     hiddenConvIds: new Set(JSON.parse(localStorage.getItem("osrs-combo-history-hidden-conv-ids") || "[]")),
     analysisCache: null,
   },
