@@ -521,6 +521,15 @@ function onModeEnter() {
       localStorage.setItem("osrs-combo-history-profit-filter", ev.target.value);
       renderHistory();
     });
+    const skillFilterSel = document.getElementById("history-skill-filter");
+    if (skillFilterSel) {
+      skillFilterSel.value = state.flipsHistory.skillFilter;
+      skillFilterSel.addEventListener("change", (ev) => {
+        state.flipsHistory.skillFilter = ev.target.value;
+        localStorage.setItem("osrs-combo-history-skill-filter", ev.target.value);
+        renderHistory();
+      });
+    }
     document.getElementById("history-replace").addEventListener("click", () => {
       const input = document.getElementById("history-file-input");
       input.dataset.mode = "replace";
@@ -686,6 +695,7 @@ function applyHistoryFilters(summaries) {
   const maxCost = f.maxCost ?? null;
   const tagsActive = (f.activeCats instanceof Set) ? f.activeCats : null;
 
+  const skillFilter = state.flipsHistory.skillFilter || "all";
   return summaries.filter((s) => {
     if (search && !s.productName.toLowerCase().includes(search)) return false;
     if (profitableOnly && s.totalProfit <= 0) return false;
@@ -694,6 +704,13 @@ function applyHistoryFilters(summaries) {
     if (!recipe) return true;
     if (recipe.components.length > maxSlots) return false;
     if (tagsActive && tagsActive.size > 0 && recipe._tags && !recipe._tags.some((t) => tagsActive.has(t))) return false;
+    // Recipe-type filter: "all" passes everything, "combos" excludes skilling
+    // recipes, any other value matches the recipe's `skill` field exactly.
+    if (skillFilter === "combos") {
+      if (recipe.skill) return false;
+    } else if (skillFilter !== "all") {
+      if (recipe.skill !== skillFilter) return false;
+    }
     if (minCost != null || maxCost != null) {
       const live = state.prices?.[s.productId]?.high ?? null;
       if (live != null) {
