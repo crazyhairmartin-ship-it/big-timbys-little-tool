@@ -1,7 +1,7 @@
 {
   "baselineDays": 5,
-  "trendDiscount": 1,
-  "score": 3.71467,
-  "samples": 11551,
-  "tunedAt": "2026-06-14T08:35:26.205Z"
+  "trendDiscount": 0.5,
+  "score": 0.1943,
+  "samples": 11935,
+  "tunedAt": "2026-06-21T08:49:29.373Z"
 }
