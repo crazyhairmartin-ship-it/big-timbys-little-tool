@@ -8,7 +8,12 @@
    ============================================================ */
 
 const API_BASE = "https://prices.runescape.wiki/api/v1/osrs";
-const ICON_BASE = "https://oldschool.runescape.wiki/images";
+// Use Special:FilePath rather than the flat /images path — the wiki stores
+// stackable items under name-suffixed files (e.g. "Rune arrow 5.png" for the
+// arrow stack image), and the mapping API's `icon` field sometimes lags
+// behind the actual filename for newly-released items. Special:FilePath is
+// the canonical resolver: it 302-redirects to whatever the real filename is.
+const ICON_BASE = "https://oldschool.runescape.wiki/w/Special:FilePath";
 
 const REFRESH_MS = 60_000;
 const HISTORY_SAMPLE_MS = 5 * 60_000;
@@ -1667,7 +1672,9 @@ function renderSkillingCard(recipe, calc, s) {
 }
 
 // Stable tier ordering across skills — alphabetical would put Adamant first.
-const TIER_ORDER = ["Bronze", "Iron", "Silver", "Steel", "Gold", "Mithril", "Adamant", "Rune"];
+// Extended with Amethyst and Dragon so Seeking arrows' tier chips sort
+// alongside Smithing/Fletching progression, not appended alphabetically.
+const TIER_ORDER = ["Bronze", "Iron", "Silver", "Steel", "Gold", "Mithril", "Adamant", "Rune", "Amethyst", "Dragon"];
 
 function renderSkillingChipGroup(hostId, field, activeSet, storageKey, customOrder) {
   const host = document.getElementById(hostId);
