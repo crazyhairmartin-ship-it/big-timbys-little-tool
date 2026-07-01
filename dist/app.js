@@ -160,6 +160,8 @@ const RECIPES = [
 
   { key:"amulet-of-torture", id:19553, name:"Amulet of torture", cat:"Zenyte", components:[{id:19541,qty:1}], supplies:[{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
   { key:"necklace-of-anguish", id:19547, name:"Necklace of anguish", cat:"Zenyte", components:[{id:19535,qty:1}], supplies:[{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
+  // No enchant runes — unlike every other Zenyte upgrade, the fang is the whole recipe.
+  { key:"necklace-of-rupture", id:33639, name:"Necklace of rupture", cat:"Zenyte", components:[{id:19547,qty:1},{id:33636,qty:1}] },
   { key:"ring-of-suffering", id:19550, name:"Ring of suffering", cat:"Zenyte", components:[{id:19538,qty:1}], supplies:[{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
   { key:"tormented-bracelet", id:19544, name:"Tormented bracelet", cat:"Zenyte", components:[{id:19532,qty:1}], supplies:[{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
   { key:"uncut-zenyte", id:19496, name:"Uncut zenyte", cat:"Zenyte", components:[{id:6573,qty:1},{id:19529,qty:1}] },
