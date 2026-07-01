@@ -919,49 +919,97 @@ async function scrapeRunecrafting(nameToId, skipped) {
 /* ----------------------------------------------------------
  * Seeking arrows (Blood Moon Rises reward).
  *
- * Each base arrow tier converts 1:1 into its seeking variant via
- *   15 × <base arrow> + 1 × Bucket of bloodwood sap → 15 × Seeking <base arrow>
- * The sap is farmed from bloodwood trees and isn't tradeable, so — like the
- * Arceuus blood/soul altar recipes — we model it as a free supply. Filed
- * under its own skill "Seeking arrows" so the Skilling dropdown surfaces
- * them as a distinct group instead of hiding them among 60 other Fletching
- * arrow/bow recipes.
+ * Two paths per arrow tier, both requiring untradeable Bucket of bloodwood
+ * sap (farmed from bloodwood trees, modelled as free — same treatment we
+ * give Arceuus dense essence for blood/soul runes):
  *
- * XP per craft is 0 on the wiki (conversion doesn't grant Fletching XP) and
- * the level requirement is unspecified — treated as 1. Throughput is left
- * unmodeled (no actionsPerHourMax, no ticks), same as Runecrafting: real
- * per-hour rates depend on how much sap you've farmed and how much base
- * arrow supply the GE has, and the theoretical 45k/hr ceiling produced
- * absurd headline GP/hr numbers on newly-launched items. Cards will show
- * "—" for GP/hr and XP/hr, and per-action margin is the useful metric.
+ *   Direct sap:  15 × <base arrow> + 1 × sap → 15 × Seeking <base arrow>
+ *   Log path:    1 × <sap-treated log> + N × feather + N × arrowtip →
+ *                N × Seeking <base arrow>
+ *
+ * The log path chains three fletching steps (log→shaft, shaft→headless,
+ * headless→arrow) but the intermediates are all untradeable, so we collapse
+ * the whole chain into one recipe per (log tier × arrow tier). N is the
+ * shaft yield per log (15 for normal up to 105 for redwood).
+ *
+ * That's 56 log-path recipes + 8 direct-sap = 64 total. subCat splits them
+ * into 8 chip-filter groups: "Direct sap", "Logs", "Oak logs", … "Redwood
+ * logs", so the sidebar Type filter can focus on one method at a time.
+ *
+ * XP is 0 (we don't display XP/hr for this skill anyway — throughput and
+ * XP both depend on player sap supply that we can't model). Level = max of
+ * the shaft-cutting Fletching gate and the arrow-tier Fletching gate.
 ---------------------------------------------------------- */
-const SEEKING_ARROWS = [
-  { base: "Bronze arrow",   seeking: "Seeking bronze arrow"   },
-  { base: "Iron arrow",     seeking: "Seeking iron arrow"     },
-  { base: "Steel arrow",    seeking: "Seeking steel arrow"    },
-  { base: "Mithril arrow",  seeking: "Seeking mithril arrow"  },
-  { base: "Adamant arrow",  seeking: "Seeking adamant arrow"  },
-  { base: "Rune arrow",     seeking: "Seeking rune arrow"     },
-  { base: "Amethyst arrow", seeking: "Seeking amethyst arrow" },
-  { base: "Dragon arrow",   seeking: "Seeking dragon arrow"   },
+const SEEKING_LOG_TIERS = [
+  { key: "logs",         subCat: "Logs",         name: "logs",         id: 1511,  yield: 15,  level: 1  },
+  { key: "oak",          subCat: "Oak logs",     name: "oak logs",     id: 1521,  yield: 30,  level: 15 },
+  { key: "willow",       subCat: "Willow logs",  name: "willow logs",  id: 1519,  yield: 45,  level: 30 },
+  { key: "maple",        subCat: "Maple logs",   name: "maple logs",   id: 1517,  yield: 60,  level: 45 },
+  { key: "yew",          subCat: "Yew logs",     name: "yew logs",     id: 1515,  yield: 75,  level: 60 },
+  { key: "magic",        subCat: "Magic logs",   name: "magic logs",   id: 1513,  yield: 90,  level: 75 },
+  { key: "redwood",      subCat: "Redwood logs", name: "redwood logs", id: 19669, yield: 105, level: 90 },
+];
+
+const SEEKING_ARROW_TIERS = [
+  { tier: "bronze",   base: "Bronze arrow",   seeking: "Seeking bronze arrow",   tip: "Bronze arrowtips",   level: 1  },
+  { tier: "iron",     base: "Iron arrow",     seeking: "Seeking iron arrow",     tip: "Iron arrowtips",     level: 15 },
+  { tier: "steel",    base: "Steel arrow",    seeking: "Seeking steel arrow",    tip: "Steel arrowtips",    level: 30 },
+  { tier: "mithril",  base: "Mithril arrow",  seeking: "Seeking mithril arrow",  tip: "Mithril arrowtips",  level: 45 },
+  { tier: "adamant",  base: "Adamant arrow",  seeking: "Seeking adamant arrow",  tip: "Adamant arrowtips",  level: 60 },
+  { tier: "rune",     base: "Rune arrow",     seeking: "Seeking rune arrow",     tip: "Rune arrowtips",     level: 75 },
+  { tier: "amethyst", base: "Amethyst arrow", seeking: "Seeking amethyst arrow", tip: "Amethyst arrowtips", level: 82 },
+  { tier: "dragon",   base: "Dragon arrow",   seeking: "Seeking dragon arrow",   tip: "Dragon arrowtips",   level: 90 },
 ];
 
 async function scrapeSeekingArrows(nameToId, skipped) {
+  const featherId = nameToId.get("feather");
+  if (!featherId) {
+    skipped.push(`Seeking arrows: feather id missing`);
+    return [];
+  }
   const recipes = [];
-  for (const s of SEEKING_ARROWS) {
-    const baseId = nameToId.get(s.base.toLowerCase());
-    const seekingId = nameToId.get(s.seeking.toLowerCase());
-    if (!baseId || !seekingId) {
-      skipped.push(`Seeking arrows: ${s.seeking} (missing id: base=${baseId}, seeking=${seekingId})`);
+  for (const arr of SEEKING_ARROW_TIERS) {
+    const seekingId = nameToId.get(arr.seeking.toLowerCase());
+    if (!seekingId) {
+      skipped.push(`Seeking arrows: ${arr.seeking} (id missing)`);
       continue;
     }
-    recipes.push({
-      key: `seek-${slugify(s.seeking)}`,
-      id: seekingId, name: s.seeking,
-      cat: "Seeking arrows", skill: "Seeking arrows",
-      level: 1, xp: 0,
-      components: [{ id: baseId, qty: 1 }],
-    });
+
+    // Direct-sap path: existing behaviour.
+    const baseId = nameToId.get(arr.base.toLowerCase());
+    if (baseId) {
+      recipes.push({
+        key: `seek-${arr.tier}-direct`,
+        id: seekingId, name: arr.seeking,
+        cat: "Seeking arrows", skill: "Seeking arrows", subCat: "Direct sap",
+        level: 1, xp: 0,
+        components: [{ id: baseId, qty: 1 }],
+      });
+    } else {
+      skipped.push(`Seeking arrows: ${arr.seeking} (base arrow id missing)`);
+    }
+
+    // Log-path recipes: 1 log + N feathers + N arrowtips → N seeking arrows.
+    const tipId = nameToId.get(arr.tip.toLowerCase());
+    if (!tipId) {
+      skipped.push(`Seeking arrows: ${arr.seeking} log paths (arrowtip id missing)`);
+      continue;
+    }
+    for (const log of SEEKING_LOG_TIERS) {
+      recipes.push({
+        key: `seek-${arr.tier}-${log.key}`,
+        id: seekingId,
+        name: `${arr.seeking} (${log.name})`,
+        cat: "Seeking arrows", skill: "Seeking arrows", subCat: log.subCat,
+        level: Math.max(log.level, arr.level), xp: 0,
+        components: [
+          { id: log.id,     qty: 1 },
+          { id: featherId,  qty: log.yield },
+          { id: tipId,      qty: log.yield },
+        ],
+        resultQty: log.yield,
+      });
+    }
   }
   return recipes;
 }
