@@ -916,6 +916,53 @@ async function scrapeRunecrafting(nameToId, skipped) {
   return recipes;
 }
 
+/* ----------------------------------------------------------
+ * Seeking arrows (Blood Moon Rises reward).
+ *
+ * Each base arrow tier converts 1:1 into its seeking variant via
+ *   15 × <base arrow> + 1 × Bucket of bloodwood sap → 15 × Seeking <base arrow>
+ * The sap is farmed from bloodwood trees and isn't tradeable, so — like the
+ * Arceuus blood/soul altar recipes — we model it as a free supply. Filed
+ * under its own skill "Seeking arrows" so the Skilling dropdown surfaces
+ * them as a distinct group instead of hiding them among 60 other Fletching
+ * arrow/bow recipes.
+ *
+ * XP per craft is 0 on the wiki, level requirement is unspecified — treated
+ * as 1. actionsPerHourMax mirrors the base arrow (~45k arrows/hr = 15 per
+ * click × 3k clicks/hr, the same throughput the fletching scrape uses).
+---------------------------------------------------------- */
+const SEEKING_ARROWS = [
+  { base: "Bronze arrow",   seeking: "Seeking bronze arrow"   },
+  { base: "Iron arrow",     seeking: "Seeking iron arrow"     },
+  { base: "Steel arrow",    seeking: "Seeking steel arrow"    },
+  { base: "Mithril arrow",  seeking: "Seeking mithril arrow"  },
+  { base: "Adamant arrow",  seeking: "Seeking adamant arrow"  },
+  { base: "Rune arrow",     seeking: "Seeking rune arrow"     },
+  { base: "Amethyst arrow", seeking: "Seeking amethyst arrow" },
+  { base: "Dragon arrow",   seeking: "Seeking dragon arrow"   },
+];
+
+async function scrapeSeekingArrows(nameToId, skipped) {
+  const recipes = [];
+  for (const s of SEEKING_ARROWS) {
+    const baseId = nameToId.get(s.base.toLowerCase());
+    const seekingId = nameToId.get(s.seeking.toLowerCase());
+    if (!baseId || !seekingId) {
+      skipped.push(`Seeking arrows: ${s.seeking} (missing id: base=${baseId}, seeking=${seekingId})`);
+      continue;
+    }
+    recipes.push({
+      key: `seek-${slugify(s.seeking)}`,
+      id: seekingId, name: s.seeking,
+      cat: "Seeking arrows", skill: "Seeking arrows",
+      level: 1, xp: 0,
+      components: [{ id: baseId, qty: 1 }],
+      actionsPerHourMax: 45000,
+    });
+  }
+  return recipes;
+}
+
 async function scrapeCrafting(nameToId, skipped) {
   const recipes = [
     ...await scrapeGemCutting(nameToId, skipped),
@@ -966,6 +1013,7 @@ async function main() {
     ...await scrapeCrafting(nameToId, skipped),
     ...await scrapeConstruction(nameToId, skipped),
     ...await scrapeRunecrafting(nameToId, skipped),
+    ...await scrapeSeekingArrows(nameToId, skipped),
   ];
 
   // Stable order: by skill, then level, then name.
