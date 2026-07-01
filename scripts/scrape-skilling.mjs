@@ -927,9 +927,13 @@ async function scrapeRunecrafting(nameToId, skipped) {
  * them as a distinct group instead of hiding them among 60 other Fletching
  * arrow/bow recipes.
  *
- * XP per craft is 0 on the wiki, level requirement is unspecified — treated
- * as 1. actionsPerHourMax mirrors the base arrow (~45k arrows/hr = 15 per
- * click × 3k clicks/hr, the same throughput the fletching scrape uses).
+ * XP per craft is 0 on the wiki (conversion doesn't grant Fletching XP) and
+ * the level requirement is unspecified — treated as 1. Throughput is left
+ * unmodeled (no actionsPerHourMax, no ticks), same as Runecrafting: real
+ * per-hour rates depend on how much sap you've farmed and how much base
+ * arrow supply the GE has, and the theoretical 45k/hr ceiling produced
+ * absurd headline GP/hr numbers on newly-launched items. Cards will show
+ * "—" for GP/hr and XP/hr, and per-action margin is the useful metric.
 ---------------------------------------------------------- */
 const SEEKING_ARROWS = [
   { base: "Bronze arrow",   seeking: "Seeking bronze arrow"   },
@@ -957,7 +961,6 @@ async function scrapeSeekingArrows(nameToId, skipped) {
       cat: "Seeking arrows", skill: "Seeking arrows",
       level: 1, xp: 0,
       components: [{ id: baseId, qty: 1 }],
-      actionsPerHourMax: 45000,
     });
   }
   return recipes;
