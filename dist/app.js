@@ -2960,11 +2960,24 @@ async function init() {
         ["name-asc",         "Name (A→Z)"],
       ];
     } else if (mode === "skilling") {
+      // Prune rate-based sorts when the current skill scope has no throughput
+      // or XP to sort by — otherwise the dropdown offers "GP / hr" for Seeking
+      // arrows where every value is null and sorting does nothing.
+      const skill = state.filters.skillingSkill;
+      const scoped = RECIPES.filter(r =>
+        r.skill && (skill === "all" || r.skill === skill));
+      const hasThroughput = scoped.some(r =>
+        r.actionsPerHourMax != null || r.ticks != null);
+      const hasXp = scoped.some(r => (r.xp || 0) > 0);
       opts = [
-        ["gphr-desc",  "GP / hr (high → low)"],
-        ["xphr-desc",  "XP / hr (high → low)"],
-        ["gpxp-desc",  "GP / XP (most profitable XP)"],
-        ["gpxp-asc",   "GP / XP (cheapest XP)"],
+        ...(hasThroughput ? [
+          ["gphr-desc",  "GP / hr (high → low)"],
+          ["xphr-desc",  "XP / hr (high → low)"],
+        ] : []),
+        ...(hasXp ? [
+          ["gpxp-desc",  "GP / XP (most profitable XP)"],
+          ["gpxp-asc",   "GP / XP (cheapest XP)"],
+        ] : []),
         ["margin-desc","Margin / action (high → low)"],
         ["level-asc",  "Level requirement (low → high)"],
         ["name-asc",   "Name (A→Z)"],
@@ -2987,7 +3000,18 @@ async function init() {
       sel.appendChild(o);
     }
     if (mode === "history")        sel.value = state.filters.historySort;
-    else if (mode === "skilling")  sel.value = state.filters.skillingSort || "gphr-desc";
+    else if (mode === "skilling") {
+      // If the persisted sort was dropped by the throughput/XP prune above,
+      // fall back to the first available (margin-desc after the prune) and
+      // persist the corrected value so it sticks across reloads.
+      const valid = new Set(opts.map(([v]) => v));
+      const persisted = state.filters.skillingSort || "gphr-desc";
+      if (!valid.has(persisted)) {
+        state.filters.skillingSort = opts[0][0];
+        localStorage.setItem("osrs-combo-skilling-sort", state.filters.skillingSort);
+      }
+      sel.value = state.filters.skillingSort;
+    }
     else                            sel.value = state.filters.sort;
   }
   document.getElementById("mode-realtime").addEventListener("click", () => setMode("realtime"));
@@ -3015,6 +3039,9 @@ async function init() {
       localStorage.setItem("osrs-combo-skilling-tiers", "[]");
       renderSkillingSubCatChips();
       renderSkillingTierChips();
+      // Sort options depend on which skill is scoped (e.g. Runecrafting has
+      // no GP/hr to sort by), so rebuild the dropdown on skill change.
+      rebuildSortOptions("skilling");
       renderGrid();
     });
   }
