@@ -163,6 +163,8 @@ const RECIPES = [
   { key:"webweaver-bow-u", id:27652, name:"Webweaver bow (u)", cat:"Wilderness", components:[{id:22547,qty:1},{id:27670,qty:1}] },
   { key:"zamorakian-hasta", id:11889, name:"Zamorakian hasta", cat:"Misc", components:[{id:11824,qty:1}], extraCost:150000 },
 
+  // No enchant runes — same pattern as Necklace of rupture: the etched fang is the whole recipe.
+  { key:"amulet-of-rancour", id:29801, name:"Amulet of rancour", cat:"Zenyte", components:[{id:19553,qty:1},{id:33534,qty:1}] },
   { key:"amulet-of-torture", id:19553, name:"Amulet of torture", cat:"Zenyte", components:[{id:19541,qty:1}], supplies:[{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
   { key:"necklace-of-anguish", id:19547, name:"Necklace of anguish", cat:"Zenyte", components:[{id:19535,qty:1}], supplies:[{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
   // No enchant runes — unlike every other Zenyte upgrade, the fang is the whole recipe.
