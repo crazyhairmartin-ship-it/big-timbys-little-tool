@@ -975,6 +975,10 @@ async function scrapeSeekingArrows(nameToId, skipped) {
       continue;
     }
 
+    // Tier-cased ("bronze" → "Bronze") — matches TIER_ORDER in app.js so the
+    // sidebar tier chips sort in progression order rather than alphabetical.
+    const tierLabel = arr.tier.charAt(0).toUpperCase() + arr.tier.slice(1);
+
     // Direct-sap path: existing behaviour.
     const baseId = nameToId.get(arr.base.toLowerCase());
     if (baseId) {
@@ -982,6 +986,7 @@ async function scrapeSeekingArrows(nameToId, skipped) {
         key: `seek-${arr.tier}-direct`,
         id: seekingId, name: arr.seeking,
         cat: "Seeking arrows", skill: "Seeking arrows", subCat: "Direct sap",
+        tier: tierLabel,
         level: 1, xp: 0,
         components: [{ id: baseId, qty: 1 }],
       });
@@ -1001,6 +1006,7 @@ async function scrapeSeekingArrows(nameToId, skipped) {
         id: seekingId,
         name: `${arr.seeking} (${log.name})`,
         cat: "Seeking arrows", skill: "Seeking arrows", subCat: log.subCat,
+        tier: tierLabel,
         level: Math.max(log.level, arr.level), xp: 0,
         components: [
           { id: log.id,     qty: 1 },
