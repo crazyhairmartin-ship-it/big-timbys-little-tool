@@ -2162,16 +2162,20 @@ function allocateRecipes(opts) {
       if (conf == null || p.confidence < conf) conf = p.confidence;
     }
     if (requireConf && (conf == null || conf < 0.6)) continue;
-    // Density = margin per gp of capital. Higher density = better use of
-    // the budget slot.
-    const density = calc.margin / calc.totalCost;
-    candidates.push({ recipe: r, calc, maxUnits, density, conf });
+    // Expected profit if we take the full 4h/1d capacity of this recipe.
+    // Sorting by THIS (not ROI density) makes the greedy prefer recipes
+    // that can actually absorb capital — you get more absolute profit
+    // by taking 4M into a mid-ROI bulk flip than 200k into a 40%-ROI
+    // niche item with a maxUnits of 2.
+    const expectedProfit = calc.margin * maxUnits;
+    candidates.push({ recipe: r, calc, maxUnits, expectedProfit, conf });
   }
-  // Sort by profit density × confidence² (confidence² matches the
-  // Recommended sort's rankScore intuition).
+  // Sort by expected total profit × confidence² (confidence² matches the
+  // Recommended sort's rankScore intuition; unfavoured items with no
+  // prediction get the 0.5² baseline treatment).
   candidates.sort((a, b) => {
-    const aw = a.density * ((a.conf ?? 0.5) ** 2);
-    const bw = b.density * ((b.conf ?? 0.5) ** 2);
+    const aw = a.expectedProfit * ((a.conf ?? 0.5) ** 2);
+    const bw = b.expectedProfit * ((b.conf ?? 0.5) ** 2);
     return bw - aw;
   });
 
