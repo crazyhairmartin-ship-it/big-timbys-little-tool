@@ -1538,6 +1538,12 @@ footer {
 .allocate-summary-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
 .allocate-summary-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 .allocate-card { cursor: pointer; }
+.allocate-hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+  margin-top: 2px;
+}
 
 /* ---------------- Market mode ----------------
    Indexes are 10 hand-listed items — none of the realtime sidebar filters
