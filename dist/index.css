@@ -1372,6 +1372,72 @@ footer {
   .grid { grid-template-columns: 1fr; }
 }
 
+/* ---------------- Mobile UX pass ----------------
+   Six top-level mode tabs + up-to-37-item chart tab bars need graceful
+   overflow on narrow screens. Horizontal scroll beats stacked wrap here:
+   users can flick sideways for tabs, and the tabs remain touch-hittable.
+*/
+@media (max-width: 880px) {
+  /* Mode tabs: 6 buttons don't fit on a phone — scroll sideways with
+     inertial-friendly behaviour instead of wrapping. */
+  .mode-toggle {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;    /* Firefox */
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    margin-right: 0;
+  }
+  .mode-toggle::-webkit-scrollbar { display: none; }
+  .mode-btn { flex-shrink: 0; padding: 8px 14px; font-size: 13px; }
+
+  /* Chart-tabs: 37-item Bot/Farm basket would eat 5+ rows if left to wrap.
+     Scroll sideways instead. */
+  .chart-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chart-tabs::-webkit-scrollbar { display: none; }
+  .chart-tabs button { flex-shrink: 0; }
+
+  /* Timeframe presets (Year/Quarter/Month/Week/Day + refresh) — allow
+     horizontal scroll to guarantee refresh stays reachable. */
+  .timeframe-buttons {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .timeframe-buttons::-webkit-scrollbar { display: none; }
+
+  /* Tighter grid + card padding — reclaim horizontal real estate. */
+  .grid { padding: 12px; gap: 12px; }
+  .card { padding: 10px; }
+
+  /* Notify button — keep visible in the mobile header row (it was inheriting
+     display:none via the .header-controls collapse). Pin it beside the
+     hamburger so users can enable alerts without having to open the filter
+     drawer first. */
+  header { position: relative; }
+  #notify-btn {
+    position: absolute;
+    top: 12px;
+    right: 62px;   /* leaves room for the hamburger button */
+    padding: 6px 10px;
+    font-size: 14px;
+  }
+}
+
+/* Chart canvas — on very narrow phones the 400px min-height was cutting
+   into everything below the fold. Cap it lower + let it scale. */
+@media (max-width: 480px) {
+  .chart-wrap { height: 260px; }
+  .card-cat-row { gap: 4px; flex-wrap: wrap; }
+  .card-cat { font-size: 10px; padding: 2px 6px; }
+  .skill-chip { font-size: 10px; }
+}
+
 .ov-header {
   display: flex;
   align-items: center;
