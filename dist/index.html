@@ -225,19 +225,20 @@
     <div class="filter-group allocate-sidebar-block">
       <label for="allocate-horizon">Time horizon</label>
       <select id="allocate-horizon">
+        <option value="1d" selected>One day (6 × 4h windows)</option>
         <option value="4h">One 4h buy window</option>
-        <option value="1d">One day (6 windows)</option>
       </select>
+      <div class="allocate-hint">Multiplies each recipe's 4h buy-limit capacity.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
       <label>Max recipes to spread across</label>
-      <input type="number" id="allocate-max-recipes" min="1" max="200" value="30" />
+      <input type="number" id="allocate-max-recipes" min="1" max="200" value="50" />
       <div class="allocate-hint">How many different recipes you're willing to juggle. Not a GE-slot cap.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
-      <label>Max % per recipe</label>
-      <input type="number" id="allocate-max-pct" min="1" max="100" value="25" />
-      <div class="allocate-hint">Diversification cap. 25 = no single recipe eats more than a quarter of the budget.</div>
+      <label>Max % per recipe (diversification)</label>
+      <input type="number" id="allocate-max-pct" min="1" max="100" value="100" />
+      <div class="allocate-hint">100 = no cap. Set lower to prevent one recipe eating the budget.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
       <label class="toggle"><input type="checkbox" id="allocate-require-conf" /> Require ≥ 60% Predictive confidence</label>
@@ -380,12 +381,12 @@
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=14"></script>
-<script src="skilling-recipes.js?v=14"></script>
-<script src="market-indexes.js?v=14"></script>
-<script src="app.js?v=14"></script>
-<script src="overnight.js?v=14"></script>
-<script src="flips-core.js?v=14"></script>
-<script src="flips.js?v=14"></script>
+<script src="overnight-core.js?v=15"></script>
+<script src="skilling-recipes.js?v=15"></script>
+<script src="market-indexes.js?v=15"></script>
+<script src="app.js?v=15"></script>
+<script src="overnight.js?v=15"></script>
+<script src="flips-core.js?v=15"></script>
+<script src="flips.js?v=15"></script>
 </body>
 </html>
