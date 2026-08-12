@@ -147,6 +147,22 @@ header {
 
 #refresh-icon { display: inline-block; }
 #refresh-icon.spinning { animation: spin 0.8s linear infinite; }
+/* Notification toggle button — sits next to refresh in the header. */
+#notify-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: var(--text-0);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+#notify-btn:hover:not(:disabled) { border-color: var(--gold-dim); }
+#notify-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 #refresh-countdown {
   display: inline-block;
   min-width: 32px;
