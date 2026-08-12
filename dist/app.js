@@ -2062,15 +2062,19 @@ function renderIndexCard(idx) {
 // drawActiveTab is bypassed in favour of the index-specific pipeline.
 let activeModalIndex = null;
 
+// Per-index chart cache. Populated once per (index × timeframe) so tab
+// switches between Combined / individual items are instant — the /timeseries
+// data doesn't need to be re-fetched. Invalidated on timeframe change.
+let indexChartCache = { indexKey: null, timeframe: null, byId: null, indexPoints: null };
+
 async function openIndexModal(idx) {
   activeModalRecipe = null;
   activeModalIndex = idx;
   activeChartTab = "combined";
   modalTitle.textContent = idx.name;
-  // Reset chart tabs to a single "Combined" — indexes don't have per-item
-  // sub-views in this pass.
+  // Wipe chart-tabs container — loadIndexChart repopulates once data arrives.
   document.getElementById("chart-tabs").replaceChildren();
-  // Clear the stats panel — index modal has no per-item detail rows.
+  // Clear the stats panel — index modal has no per-item detail rows yet.
   const details = document.getElementById("modal-details");
   if (details) details.replaceChildren();
   if (typeof modal.showModal === "function") modal.showModal();
@@ -2082,8 +2086,22 @@ const INDEX_FETCH_CONCURRENCY = 5;
 
 async function loadIndexChart(idx) {
   const preset = TIMEFRAME_PRESETS[activeTimeframe] || TIMEFRAME_PRESETS.week;
+
+  // Cache hit: skip the fetch, just re-render tabs + active tab. Happens on
+  // tab switches inside the same modal open.
+  const cacheHit = indexChartCache.indexKey === idx.key
+                && indexChartCache.timeframe === activeTimeframe
+                && indexChartCache.byId
+                && indexChartCache.indexPoints;
+  if (cacheHit) {
+    renderIndexChartTabs(idx);
+    drawActiveIndexTab(idx);
+    return;
+  }
+
   modalStatus.textContent = `Loading ${idx.name}: ${idx.items.length} items @ ${preset.step} step…`;
   drawChartMessage("Loading…");
+  document.getElementById("chart-tabs").replaceChildren();
 
   try {
     const cutoff = Date.now() - preset.windowMs;
@@ -2138,12 +2156,67 @@ async function loadIndexChart(idx) {
       return;
     }
 
-    modalStatus.textContent = `${indexPoints.length} points · ${preset.step} step · ${idx.items.length} basket items`;
-    drawIndexChart(indexPoints);
+    // Persist byId as a plain object for the tab-switch code below.
+    const byIdObj = {};
+    for (const [id, points] of seriesById) byIdObj[id] = points;
+    indexChartCache = {
+      indexKey: idx.key,
+      timeframe: activeTimeframe,
+      byId: byIdObj,
+      indexPoints,
+    };
+
+    renderIndexChartTabs(idx);
+    drawActiveIndexTab(idx);
   } catch (e) {
     modalStatus.textContent = `Error: ${e.message}`;
     drawChartMessage("Error loading data");
   }
+}
+
+// Render Combined + one tab per basket item. Same interaction as the combo-
+// item chart tabs. Tab clicks are instant (data lives in indexChartCache).
+function renderIndexChartTabs(idx) {
+  const container = document.getElementById("chart-tabs");
+  container.replaceChildren();
+  const mkButton = (key, label, isCombined = false) => {
+    const btn = el("button", { attrs: { "data-tab": String(key) } });
+    btn.appendChild(document.createTextNode(label));
+    if (isCombined) btn.classList.add("combined");
+    if (String(activeChartTab) === String(key)) btn.classList.add("active");
+    btn.onclick = () => {
+      activeChartTab = key;
+      renderIndexChartTabs(idx);
+      drawActiveIndexTab(idx);
+    };
+    return btn;
+  };
+  container.appendChild(mkButton("combined", "Combined", true));
+  for (const item of idx.items) {
+    container.appendChild(mkButton(item.id, item.name));
+  }
+}
+
+function drawActiveIndexTab(idx) {
+  const preset = TIMEFRAME_PRESETS[activeTimeframe] || TIMEFRAME_PRESETS.week;
+  if (activeChartTab === "combined") {
+    const points = indexChartCache.indexPoints;
+    modalStatus.textContent = `${points.length} points · ${preset.step} step · ${idx.items.length} basket items`;
+    drawIndexChart(points);
+    return;
+  }
+  const itemId = +activeChartTab;
+  const item = idx.items.find(i => i.id === itemId);
+  const raw = indexChartCache.byId[itemId] || [];
+  if (!raw.length) {
+    drawChartMessage("No data");
+    modalStatus.textContent = `${item?.name || `#${itemId}`}: no data`;
+    return;
+  }
+  // Item-level view uses the same drawIndexChart — just plot the mid price.
+  const shaped = raw.map(p => ({ ts: p.ts, value: p.mid }));
+  modalStatus.textContent = `${item?.name || `#${itemId}`}: ${shaped.length} points · ${preset.step} step`;
+  drawIndexChart(shaped);
 }
 
 function drawIndexChart(points) {
@@ -2393,7 +2466,8 @@ document.getElementById("modal-refresh").addEventListener("click", async (e) => 
   const btn = e.currentTarget;
   btn.classList.add("spinning");
   if (activeModalIndex) {
-    // Index charts don't cache to chartCache; re-fetching is just re-loading.
+    // Invalidate the per-index cache so the fetch actually re-runs.
+    indexChartCache = { indexKey: null, timeframe: null, byId: null, indexPoints: null };
     await loadIndexChart(activeModalIndex);
   } else if (activeModalRecipe) {
     chartCache = { recipeKey: null, timeframe: null, byId: {} };
