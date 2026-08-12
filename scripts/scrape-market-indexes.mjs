@@ -79,19 +79,32 @@ const CUSTOM_INDEXES = [
     name: "Bot/Farm Index",
     description: "Items whose price is depressed by bot/farm supply flooding",
     items: [
-      // Gathered-log bots
-      "Yew logs", "Magic logs", "Redwood logs",
-      // Runecraft bots
+      // Smelting bots (finished bars)
+      "Steel bar", "Mithril bar", "Adamantite bar", "Runite bar",
+      // Mining bots (ores + coal)
+      "Iron ore", "Coal", "Adamantite ore", "Runite ore",
+      // Runecraft bots (essence + finished runes)
+      "Pure essence", "Rune essence",
       "Nature rune", "Law rune", "Death rune", "Cosmic rune",
-      // Dragonhide bots (blue/black dragons)
+      // Glassblowing / crafting supply
+      "Air orb",
+      // Fletching supply
+      "Bow string", "Flax",
+      // Cannonball smithing bots
+      "Steel cannonball",
+      // Dragon hide/scale bots
       "Blue dragonhide", "Red dragonhide", "Black dragonhide",
-      "Green dragon leather",
-      // Mining bots
-      "Adamantite ore", "Runite ore", "Coal",
-      // Fishing bots
-      "Raw shark", "Raw monkfish",
-      // Grave / Zulrah / other repetitive supply
+      "Green dragonhide", "Green dragon leather", "Blue dragon scale",
+      // Bone bots
       "Big bones", "Dragon bones",
+      // Fishing bots
+      "Raw lobster", "Raw swordfish", "Raw monkfish", "Raw shark",
+      // Woodcutting bots
+      "Yew logs", "Magic logs", "Redwood logs",
+      // Hunter bots
+      "Chinchompa", "Red chinchompa",
+      // Herblore secondary bots
+      "White berries",
       // Chaos temple bots
       "Wine of zamorak",
     ],
