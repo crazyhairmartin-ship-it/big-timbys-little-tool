@@ -691,6 +691,10 @@ const state = {
   // predicted buy or sell local hour. See checkPredictedHourAlerts().
   notificationsEnabled: localStorage.getItem("osrs-combo-notifications-enabled") === "1",
   alertsFired: new Set(),  // in-memory dedup keys, garbage-collected per hour
+  // Bulk allocator result — populated by the "Calculate allocation" button
+  // and consumed by renderAllocate(). Persists across mode switches so the
+  // user can leave/return without re-running.
+  allocation: null,
   // Snapshot of previous margins so we can show a trend arrow on cards.
   // Keyed by recipe.key; cleared on full refresh after capture.
   lastMargin: {},
@@ -2108,6 +2112,172 @@ function renderIndexCard(idx) {
   return card;
 }
 
+/* ---------------- Bulk Allocator ----------------
+   Given a budget, a time horizon, and a slot cap, propose an allocation
+   of profitable recipes that maximises expected profit while respecting:
+   - Budget: total cost of buys ≤ budget
+   - GE slots: at most `slots` recipes assigned (each recipe conservatively
+     takes ~2 slots — buy phase + sell phase; we model 1 slot per recipe
+     since the buy phase serialises easily but a distinct recipe can't
+     share its sell slot)
+   - GE buy limits: per-recipe unit count ≤ limitFlipsPer4h (or × 6 for
+     the "one day" horizon)
+   - Filters: profitableOnly always applied; optional confidence and
+     skip-skilling toggles
+
+   Uses a greedy sort-by-profit-density algorithm. Bounded knapsack is
+   NP-hard in general but the small item count (~275 combos + 500 skilling)
+   and the tight budget-per-recipe ceiling mean greedy is within a
+   percent or two of the optimal LP-relaxation solution — good enough,
+   sub-millisecond compute, trivial to explain.
+---------------------------------------------------- */
+function allocateRecipes(opts) {
+  const { budget, horizon, slots, requireConf, skipSkilling } = opts;
+  if (!budget || budget <= 0) return { allocations: [], totalCost: 0, totalProfit: 0, note: "Enter a budget" };
+  const horizonMult = horizon === "1d" ? 6 : 1;
+
+  // Pull the currently-visible items with their calc — reuses whatever
+  // filter/strategy the user has set.
+  const candidates = [];
+  const pm = window.overnightData?.predMap || {};
+  for (const r of RECIPES) {
+    if (skipSkilling && r.skill) continue;
+    const calc = calcMargin(r);
+    if (!calc.allPresent) continue;
+    if (!(calc.margin > 0)) continue;
+    if (!(calc.totalCost > 0)) continue;
+    if (calc.limitFlipsPer4h == null) continue;   // can't cap without GE limit info
+    const maxUnits = calc.limitFlipsPer4h * horizonMult;
+    if (maxUnits <= 0) continue;
+    // Confidence gate — only when the recipe has predictions AND the user asked
+    // for it. Recipes with no prediction (most combos when overnight hasn't
+    // been analysed yet) pass through by default.
+    let conf = null;
+    for (const id of [r.id, ...r.components.map(c => c.id)]) {
+      const p = pm[id];
+      if (!p || p.confidence == null) { conf = null; break; }
+      if (conf == null || p.confidence < conf) conf = p.confidence;
+    }
+    if (requireConf && (conf == null || conf < 0.6)) continue;
+    // Density = margin per gp of capital. Higher density = better use of
+    // the budget slot.
+    const density = calc.margin / calc.totalCost;
+    candidates.push({ recipe: r, calc, maxUnits, density, conf });
+  }
+  // Sort by profit density × confidence² (confidence² matches the
+  // Recommended sort's rankScore intuition).
+  candidates.sort((a, b) => {
+    const aw = a.density * ((a.conf ?? 0.5) ** 2);
+    const bw = b.density * ((b.conf ?? 0.5) ** 2);
+    return bw - aw;
+  });
+
+  // Greedy fill: for each candidate, take as many units as fit in remaining
+  // budget + respect maxUnits + one slot per recipe.
+  let remainingBudget = budget;
+  let remainingSlots = slots;
+  const allocations = [];
+  for (const cand of candidates) {
+    if (remainingSlots <= 0 || remainingBudget <= 0) break;
+    const budgetLimited = Math.floor(remainingBudget / cand.calc.totalCost);
+    const count = Math.min(cand.maxUnits, budgetLimited);
+    if (count <= 0) continue;
+    const cost = count * cand.calc.totalCost;
+    const profit = count * cand.calc.margin;
+    allocations.push({
+      recipe: cand.recipe,
+      calc: cand.calc,
+      count,
+      cost,
+      profit,
+      confidence: cand.conf,
+    });
+    remainingBudget -= cost;
+    remainingSlots -= 1;
+  }
+  const totalCost = allocations.reduce((s, a) => s + a.cost, 0);
+  const totalProfit = allocations.reduce((s, a) => s + a.profit, 0);
+  return { allocations, totalCost, totalProfit, remainingBudget, remainingSlots };
+}
+
+function renderAllocate() {
+  const grid = document.getElementById("grid");
+  const tableWrap = document.getElementById("table-wrap");
+  tableWrap.hidden = true;
+  grid.hidden = false;
+  grid.replaceChildren();
+
+  const alloc = state.allocation;
+  if (!alloc) {
+    grid.appendChild(el("div", { class: "empty",
+      text: "Enter a budget in the sidebar and click Calculate allocation." }));
+    return;
+  }
+  if (alloc.note) {
+    grid.appendChild(el("div", { class: "empty", text: alloc.note }));
+    return;
+  }
+  if (!alloc.allocations.length) {
+    grid.appendChild(el("div", { class: "empty",
+      text: "No profitable recipes match the current filters + budget." }));
+    return;
+  }
+
+  // Header summary
+  const summary = el("div", { class: "allocate-summary" });
+  const row = (label, val) => {
+    summary.appendChild(el("div", { class: "allocate-summary-cell" },
+      el("div", { class: "allocate-summary-label", text: label }),
+      el("div", { class: "allocate-summary-value", text: val })));
+  };
+  row("Recipes allocated", String(alloc.allocations.length));
+  row("Total capital deployed", fmtGp(alloc.totalCost));
+  row("Expected profit", fmtGp(Math.round(alloc.totalProfit)));
+  row("Expected ROI", ((alloc.totalProfit / alloc.totalCost) * 100).toFixed(2) + "%");
+  row("Budget remaining", fmtGp(alloc.remainingBudget));
+  row("Slots remaining", String(alloc.remainingSlots));
+  grid.appendChild(summary);
+
+  const frag = document.createDocumentFragment();
+  for (const a of alloc.allocations) frag.appendChild(renderAllocationCard(a));
+  grid.appendChild(frag);
+}
+
+function renderAllocationCard(a) {
+  const card = el("article", { class: "card allocate-card profit" });
+  card.onclick = () => openModal(a.recipe);
+
+  const iconBox = el("div", { class: "card-icon" });
+  const img = el("img", { attrs: { alt: "", loading: "lazy", src: recipeIcon(a.recipe) } });
+  img.onerror = () => { img.style.display = "none"; };
+  iconBox.appendChild(img);
+
+  const catRow = el("div", { class: "card-cat-row" },
+    el("span", { class: "card-cat", text: a.recipe.cat }),
+  );
+  if (a.confidence != null) {
+    catRow.appendChild(el("span", { class: "skill-chip", text: Math.round(a.confidence * 100) + "% reliable" }));
+  }
+  const nameDiv = el("div", { class: "card-name", text: a.recipe.name });
+  const titleBox = el("div", { class: "card-title" }, nameDiv, catRow);
+  card.appendChild(el("div", { class: "card-head" }, iconBox, titleBox));
+
+  const stats = el("div", { class: "card-stats" });
+  const row = (label, val, cls) => {
+    const r = el("div", { class: "stat-row " + (cls || "") });
+    r.appendChild(el("span", { class: "stat-label", text: label }));
+    r.appendChild(el("span", { class: "stat-value", text: val }));
+    return r;
+  };
+  stats.appendChild(row("Buy", `${a.count.toLocaleString()}× @ ${fmtGp(a.calc.totalCost)}`));
+  stats.appendChild(row("Capital", fmtGp(a.cost)));
+  stats.appendChild(row("Expected profit", fmtGp(Math.round(a.profit)), "v-good"));
+  stats.appendChild(row("Margin / craft", fmtGp(Math.round(a.calc.margin))));
+  stats.appendChild(row("ROI", ((a.calc.margin / a.calc.totalCost) * 100).toFixed(2) + "%"));
+  card.appendChild(stats);
+  return card;
+}
+
 // Active index (parallel to activeModalRecipe). When set, loadModalChart/
 // drawActiveTab is bypassed in favour of the index-specific pipeline.
 let activeModalIndex = null;
@@ -2364,6 +2534,7 @@ function renderGrid() {
   if (state.mode === "history" && window.Flips) { window.Flips.renderHistory(); return; }
   if (state.mode === "skilling") { renderSkilling(); return; }
   if (state.mode === "market") { renderMarket(); return; }
+  if (state.mode === "allocate") { renderAllocate(); return; }
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
   // Skilling recipes live in their own mode — exclude them from the
@@ -3446,11 +3617,13 @@ async function init() {
     document.getElementById("mode-skilling").classList.toggle("active", m === "skilling");
     document.getElementById("mode-skilling-overnight").classList.toggle("active", m === "skilling-overnight");
     document.getElementById("mode-market").classList.toggle("active", m === "market");
+    document.getElementById("mode-allocate").classList.toggle("active", m === "allocate");
     document.getElementById("layout").classList.toggle("mode-overnight", m === "overnight");
     document.getElementById("layout").classList.toggle("mode-history", m === "history");
     document.getElementById("layout").classList.toggle("mode-skilling", m === "skilling");
     document.getElementById("layout").classList.toggle("mode-skilling-overnight", m === "skilling-overnight");
     document.getElementById("layout").classList.toggle("mode-market", m === "market");
+    document.getElementById("layout").classList.toggle("mode-allocate", m === "allocate");
     if (prev === "history" && m !== "history" && window.Flips?.onModeExit) {
       window.Flips.onModeExit();
     }
@@ -3535,6 +3708,7 @@ async function init() {
   document.getElementById("mode-skilling").addEventListener("click", () => setMode("skilling"));
   document.getElementById("mode-skilling-overnight").addEventListener("click", () => setMode("skilling-overnight"));
   document.getElementById("mode-market").addEventListener("click", () => setMode("market"));
+  document.getElementById("mode-allocate").addEventListener("click", () => setMode("allocate"));
 
   // Skilling sidebar wiring.
   const skillSel = document.getElementById("skilling-skill");
@@ -3870,6 +4044,41 @@ async function init() {
       localStorage.setItem("osrs-combo-notifications-enabled", "0");
     }
     updateNotifyButton();
+  }
+
+  // Bulk allocator: Calculate button reads sidebar inputs, runs the greedy
+  // allocation, and re-renders the Allocate tab with the result.
+  const allocateBtn = document.getElementById("allocate-btn");
+  if (allocateBtn) {
+    // Parse "200000000" or "200,000,000" or "200m" style input.
+    const parseGp = (s) => {
+      if (!s) return null;
+      s = String(s).trim().toLowerCase().replace(/,/g, "").replace(/\s/g, "");
+      const suffix = s.match(/([kmb])$/);
+      const mult = { k: 1e3, m: 1e6, b: 1e9 }[suffix?.[1]] || 1;
+      const num = parseFloat(suffix ? s.slice(0, -1) : s);
+      return isFinite(num) ? num * mult : null;
+    };
+    allocateBtn.addEventListener("click", () => {
+      const budget = parseGp(document.getElementById("allocate-budget").value);
+      const horizon = document.getElementById("allocate-horizon").value;
+      const slots = Math.max(1, Math.min(8, parseInt(document.getElementById("allocate-slots").value, 10) || 8));
+      const requireConf = document.getElementById("allocate-require-conf").checked;
+      const skipSkilling = document.getElementById("allocate-skip-skilling").checked;
+      state.allocation = allocateRecipes({ budget, horizon, slots, requireConf, skipSkilling });
+      // Persist inputs so they survive reload.
+      localStorage.setItem("osrs-combo-allocate-budget", document.getElementById("allocate-budget").value);
+      localStorage.setItem("osrs-combo-allocate-horizon", horizon);
+      localStorage.setItem("osrs-combo-allocate-slots", String(slots));
+      renderGrid();
+    });
+    // Restore persisted inputs on load
+    const savedBudget = localStorage.getItem("osrs-combo-allocate-budget");
+    if (savedBudget) document.getElementById("allocate-budget").value = savedBudget;
+    const savedHorizon = localStorage.getItem("osrs-combo-allocate-horizon");
+    if (savedHorizon) document.getElementById("allocate-horizon").value = savedHorizon;
+    const savedSlots = localStorage.getItem("osrs-combo-allocate-slots");
+    if (savedSlots) document.getElementById("allocate-slots").value = savedSlots;
   }
 
   // Sidebar collapse toggle

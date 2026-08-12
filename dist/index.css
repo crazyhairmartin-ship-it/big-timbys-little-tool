@@ -1503,6 +1503,42 @@ footer {
 #layout:not(.mode-overnight) .ov-time-filter { display: none; }
 
 
+/* ---------------- Allocate mode ----------------
+   Sidebar shows only the Allocate inputs. Grid shows a summary header +
+   one card per allocated recipe. Hide the realtime filters that don't
+   apply. */
+.allocate-sidebar-block { display: none; }
+.mode-allocate .allocate-sidebar-block { display: flex; flex-direction: column; gap: 6px; }
+.mode-allocate .filter-group:has(#search),
+.mode-allocate .filter-group:has(#hide-stale-products),
+.mode-allocate .filter-group:has(#hide-stale-components),
+.mode-allocate .filter-group:has(#hide-low-volume),
+.mode-allocate .filter-group:has(#ge-slots),
+.mode-allocate .filter-group:has(#categories),
+.mode-allocate .filter-group:has(#sort),
+.mode-allocate .filter-group.cost-range,
+.mode-allocate .filter-group.toggles,
+.mode-allocate .ov-time-filter,
+.mode-allocate .view-toggle {
+  display: none;
+}
+
+.allocate-summary {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.allocate-summary-cell { display: flex; flex-direction: column; gap: 2px; }
+.allocate-summary-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.allocate-summary-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.allocate-card { cursor: pointer; }
+
 /* ---------------- Market mode ----------------
    Indexes are 10 hand-listed items — none of the realtime sidebar filters
    apply. Hide the whole filter stack; keep only the Sort dropdown since it
