@@ -33,20 +33,31 @@ const WIKI_INDEXES = [
  */
 const CUSTOM_INDEXES = [
   {
-    key: "raids",
-    name: "Raids Index",
-    description: "Unique drops from Chambers of Xeric, Theatre of Blood, and Tombs of Amascut",
+    key: "cox",
+    name: "CoX Index",
+    description: "Unique drops from Chambers of Xeric",
     items: [
-      // Chambers of Xeric uniques
       "Twisted bow", "Kodai insignia", "Dragon claws", "Elder maul",
       "Dinh's bulwark", "Dragon hunter crossbow", "Twisted buckler",
       "Ancestral hat", "Ancestral robe top", "Ancestral robe bottom",
       "Dexterous prayer scroll", "Arcane prayer scroll", "Torn prayer scroll",
-      // Theatre of Blood uniques
+    ],
+  },
+  {
+    key: "tob",
+    name: "ToB Index",
+    description: "Unique drops from Theatre of Blood",
+    items: [
       "Scythe of vitur (uncharged)", "Ghrazi rapier", "Sanguinesti staff (uncharged)",
       "Justiciar faceguard", "Justiciar chestguard", "Justiciar legguards",
       "Avernic defender hilt",
-      // Tombs of Amascut uniques
+    ],
+  },
+  {
+    key: "toa",
+    name: "ToA Index",
+    description: "Unique drops from Tombs of Amascut",
+    items: [
       "Tumeken's shadow (uncharged)", "Elidinis' ward", "Osmumten's fang",
       "Masori mask", "Masori body", "Masori chaps", "Lightbearer",
     ],
