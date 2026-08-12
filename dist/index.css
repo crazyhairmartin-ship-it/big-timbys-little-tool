@@ -1469,6 +1469,36 @@ footer {
   border-top: 1px solid var(--line);
   margin-top: 4px;
 }
+/* 24h change chip — one row on each market card. Coloured by direction. */
+.market-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.market-chip-up   { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+.market-chip-down { background: rgba(239, 68, 68,  0.15); color: #f87171; }
+.market-chip-flat { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+
+/* Chart-modal stats row: 24h / 7d / 30d / YTD % change above the chart */
+.index-change-row {
+  display: flex;
+  gap: 12px;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.index-change-row .index-change-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.index-change-row .index-change-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.index-change-row .index-change-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 
 
 /* ---------------- History mode ---------------- */

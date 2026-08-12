@@ -2007,6 +2007,31 @@ function computeIndexValue(idx) {
   };
 }
 
+// 24h change: uses the wiki's /24h rolling average as the "24h-ago" reference.
+// Not exactly "value at t-24h" — it's the mean over the past window — but the
+// approximation is close enough for a directional chip. Returns null when the
+// current or 24h-avg basket coverage is too thin to trust the comparison.
+function computeIndex24hChange(idx) {
+  const nowValue = computeIndexValue(idx).value;
+  if (!isFinite(nowValue) || nowValue === 0) return null;
+  const avg = state.avg24h;
+  if (!avg) return null;
+  let sum24 = 0, contributing = 0;
+  for (const item of idx.items) {
+    const p = avg[item.id];
+    if (!p || (p.high == null && p.low == null)) continue;
+    const mid = ((p.high ?? p.low) + (p.low ?? p.high)) / 2;
+    sum24 += mid;
+    contributing++;
+  }
+  // Skip the chip if <70% of the basket has a 24h avg — otherwise a couple of
+  // items dropping in/out over the day would swing the calc absurdly.
+  if (contributing < idx.items.length * 0.7) return null;
+  const past = sum24 / idx.divisor;
+  if (past === 0) return null;
+  return (nowValue - past) / past;  // signed fraction: +0.05 = up 5%
+}
+
 function renderMarket() {
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
@@ -2046,6 +2071,27 @@ function renderIndexCard(idx) {
     return r;
   };
   stats.appendChild(row("Current value", contributing > 0 ? fmtGp(Math.round(value)) : "—"));
+
+  // 24h change chip — green for gains, red for losses, muted for flat/no-data
+  const change = computeIndex24hChange(idx);
+  const chipRow = el("div", { class: "stat-row" });
+  chipRow.appendChild(el("span", { class: "stat-label", text: "24h change" }));
+  if (change == null) {
+    chipRow.appendChild(el("span", { class: "stat-value", text: "—" }));
+  } else {
+    const pct = change * 100;
+    const cls = pct >= 0.5 ? "market-chip-up"
+             : pct <= -0.5 ? "market-chip-down"
+             : "market-chip-flat";
+    const arrow = pct >= 0.5 ? "▲" : pct <= -0.5 ? "▼" : "→";
+    const chip = el("span", { class: `market-chip ${cls}`,
+      text: `${arrow} ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` });
+    const wrap = el("span", { class: "stat-value" });
+    wrap.appendChild(chip);
+    chipRow.appendChild(wrap);
+  }
+  stats.appendChild(chipRow);
+
   stats.appendChild(row("Divisor", String(idx.divisor)));
   if (contributing < total) {
     stats.appendChild(row("Priced items", `${contributing} / ${total}`));
@@ -2197,11 +2243,28 @@ function renderIndexChartTabs(idx) {
   }
 }
 
+// Format a signed change fraction as "▲ +2.34%" / "▼ -1.02%" / "→ +0.05%"
+function fmtChangeChip(frac) {
+  if (frac == null || !isFinite(frac)) return "";
+  const pct = frac * 100;
+  const arrow = pct >= 0.05 ? "▲" : pct <= -0.05 ? "▼" : "→";
+  return `${arrow} ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+}
+
 function drawActiveIndexTab(idx) {
   const preset = TIMEFRAME_PRESETS[activeTimeframe] || TIMEFRAME_PRESETS.week;
+  // Change over the displayed range = last vs first point.
+  const rangeChange = (points) => {
+    const valuesKey = points[0]?.value != null ? "value" : "mid";
+    const first = points[0]?.[valuesKey], last = points[points.length - 1]?.[valuesKey];
+    if (first == null || last == null || first === 0) return null;
+    return (last - first) / first;
+  };
   if (activeChartTab === "combined") {
     const points = indexChartCache.indexPoints;
-    modalStatus.textContent = `${points.length} points · ${preset.step} step · ${idx.items.length} basket items`;
+    const change = rangeChange(points);
+    const changeStr = change != null ? ` · ${fmtChangeChip(change)} over range` : "";
+    modalStatus.textContent = `${points.length} points · ${preset.step} step · ${idx.items.length} basket items${changeStr}`;
     drawIndexChart(points);
     return;
   }
@@ -2215,7 +2278,9 @@ function drawActiveIndexTab(idx) {
   }
   // Item-level view uses the same drawIndexChart — just plot the mid price.
   const shaped = raw.map(p => ({ ts: p.ts, value: p.mid }));
-  modalStatus.textContent = `${item?.name || `#${itemId}`}: ${shaped.length} points · ${preset.step} step`;
+  const change = rangeChange(shaped);
+  const changeStr = change != null ? ` · ${fmtChangeChip(change)} over range` : "";
+  modalStatus.textContent = `${item?.name || `#${itemId}`}: ${shaped.length} points · ${preset.step} step${changeStr}`;
   drawIndexChart(shaped);
 }
 
