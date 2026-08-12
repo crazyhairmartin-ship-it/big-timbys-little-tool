@@ -2132,9 +2132,12 @@ function renderIndexCard(idx) {
    sub-millisecond compute, trivial to explain.
 ---------------------------------------------------- */
 function allocateRecipes(opts) {
-  const { budget, horizon, slots, requireConf, skipSkilling } = opts;
+  const { budget, horizon, maxRecipes, maxPerRecipePct, requireConf, skipSkilling } = opts;
   if (!budget || budget <= 0) return { allocations: [], totalCost: 0, totalProfit: 0, note: "Enter a budget" };
   const horizonMult = horizon === "1d" ? 6 : 1;
+  const perRecipeCap = maxPerRecipePct > 0 && maxPerRecipePct < 100
+    ? budget * (maxPerRecipePct / 100)
+    : Infinity;
 
   // Pull the currently-visible items with their calc — reuses whatever
   // filter/strategy the user has set.
@@ -2172,15 +2175,23 @@ function allocateRecipes(opts) {
     return bw - aw;
   });
 
-  // Greedy fill: for each candidate, take as many units as fit in remaining
-  // budget + respect maxUnits + one slot per recipe.
+  // Greedy fill: walk the FULL candidate list until budget runs out or we
+  // hit the max-recipes ceiling. Each recipe is capped by its 4h buy-limit
+  // AND by the per-recipe budget cap (so one high-ROI item can't eat 90%
+  // of a large budget).
   let remainingBudget = budget;
-  let remainingSlots = slots;
+  let recipesUsed = 0;
   const allocations = [];
   for (const cand of candidates) {
-    if (remainingSlots <= 0 || remainingBudget <= 0) break;
+    if (remainingBudget <= 0) break;
+    if (recipesUsed >= maxRecipes) break;
+    // How much of THIS recipe can we buy?
+    //   - Budget-limited by remaining budget
+    //   - Diversification-limited by per-recipe cap (percentage of total budget)
+    //   - Supply-limited by 4h GE buy limit × horizon
     const budgetLimited = Math.floor(remainingBudget / cand.calc.totalCost);
-    const count = Math.min(cand.maxUnits, budgetLimited);
+    const perRecipeLimited = Math.floor(perRecipeCap / cand.calc.totalCost);
+    const count = Math.min(cand.maxUnits, budgetLimited, perRecipeLimited);
     if (count <= 0) continue;
     const cost = count * cand.calc.totalCost;
     const profit = count * cand.calc.margin;
@@ -2193,11 +2204,27 @@ function allocateRecipes(opts) {
       confidence: cand.conf,
     });
     remainingBudget -= cost;
-    remainingSlots -= 1;
+    recipesUsed += 1;
   }
   const totalCost = allocations.reduce((s, a) => s + a.cost, 0);
   const totalProfit = allocations.reduce((s, a) => s + a.profit, 0);
-  return { allocations, totalCost, totalProfit, remainingBudget, remainingSlots };
+  const deployedPct = (totalCost / budget) * 100;
+  return {
+    allocations,
+    totalCost,
+    totalProfit,
+    remainingBudget,
+    recipesUsed,
+    candidatesConsidered: candidates.length,
+    deployedPct,
+    // If we ran out of viable recipes before deploying the budget, note why —
+    // helps the user diagnose "why didn't it use my 300M?" without needing to
+    // dig into the code.
+    exhaustedReason:
+      remainingBudget <= 0 ? "budget fully deployed"
+      : recipesUsed >= maxRecipes ? `hit max-recipes cap (${maxRecipes})`
+      : "ran out of candidates that clear filters + per-recipe cap",
+  };
 }
 
 function renderAllocate() {
@@ -2231,11 +2258,11 @@ function renderAllocate() {
       el("div", { class: "allocate-summary-value", text: val })));
   };
   row("Recipes allocated", String(alloc.allocations.length));
-  row("Total capital deployed", fmtGp(alloc.totalCost));
+  row("Capital deployed", `${fmtGp(alloc.totalCost)} (${alloc.deployedPct.toFixed(1)}%)`);
+  row("Budget remaining", fmtGp(alloc.remainingBudget));
   row("Expected profit", fmtGp(Math.round(alloc.totalProfit)));
   row("Expected ROI", ((alloc.totalProfit / alloc.totalCost) * 100).toFixed(2) + "%");
-  row("Budget remaining", fmtGp(alloc.remainingBudget));
-  row("Slots remaining", String(alloc.remainingSlots));
+  row("Stopped because", alloc.exhaustedReason);
   grid.appendChild(summary);
 
   const frag = document.createDocumentFragment();
@@ -4062,14 +4089,16 @@ async function init() {
     allocateBtn.addEventListener("click", () => {
       const budget = parseGp(document.getElementById("allocate-budget").value);
       const horizon = document.getElementById("allocate-horizon").value;
-      const slots = Math.max(1, Math.min(8, parseInt(document.getElementById("allocate-slots").value, 10) || 8));
+      const maxRecipes = Math.max(1, Math.min(200, parseInt(document.getElementById("allocate-max-recipes").value, 10) || 30));
+      const maxPerRecipePct = Math.max(1, Math.min(100, parseFloat(document.getElementById("allocate-max-pct").value) || 25));
       const requireConf = document.getElementById("allocate-require-conf").checked;
       const skipSkilling = document.getElementById("allocate-skip-skilling").checked;
-      state.allocation = allocateRecipes({ budget, horizon, slots, requireConf, skipSkilling });
+      state.allocation = allocateRecipes({ budget, horizon, maxRecipes, maxPerRecipePct, requireConf, skipSkilling });
       // Persist inputs so they survive reload.
       localStorage.setItem("osrs-combo-allocate-budget", document.getElementById("allocate-budget").value);
       localStorage.setItem("osrs-combo-allocate-horizon", horizon);
-      localStorage.setItem("osrs-combo-allocate-slots", String(slots));
+      localStorage.setItem("osrs-combo-allocate-max-recipes", String(maxRecipes));
+      localStorage.setItem("osrs-combo-allocate-max-pct", String(maxPerRecipePct));
       renderGrid();
     });
     // Restore persisted inputs on load
@@ -4077,8 +4106,10 @@ async function init() {
     if (savedBudget) document.getElementById("allocate-budget").value = savedBudget;
     const savedHorizon = localStorage.getItem("osrs-combo-allocate-horizon");
     if (savedHorizon) document.getElementById("allocate-horizon").value = savedHorizon;
-    const savedSlots = localStorage.getItem("osrs-combo-allocate-slots");
-    if (savedSlots) document.getElementById("allocate-slots").value = savedSlots;
+    const savedMaxRecipes = localStorage.getItem("osrs-combo-allocate-max-recipes");
+    if (savedMaxRecipes) document.getElementById("allocate-max-recipes").value = savedMaxRecipes;
+    const savedMaxPct = localStorage.getItem("osrs-combo-allocate-max-pct");
+    if (savedMaxPct) document.getElementById("allocate-max-pct").value = savedMaxPct;
   }
 
   // Sidebar collapse toggle
