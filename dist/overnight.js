@@ -7,7 +7,7 @@
 
 const OVERNIGHT_MIN_VOLUME = 10;    // skip items trading < 10/24h (too thin to predict)
 const OVERNIGHT_FETCH_CONCURRENCY = 5;
-const OVERNIGHT_CACHE_KEY = "osrs-combo-overnight-v2";
+const OVERNIGHT_CACHE_KEY = "osrs-combo-overnight-v3";
 const OVERNIGHT_CACHE_TTL_MS = 24 * 3600 * 1000;
 const OVERNIGHT_TREND_DISCOUNT = 0.5;  // fraction of a downtrend applied as a sell-price haircut
 // Component-dip "buying opportunity" thresholds (volatility-aware z-scores).
@@ -171,7 +171,10 @@ async function runOvernightAnalysis(onProgress) {
     predMap[id] = {
       overnight: a.predBuy,
       daytime: a.predSell * (1 + trendDiscount * Math.min(0, trend)),
-      confidence: a.confidence,
+      confidence: a.confidence,           // Wilson lower-bound (what UI displays)
+      confidenceGood: a.confidenceGood,   // days where pattern held
+      confidenceEvaluable: a.confidenceEvaluable, // total days scored
+      confidenceRaw: a.confidenceRaw,     // pre-Wilson naive fraction
       buyHour: windows.buyHours[0] ?? null,
       sellHour: windows.sellHours[0] ?? null,
       trend,
@@ -243,16 +246,19 @@ function overnightLocalHour(utcHour) {
 }
 
 // The recipe's confidence = minimum confidence among product + all components.
-// Returns a 0–1 number, or null if any prediction is missing.
+// Returns { confidence, bottleneckId } or null if any prediction is missing.
+// The bottleneck is the specific item whose confidence set the min — useful
+// to show in the "% reliable" tooltip so the user can see *why* a recipe
+// scored low ("bottlenecked by the herb, only 6 of 12 evaluable days").
 function overnightRecipeConfidence(recipe) {
   const pm = overnightData.predMap;
-  let min = Infinity;
+  let min = Infinity, bottleneckId = null;
   for (const id of [recipe.id, ...recipe.components.map(c => c.id)]) {
     const p = pm[id];
     if (!p || p.confidence == null) return null;
-    if (p.confidence < min) min = p.confidence;
+    if (p.confidence < min) { min = p.confidence; bottleneckId = id; }
   }
-  return min === Infinity ? null : min;
+  return min === Infinity ? null : { confidence: min, bottleneckId };
 }
 
 // A trend chip for the recipe card — reuses the realtime .trend-chip styling.
@@ -322,7 +328,21 @@ function overnightRecipeCard(recipe, calc) {
     el("span", { class: "card-cat", text: recipe.cat }),
   );
   if (conf !== null) {
-    catRow.appendChild(el("span", { class: "skill-chip", text: Math.round(conf * 100) + "% reliable" }));
+    // Build a tooltip that explains the reliability number: which item was
+    // the bottleneck + how many evaluable days it had. Helps the user tell
+    // "reliable across 60 days" from "reliable across 6 days".
+    const bp = overnightData.predMap[conf.bottleneckId];
+    const bottleneckName = state.mapping?.[conf.bottleneckId]?.name || `#${conf.bottleneckId}`;
+    let tooltip;
+    if (bp && bp.confidenceEvaluable != null) {
+      const rawPct = bp.confidenceRaw != null ? (bp.confidenceRaw * 100).toFixed(0) : "?";
+      tooltip = `Bottlenecked by ${bottleneckName}: ${bp.confidenceGood} of ${bp.confidenceEvaluable} evaluable days had buy-hour < sell-hour (raw ${rawPct}%, Wilson-adjusted for sample size)`;
+    } else {
+      tooltip = `Recipe reliability = minimum across product + components`;
+    }
+    const chip = el("span", { class: "skill-chip", text: Math.round(conf.confidence * 100) + "% reliable" });
+    chip.title = tooltip;
+    catRow.appendChild(chip);
   }
   const trendChipEl = overnightTrendChip(overnightData.predMap[recipe.id] && overnightData.predMap[recipe.id].trend);
   if (trendChipEl) catRow.appendChild(trendChipEl);
@@ -495,7 +515,8 @@ function overnightVisible() {
     // _confidence is the recipe's reliability (min over product + components).
     // scoreRecommended reads it as a 5th metric on the Experimental grid only —
     // realtime items have no predictions, so _confidence stays undefined there.
-    item._confidence = overnightRecipeConfidence(recipe);
+    const c = overnightRecipeConfidence(recipe);
+    item._confidence = c ? c.confidence : null;
     out.push(item);
   }
   return sortRecipeList(out);
