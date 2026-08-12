@@ -230,8 +230,14 @@
       </select>
     </div>
     <div class="filter-group allocate-sidebar-block">
-      <label>GE slots to use</label>
-      <input type="number" id="allocate-slots" min="1" max="8" value="8" />
+      <label>Max recipes to spread across</label>
+      <input type="number" id="allocate-max-recipes" min="1" max="200" value="30" />
+      <div class="allocate-hint">How many different recipes you're willing to juggle. Not a GE-slot cap.</div>
+    </div>
+    <div class="filter-group allocate-sidebar-block">
+      <label>Max % per recipe</label>
+      <input type="number" id="allocate-max-pct" min="1" max="100" value="25" />
+      <div class="allocate-hint">Diversification cap. 25 = no single recipe eats more than a quarter of the budget.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
       <label class="toggle"><input type="checkbox" id="allocate-require-conf" /> Require ≥ 60% Predictive confidence</label>
@@ -374,12 +380,12 @@
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=13"></script>
-<script src="skilling-recipes.js?v=13"></script>
-<script src="market-indexes.js?v=13"></script>
-<script src="app.js?v=13"></script>
-<script src="overnight.js?v=13"></script>
-<script src="flips-core.js?v=13"></script>
-<script src="flips.js?v=13"></script>
+<script src="overnight-core.js?v=14"></script>
+<script src="skilling-recipes.js?v=14"></script>
+<script src="market-indexes.js?v=14"></script>
+<script src="app.js?v=14"></script>
+<script src="overnight.js?v=14"></script>
+<script src="flips-core.js?v=14"></script>
+<script src="flips.js?v=14"></script>
 </body>
 </html>
