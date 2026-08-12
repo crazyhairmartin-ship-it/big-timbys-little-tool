@@ -112,6 +112,28 @@ function ocDayKey(tsSeconds) {
 }
 
 // Fraction of days on which the buy-hours mean was below the sell-hours mean.
+// Wilson lower-bound on the success rate — shrinks small-sample "100%" back
+// toward the baseline that finite evidence actually supports. 8-of-8 evaluable
+// days becomes ~68%, not 100%; 80-of-80 becomes ~96%. Fixes the "22 items
+// showing bogus 100% reliable" issue where a handful of days of buy-mean <
+// sell-mean lucked into a perfect streak.
+// z=1.96 corresponds to a 95% confidence interval.
+function wilsonLowerBound(good, n, z = 1.96) {
+  if (n <= 0) return 0;
+  const p = good / n;
+  const z2 = z * z;
+  const denom = 1 + z2 / n;
+  const center = (p + z2 / (2 * n)) / denom;
+  const half = (z * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n))) / denom;
+  return Math.max(0, center - half);
+}
+
+// Returns { confidence, raw, good, evaluable } where:
+//   confidence = Wilson lower-bound (what the UI displays)
+//   raw        = naive good / evaluable (kept for backwards debug / diagnostics)
+//   good       = day count where buy-hour mean < sell-hour mean
+//   evaluable  = day count with both buy-hour and sell-hour points
+// The UI can render "X of Y days" for transparency alongside the % chip.
 function confidenceOf(series, windows) {
   const buySet = new Set(windows.buyHours);
   const sellSet = new Set(windows.sellHours);
@@ -134,7 +156,13 @@ function confidenceOf(series, windows) {
     const sellMean = day.sell.reduce((a, b) => a + b, 0) / day.sell.length;
     if (buyMean < sellMean) good += 1;
   }
-  return evaluable > 0 ? good / evaluable : 0;
+  const raw = evaluable > 0 ? good / evaluable : 0;
+  return {
+    confidence: wilsonLowerBound(good, evaluable),
+    raw,
+    good,
+    evaluable,
+  };
 }
 
 // Profit per unit: sale price, less GE tax on the sale, less the buy price.
@@ -162,11 +190,19 @@ function analyzeItem(id, series, windows, taxFn, baselineDays = OC_BASELINE_DAYS
   if (predBuy == null || predSell == null || predBuy <= 0 || predSell <= 0) return null;
   const profit = predictedProfit(predBuy, predSell, taxFn);
   const profitPct = profit / predBuy;
-  const confidence = confidenceOf(series, windows);
+  const c = confidenceOf(series, windows);
   return {
     id,
-    predBuy, predSell, profit, profitPct, confidence,
-    score: rankScore(profitPct, confidence),
+    predBuy, predSell, profit, profitPct,
+    confidence: c.confidence,
+    // Extra transparency fields for the UI — how many evaluable days went into
+    // the confidence number, and how many were "good" (buy-mean < sell-mean).
+    // Also the raw (unshrunk) fraction for anyone who wants to see the pre-
+    // Wilson value.
+    confidenceGood: c.good,
+    confidenceEvaluable: c.evaluable,
+    confidenceRaw: c.raw,
+    score: rankScore(profitPct, c.confidence),
     curve: hourlyProfile(series),
   };
 }

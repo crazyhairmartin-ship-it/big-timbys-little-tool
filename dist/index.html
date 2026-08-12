@@ -53,6 +53,9 @@
       Smithing
       <input type="number" id="smithing-level" min="1" max="99" value="99">
     </label>
+    <button id="notify-btn" title="Alert me when a favorited item hits its predicted buy/sell hour">
+      <span id="notify-icon">🔕</span>
+    </button>
     <button id="refresh-btn" class="btn-primary" title="Manual refresh">
       <span id="refresh-icon">⟳</span>
       <span id="refresh-countdown">60s</span>
@@ -215,6 +218,28 @@
       <label class="toggle"><input type="checkbox" id="runecrafting-binding-necklace"> Binding necklace <span class="boost-note">(combo runes: 50%→100%)</span></label>
       <label class="toggle"><input type="checkbox" id="runecrafting-magic-imbue"> Magic Imbue <span class="boost-note">(skip 2nd talisman)</span></label>
     </div>
+    <div class="filter-group allocate-sidebar-block">
+      <label>Budget (gp)</label>
+      <input type="text" id="allocate-budget" inputmode="numeric" placeholder="e.g. 200000000" />
+    </div>
+    <div class="filter-group allocate-sidebar-block">
+      <label for="allocate-horizon">Time horizon</label>
+      <select id="allocate-horizon">
+        <option value="4h">One 4h buy window</option>
+        <option value="1d">One day (6 windows)</option>
+      </select>
+    </div>
+    <div class="filter-group allocate-sidebar-block">
+      <label>GE slots to use</label>
+      <input type="number" id="allocate-slots" min="1" max="8" value="8" />
+    </div>
+    <div class="filter-group allocate-sidebar-block">
+      <label class="toggle"><input type="checkbox" id="allocate-require-conf" /> Require ≥ 60% Predictive confidence</label>
+      <label class="toggle"><input type="checkbox" id="allocate-skip-skilling" /> Skip skilling recipes</label>
+    </div>
+    <div class="filter-group allocate-sidebar-block">
+      <button id="allocate-btn" class="btn-primary" style="width:100%">Calculate allocation</button>
+    </div>
     <div class="filter-group history-sidebar-block">
       <label for="history-range">Time range</label>
       <select id="history-range">
@@ -276,6 +301,7 @@
       <button id="mode-skilling" class="mode-btn" data-mode="skilling">Skilling</button>
       <button id="mode-skilling-overnight" class="mode-btn" data-mode="skilling-overnight">Skilling Predictive</button>
       <button id="mode-market" class="mode-btn" data-mode="market">Market</button>
+      <button id="mode-allocate" class="mode-btn" data-mode="allocate">Allocate</button>
     </div>
     <div class="view-toggle">
       <button id="view-cards" class="vt-btn active" data-view="cards">Cards</button>
@@ -348,12 +374,12 @@
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=10"></script>
-<script src="skilling-recipes.js?v=10"></script>
-<script src="market-indexes.js?v=10"></script>
-<script src="app.js?v=10"></script>
-<script src="overnight.js?v=10"></script>
-<script src="flips-core.js?v=10"></script>
-<script src="flips.js?v=10"></script>
+<script src="overnight-core.js?v=13"></script>
+<script src="skilling-recipes.js?v=13"></script>
+<script src="market-indexes.js?v=13"></script>
+<script src="app.js?v=13"></script>
+<script src="overnight.js?v=13"></script>
+<script src="flips-core.js?v=13"></script>
+<script src="flips.js?v=13"></script>
 </body>
 </html>

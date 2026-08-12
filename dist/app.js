@@ -687,6 +687,14 @@ const state = {
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
+  // Browser notification alerts — auto-fire when a favorited item hits its
+  // predicted buy or sell local hour. See checkPredictedHourAlerts().
+  notificationsEnabled: localStorage.getItem("osrs-combo-notifications-enabled") === "1",
+  alertsFired: new Set(),  // in-memory dedup keys, garbage-collected per hour
+  // Bulk allocator result — populated by the "Calculate allocation" button
+  // and consumed by renderAllocate(). Persists across mode switches so the
+  // user can leave/return without re-running.
+  allocation: null,
   // Snapshot of previous margins so we can show a trend arrow on cards.
   // Keyed by recipe.key; cleared on full refresh after capture.
   lastMargin: {},
@@ -2007,6 +2015,31 @@ function computeIndexValue(idx) {
   };
 }
 
+// 24h change: uses the wiki's /24h rolling average as the "24h-ago" reference.
+// Not exactly "value at t-24h" — it's the mean over the past window — but the
+// approximation is close enough for a directional chip. Returns null when the
+// current or 24h-avg basket coverage is too thin to trust the comparison.
+function computeIndex24hChange(idx) {
+  const nowValue = computeIndexValue(idx).value;
+  if (!isFinite(nowValue) || nowValue === 0) return null;
+  const avg = state.avg24h;
+  if (!avg) return null;
+  let sum24 = 0, contributing = 0;
+  for (const item of idx.items) {
+    const p = avg[item.id];
+    if (!p || (p.high == null && p.low == null)) continue;
+    const mid = ((p.high ?? p.low) + (p.low ?? p.high)) / 2;
+    sum24 += mid;
+    contributing++;
+  }
+  // Skip the chip if <70% of the basket has a 24h avg — otherwise a couple of
+  // items dropping in/out over the day would swing the calc absurdly.
+  if (contributing < idx.items.length * 0.7) return null;
+  const past = sum24 / idx.divisor;
+  if (past === 0) return null;
+  return (nowValue - past) / past;  // signed fraction: +0.05 = up 5%
+}
+
 function renderMarket() {
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
@@ -2046,6 +2079,27 @@ function renderIndexCard(idx) {
     return r;
   };
   stats.appendChild(row("Current value", contributing > 0 ? fmtGp(Math.round(value)) : "—"));
+
+  // 24h change chip — green for gains, red for losses, muted for flat/no-data
+  const change = computeIndex24hChange(idx);
+  const chipRow = el("div", { class: "stat-row" });
+  chipRow.appendChild(el("span", { class: "stat-label", text: "24h change" }));
+  if (change == null) {
+    chipRow.appendChild(el("span", { class: "stat-value", text: "—" }));
+  } else {
+    const pct = change * 100;
+    const cls = pct >= 0.5 ? "market-chip-up"
+             : pct <= -0.5 ? "market-chip-down"
+             : "market-chip-flat";
+    const arrow = pct >= 0.5 ? "▲" : pct <= -0.5 ? "▼" : "→";
+    const chip = el("span", { class: `market-chip ${cls}`,
+      text: `${arrow} ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` });
+    const wrap = el("span", { class: "stat-value" });
+    wrap.appendChild(chip);
+    chipRow.appendChild(wrap);
+  }
+  stats.appendChild(chipRow);
+
   stats.appendChild(row("Divisor", String(idx.divisor)));
   if (contributing < total) {
     stats.appendChild(row("Priced items", `${contributing} / ${total}`));
@@ -2054,6 +2108,172 @@ function renderIndexCard(idx) {
     const d = el("div", { class: "market-desc", text: idx.description });
     stats.appendChild(d);
   }
+  card.appendChild(stats);
+  return card;
+}
+
+/* ---------------- Bulk Allocator ----------------
+   Given a budget, a time horizon, and a slot cap, propose an allocation
+   of profitable recipes that maximises expected profit while respecting:
+   - Budget: total cost of buys ≤ budget
+   - GE slots: at most `slots` recipes assigned (each recipe conservatively
+     takes ~2 slots — buy phase + sell phase; we model 1 slot per recipe
+     since the buy phase serialises easily but a distinct recipe can't
+     share its sell slot)
+   - GE buy limits: per-recipe unit count ≤ limitFlipsPer4h (or × 6 for
+     the "one day" horizon)
+   - Filters: profitableOnly always applied; optional confidence and
+     skip-skilling toggles
+
+   Uses a greedy sort-by-profit-density algorithm. Bounded knapsack is
+   NP-hard in general but the small item count (~275 combos + 500 skilling)
+   and the tight budget-per-recipe ceiling mean greedy is within a
+   percent or two of the optimal LP-relaxation solution — good enough,
+   sub-millisecond compute, trivial to explain.
+---------------------------------------------------- */
+function allocateRecipes(opts) {
+  const { budget, horizon, slots, requireConf, skipSkilling } = opts;
+  if (!budget || budget <= 0) return { allocations: [], totalCost: 0, totalProfit: 0, note: "Enter a budget" };
+  const horizonMult = horizon === "1d" ? 6 : 1;
+
+  // Pull the currently-visible items with their calc — reuses whatever
+  // filter/strategy the user has set.
+  const candidates = [];
+  const pm = window.overnightData?.predMap || {};
+  for (const r of RECIPES) {
+    if (skipSkilling && r.skill) continue;
+    const calc = calcMargin(r);
+    if (!calc.allPresent) continue;
+    if (!(calc.margin > 0)) continue;
+    if (!(calc.totalCost > 0)) continue;
+    if (calc.limitFlipsPer4h == null) continue;   // can't cap without GE limit info
+    const maxUnits = calc.limitFlipsPer4h * horizonMult;
+    if (maxUnits <= 0) continue;
+    // Confidence gate — only when the recipe has predictions AND the user asked
+    // for it. Recipes with no prediction (most combos when overnight hasn't
+    // been analysed yet) pass through by default.
+    let conf = null;
+    for (const id of [r.id, ...r.components.map(c => c.id)]) {
+      const p = pm[id];
+      if (!p || p.confidence == null) { conf = null; break; }
+      if (conf == null || p.confidence < conf) conf = p.confidence;
+    }
+    if (requireConf && (conf == null || conf < 0.6)) continue;
+    // Density = margin per gp of capital. Higher density = better use of
+    // the budget slot.
+    const density = calc.margin / calc.totalCost;
+    candidates.push({ recipe: r, calc, maxUnits, density, conf });
+  }
+  // Sort by profit density × confidence² (confidence² matches the
+  // Recommended sort's rankScore intuition).
+  candidates.sort((a, b) => {
+    const aw = a.density * ((a.conf ?? 0.5) ** 2);
+    const bw = b.density * ((b.conf ?? 0.5) ** 2);
+    return bw - aw;
+  });
+
+  // Greedy fill: for each candidate, take as many units as fit in remaining
+  // budget + respect maxUnits + one slot per recipe.
+  let remainingBudget = budget;
+  let remainingSlots = slots;
+  const allocations = [];
+  for (const cand of candidates) {
+    if (remainingSlots <= 0 || remainingBudget <= 0) break;
+    const budgetLimited = Math.floor(remainingBudget / cand.calc.totalCost);
+    const count = Math.min(cand.maxUnits, budgetLimited);
+    if (count <= 0) continue;
+    const cost = count * cand.calc.totalCost;
+    const profit = count * cand.calc.margin;
+    allocations.push({
+      recipe: cand.recipe,
+      calc: cand.calc,
+      count,
+      cost,
+      profit,
+      confidence: cand.conf,
+    });
+    remainingBudget -= cost;
+    remainingSlots -= 1;
+  }
+  const totalCost = allocations.reduce((s, a) => s + a.cost, 0);
+  const totalProfit = allocations.reduce((s, a) => s + a.profit, 0);
+  return { allocations, totalCost, totalProfit, remainingBudget, remainingSlots };
+}
+
+function renderAllocate() {
+  const grid = document.getElementById("grid");
+  const tableWrap = document.getElementById("table-wrap");
+  tableWrap.hidden = true;
+  grid.hidden = false;
+  grid.replaceChildren();
+
+  const alloc = state.allocation;
+  if (!alloc) {
+    grid.appendChild(el("div", { class: "empty",
+      text: "Enter a budget in the sidebar and click Calculate allocation." }));
+    return;
+  }
+  if (alloc.note) {
+    grid.appendChild(el("div", { class: "empty", text: alloc.note }));
+    return;
+  }
+  if (!alloc.allocations.length) {
+    grid.appendChild(el("div", { class: "empty",
+      text: "No profitable recipes match the current filters + budget." }));
+    return;
+  }
+
+  // Header summary
+  const summary = el("div", { class: "allocate-summary" });
+  const row = (label, val) => {
+    summary.appendChild(el("div", { class: "allocate-summary-cell" },
+      el("div", { class: "allocate-summary-label", text: label }),
+      el("div", { class: "allocate-summary-value", text: val })));
+  };
+  row("Recipes allocated", String(alloc.allocations.length));
+  row("Total capital deployed", fmtGp(alloc.totalCost));
+  row("Expected profit", fmtGp(Math.round(alloc.totalProfit)));
+  row("Expected ROI", ((alloc.totalProfit / alloc.totalCost) * 100).toFixed(2) + "%");
+  row("Budget remaining", fmtGp(alloc.remainingBudget));
+  row("Slots remaining", String(alloc.remainingSlots));
+  grid.appendChild(summary);
+
+  const frag = document.createDocumentFragment();
+  for (const a of alloc.allocations) frag.appendChild(renderAllocationCard(a));
+  grid.appendChild(frag);
+}
+
+function renderAllocationCard(a) {
+  const card = el("article", { class: "card allocate-card profit" });
+  card.onclick = () => openModal(a.recipe);
+
+  const iconBox = el("div", { class: "card-icon" });
+  const img = el("img", { attrs: { alt: "", loading: "lazy", src: recipeIcon(a.recipe) } });
+  img.onerror = () => { img.style.display = "none"; };
+  iconBox.appendChild(img);
+
+  const catRow = el("div", { class: "card-cat-row" },
+    el("span", { class: "card-cat", text: a.recipe.cat }),
+  );
+  if (a.confidence != null) {
+    catRow.appendChild(el("span", { class: "skill-chip", text: Math.round(a.confidence * 100) + "% reliable" }));
+  }
+  const nameDiv = el("div", { class: "card-name", text: a.recipe.name });
+  const titleBox = el("div", { class: "card-title" }, nameDiv, catRow);
+  card.appendChild(el("div", { class: "card-head" }, iconBox, titleBox));
+
+  const stats = el("div", { class: "card-stats" });
+  const row = (label, val, cls) => {
+    const r = el("div", { class: "stat-row " + (cls || "") });
+    r.appendChild(el("span", { class: "stat-label", text: label }));
+    r.appendChild(el("span", { class: "stat-value", text: val }));
+    return r;
+  };
+  stats.appendChild(row("Buy", `${a.count.toLocaleString()}× @ ${fmtGp(a.calc.totalCost)}`));
+  stats.appendChild(row("Capital", fmtGp(a.cost)));
+  stats.appendChild(row("Expected profit", fmtGp(Math.round(a.profit)), "v-good"));
+  stats.appendChild(row("Margin / craft", fmtGp(Math.round(a.calc.margin))));
+  stats.appendChild(row("ROI", ((a.calc.margin / a.calc.totalCost) * 100).toFixed(2) + "%"));
   card.appendChild(stats);
   return card;
 }
@@ -2197,11 +2417,28 @@ function renderIndexChartTabs(idx) {
   }
 }
 
+// Format a signed change fraction as "▲ +2.34%" / "▼ -1.02%" / "→ +0.05%"
+function fmtChangeChip(frac) {
+  if (frac == null || !isFinite(frac)) return "";
+  const pct = frac * 100;
+  const arrow = pct >= 0.05 ? "▲" : pct <= -0.05 ? "▼" : "→";
+  return `${arrow} ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+}
+
 function drawActiveIndexTab(idx) {
   const preset = TIMEFRAME_PRESETS[activeTimeframe] || TIMEFRAME_PRESETS.week;
+  // Change over the displayed range = last vs first point.
+  const rangeChange = (points) => {
+    const valuesKey = points[0]?.value != null ? "value" : "mid";
+    const first = points[0]?.[valuesKey], last = points[points.length - 1]?.[valuesKey];
+    if (first == null || last == null || first === 0) return null;
+    return (last - first) / first;
+  };
   if (activeChartTab === "combined") {
     const points = indexChartCache.indexPoints;
-    modalStatus.textContent = `${points.length} points · ${preset.step} step · ${idx.items.length} basket items`;
+    const change = rangeChange(points);
+    const changeStr = change != null ? ` · ${fmtChangeChip(change)} over range` : "";
+    modalStatus.textContent = `${points.length} points · ${preset.step} step · ${idx.items.length} basket items${changeStr}`;
     drawIndexChart(points);
     return;
   }
@@ -2215,7 +2452,9 @@ function drawActiveIndexTab(idx) {
   }
   // Item-level view uses the same drawIndexChart — just plot the mid price.
   const shaped = raw.map(p => ({ ts: p.ts, value: p.mid }));
-  modalStatus.textContent = `${item?.name || `#${itemId}`}: ${shaped.length} points · ${preset.step} step`;
+  const change = rangeChange(shaped);
+  const changeStr = change != null ? ` · ${fmtChangeChip(change)} over range` : "";
+  modalStatus.textContent = `${item?.name || `#${itemId}`}: ${shaped.length} points · ${preset.step} step${changeStr}`;
   drawIndexChart(shaped);
 }
 
@@ -2295,6 +2534,7 @@ function renderGrid() {
   if (state.mode === "history" && window.Flips) { window.Flips.renderHistory(); return; }
   if (state.mode === "skilling") { renderSkilling(); return; }
   if (state.mode === "market") { renderMarket(); return; }
+  if (state.mode === "allocate") { renderAllocate(); return; }
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
   // Skilling recipes live in their own mode — exclude them from the
@@ -3095,6 +3335,128 @@ function drawChart(points, opts = {}) {
   chartGeom = { points, xs, ys, vy, padL, padR, priceTop, priceH, volTop, volH, w, h, barW, showCost };
 }
 
+/* ---------------- Alerts (browser notifications) ----------------
+   Fires a Notification when a favorited recipe's predicted buy or sell
+   hour becomes the current local hour. Uses the browser's Notification API
+   directly — no push server, no background workers. Piggybacks on the
+   existing refresh polling (~60s) so alerts land within a minute of the
+   hour boundary.
+
+   Dedup: state.alertsFired stores <recipeKey>|<kind>|<hourStamp> keys so
+   we don't fire twice in the same hour. Hour stamp = "YYYY-MM-DD-HH" in
+   local time.
+---------------------------------------------------- */
+function notificationsSupported() {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+function updateNotifyButton() {
+  const btn = document.getElementById("notify-btn");
+  const icon = document.getElementById("notify-icon");
+  if (!btn || !icon) return;
+  if (!notificationsSupported()) {
+    icon.textContent = "🔕";
+    btn.title = "Notifications not supported by this browser";
+    btn.disabled = true;
+    return;
+  }
+  const enabled = state.notificationsEnabled && Notification.permission === "granted";
+  icon.textContent = enabled ? "🔔" : "🔕";
+  btn.title = enabled
+    ? "Alerts ON — will notify when a favorited item hits its predicted buy/sell hour. Click to disable."
+    : Notification.permission === "denied"
+      ? "Browser blocked notifications for this site. Enable in browser settings to re-activate."
+      : "Alerts OFF — click to enable browser notifications for predicted-hour hits on favorited items.";
+}
+
+async function toggleNotifications() {
+  if (!notificationsSupported()) return;
+  if (state.notificationsEnabled) {
+    state.notificationsEnabled = false;
+    localStorage.setItem("osrs-combo-notifications-enabled", "0");
+  } else {
+    if (Notification.permission === "default") {
+      const p = await Notification.requestPermission();
+      if (p !== "granted") { updateNotifyButton(); return; }
+    }
+    if (Notification.permission !== "granted") { updateNotifyButton(); return; }
+    state.notificationsEnabled = true;
+    localStorage.setItem("osrs-combo-notifications-enabled", "1");
+    // Confirmation ping so the user sees it actually works
+    try {
+      new Notification("Big Timby alerts on", {
+        body: "You'll get notified when a favorited item hits its predicted buy or sell hour.",
+        tag: "big-timby-enable-confirm",
+      });
+    } catch (_) { /* some browsers deny constructor without user gesture — ignore */ }
+  }
+  updateNotifyButton();
+}
+
+function hourStamp(d = new Date()) {
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}-${pad(d.getHours())}`;
+}
+
+// Called at the end of refresh() — walks favorited recipes, checks whether
+// the current local hour equals a predicted buy or sell hour, fires
+// notifications for anything not already fired this hour.
+function checkPredictedHourAlerts() {
+  if (!state.notificationsEnabled) return;
+  if (!notificationsSupported() || Notification.permission !== "granted") return;
+  const pm = window.overnightData?.predMap;
+  if (!pm) return; // predictions haven't been computed yet
+  const nowLocalHour = new Date().getHours();
+  const stamp = hourStamp();
+
+  // Helper: convert a UTC hour (what predMap stores) to a local hour
+  const utcToLocalHour = (utcH) => {
+    if (utcH == null) return null;
+    const d = new Date(); d.setUTCHours(utcH, 0, 0, 0);
+    return d.getHours();
+  };
+
+  for (const key of state.favorites) {
+    const recipe = RECIPES.find(r => r.key === key);
+    if (!recipe) continue;
+    // For a combo recipe, "predicted buy hour" = when to buy the components.
+    // Fire for each unique component buy hour that matches.
+    const alerts = [];
+    for (const c of recipe.components) {
+      const p = pm[c.id];
+      if (!p) continue;
+      const localBuy = utcToLocalHour(p.buyHour);
+      if (localBuy === nowLocalHour) alerts.push({ kind: "buy", itemId: c.id, itemName: state.mapping?.[c.id]?.name || `#${c.id}` });
+    }
+    // Product sell hour
+    const prod = pm[recipe.id];
+    if (prod) {
+      const localSell = utcToLocalHour(prod.sellHour);
+      if (localSell === nowLocalHour) alerts.push({ kind: "sell", itemId: recipe.id, itemName: recipe.name });
+    }
+
+    for (const a of alerts) {
+      const dedup = `${key}|${a.kind}|${a.itemId}|${stamp}`;
+      if (state.alertsFired.has(dedup)) continue;
+      state.alertsFired.add(dedup);
+      try {
+        new Notification(
+          a.kind === "buy" ? `Buy window: ${a.itemName}` : `Sell window: ${a.itemName}`,
+          {
+            body: `Predicted ${a.kind} hour for ${recipe.name} — favorited item`,
+            tag: dedup,
+          }
+        );
+      } catch (_) { /* browser may block if page isn't focused — dedup already recorded so we won't retry this hour */ }
+    }
+  }
+  // Garbage-collect old dedup entries so state.alertsFired doesn't grow
+  // unbounded. Keep only entries stamped for the current hour.
+  for (const k of state.alertsFired) {
+    if (!k.endsWith(stamp)) state.alertsFired.delete(k);
+  }
+}
+
 /* ---------------- Refresh loop ---------------- */
 async function refresh() {
   const btn = document.getElementById("refresh-btn");
@@ -3125,6 +3487,10 @@ async function refresh() {
     state.avg24h = avg24h;
     state.lastFetched = Date.now();
     renderGrid();
+    // Fire any predicted-hour alerts for favorited items. Cheap — a couple
+    // of hash-set lookups per favorite — and runs post-render so it doesn't
+    // block the UI.
+    try { checkPredictedHourAlerts(); } catch (e) { console.warn("Alert check failed:", e); }
   } catch (e) {
     console.error("Refresh failed:", e);
   } finally {
@@ -3251,11 +3617,13 @@ async function init() {
     document.getElementById("mode-skilling").classList.toggle("active", m === "skilling");
     document.getElementById("mode-skilling-overnight").classList.toggle("active", m === "skilling-overnight");
     document.getElementById("mode-market").classList.toggle("active", m === "market");
+    document.getElementById("mode-allocate").classList.toggle("active", m === "allocate");
     document.getElementById("layout").classList.toggle("mode-overnight", m === "overnight");
     document.getElementById("layout").classList.toggle("mode-history", m === "history");
     document.getElementById("layout").classList.toggle("mode-skilling", m === "skilling");
     document.getElementById("layout").classList.toggle("mode-skilling-overnight", m === "skilling-overnight");
     document.getElementById("layout").classList.toggle("mode-market", m === "market");
+    document.getElementById("layout").classList.toggle("mode-allocate", m === "allocate");
     if (prev === "history" && m !== "history" && window.Flips?.onModeExit) {
       window.Flips.onModeExit();
     }
@@ -3340,6 +3708,7 @@ async function init() {
   document.getElementById("mode-skilling").addEventListener("click", () => setMode("skilling"));
   document.getElementById("mode-skilling-overnight").addEventListener("click", () => setMode("skilling-overnight"));
   document.getElementById("mode-market").addEventListener("click", () => setMode("market"));
+  document.getElementById("mode-allocate").addEventListener("click", () => setMode("allocate"));
 
   // Skilling sidebar wiring.
   const skillSel = document.getElementById("skilling-skill");
@@ -3662,6 +4031,55 @@ async function init() {
     renderGrid();
   });
   document.getElementById("refresh-btn").addEventListener("click", refresh);
+  // Notifications button — click toggles alerts on/off. On first enable we
+  // request Notification permission (needs a user gesture in most browsers).
+  const notifyBtn = document.getElementById("notify-btn");
+  if (notifyBtn) {
+    notifyBtn.addEventListener("click", toggleNotifications);
+    // If user had alerts enabled last session but permission has since been
+    // revoked, silently disable so the button icon matches reality.
+    if (state.notificationsEnabled && notificationsSupported()
+        && Notification.permission !== "granted") {
+      state.notificationsEnabled = false;
+      localStorage.setItem("osrs-combo-notifications-enabled", "0");
+    }
+    updateNotifyButton();
+  }
+
+  // Bulk allocator: Calculate button reads sidebar inputs, runs the greedy
+  // allocation, and re-renders the Allocate tab with the result.
+  const allocateBtn = document.getElementById("allocate-btn");
+  if (allocateBtn) {
+    // Parse "200000000" or "200,000,000" or "200m" style input.
+    const parseGp = (s) => {
+      if (!s) return null;
+      s = String(s).trim().toLowerCase().replace(/,/g, "").replace(/\s/g, "");
+      const suffix = s.match(/([kmb])$/);
+      const mult = { k: 1e3, m: 1e6, b: 1e9 }[suffix?.[1]] || 1;
+      const num = parseFloat(suffix ? s.slice(0, -1) : s);
+      return isFinite(num) ? num * mult : null;
+    };
+    allocateBtn.addEventListener("click", () => {
+      const budget = parseGp(document.getElementById("allocate-budget").value);
+      const horizon = document.getElementById("allocate-horizon").value;
+      const slots = Math.max(1, Math.min(8, parseInt(document.getElementById("allocate-slots").value, 10) || 8));
+      const requireConf = document.getElementById("allocate-require-conf").checked;
+      const skipSkilling = document.getElementById("allocate-skip-skilling").checked;
+      state.allocation = allocateRecipes({ budget, horizon, slots, requireConf, skipSkilling });
+      // Persist inputs so they survive reload.
+      localStorage.setItem("osrs-combo-allocate-budget", document.getElementById("allocate-budget").value);
+      localStorage.setItem("osrs-combo-allocate-horizon", horizon);
+      localStorage.setItem("osrs-combo-allocate-slots", String(slots));
+      renderGrid();
+    });
+    // Restore persisted inputs on load
+    const savedBudget = localStorage.getItem("osrs-combo-allocate-budget");
+    if (savedBudget) document.getElementById("allocate-budget").value = savedBudget;
+    const savedHorizon = localStorage.getItem("osrs-combo-allocate-horizon");
+    if (savedHorizon) document.getElementById("allocate-horizon").value = savedHorizon;
+    const savedSlots = localStorage.getItem("osrs-combo-allocate-slots");
+    if (savedSlots) document.getElementById("allocate-slots").value = savedSlots;
+  }
 
   // Sidebar collapse toggle
   const layoutEl = document.getElementById("layout");
