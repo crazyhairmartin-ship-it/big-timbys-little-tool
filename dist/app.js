@@ -687,6 +687,10 @@ const state = {
   },
   // Per-recipe favorites (Set of recipe.key strings)
   favorites: new Set(JSON.parse(localStorage.getItem("osrs-combo-favorites") || "[]")),
+  // Browser notification alerts — auto-fire when a favorited item hits its
+  // predicted buy or sell local hour. See checkPredictedHourAlerts().
+  notificationsEnabled: localStorage.getItem("osrs-combo-notifications-enabled") === "1",
+  alertsFired: new Set(),  // in-memory dedup keys, garbage-collected per hour
   // Snapshot of previous margins so we can show a trend arrow on cards.
   // Keyed by recipe.key; cleared on full refresh after capture.
   lastMargin: {},
@@ -3160,6 +3164,128 @@ function drawChart(points, opts = {}) {
   chartGeom = { points, xs, ys, vy, padL, padR, priceTop, priceH, volTop, volH, w, h, barW, showCost };
 }
 
+/* ---------------- Alerts (browser notifications) ----------------
+   Fires a Notification when a favorited recipe's predicted buy or sell
+   hour becomes the current local hour. Uses the browser's Notification API
+   directly — no push server, no background workers. Piggybacks on the
+   existing refresh polling (~60s) so alerts land within a minute of the
+   hour boundary.
+
+   Dedup: state.alertsFired stores <recipeKey>|<kind>|<hourStamp> keys so
+   we don't fire twice in the same hour. Hour stamp = "YYYY-MM-DD-HH" in
+   local time.
+---------------------------------------------------- */
+function notificationsSupported() {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+function updateNotifyButton() {
+  const btn = document.getElementById("notify-btn");
+  const icon = document.getElementById("notify-icon");
+  if (!btn || !icon) return;
+  if (!notificationsSupported()) {
+    icon.textContent = "🔕";
+    btn.title = "Notifications not supported by this browser";
+    btn.disabled = true;
+    return;
+  }
+  const enabled = state.notificationsEnabled && Notification.permission === "granted";
+  icon.textContent = enabled ? "🔔" : "🔕";
+  btn.title = enabled
+    ? "Alerts ON — will notify when a favorited item hits its predicted buy/sell hour. Click to disable."
+    : Notification.permission === "denied"
+      ? "Browser blocked notifications for this site. Enable in browser settings to re-activate."
+      : "Alerts OFF — click to enable browser notifications for predicted-hour hits on favorited items.";
+}
+
+async function toggleNotifications() {
+  if (!notificationsSupported()) return;
+  if (state.notificationsEnabled) {
+    state.notificationsEnabled = false;
+    localStorage.setItem("osrs-combo-notifications-enabled", "0");
+  } else {
+    if (Notification.permission === "default") {
+      const p = await Notification.requestPermission();
+      if (p !== "granted") { updateNotifyButton(); return; }
+    }
+    if (Notification.permission !== "granted") { updateNotifyButton(); return; }
+    state.notificationsEnabled = true;
+    localStorage.setItem("osrs-combo-notifications-enabled", "1");
+    // Confirmation ping so the user sees it actually works
+    try {
+      new Notification("Big Timby alerts on", {
+        body: "You'll get notified when a favorited item hits its predicted buy or sell hour.",
+        tag: "big-timby-enable-confirm",
+      });
+    } catch (_) { /* some browsers deny constructor without user gesture — ignore */ }
+  }
+  updateNotifyButton();
+}
+
+function hourStamp(d = new Date()) {
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}-${pad(d.getHours())}`;
+}
+
+// Called at the end of refresh() — walks favorited recipes, checks whether
+// the current local hour equals a predicted buy or sell hour, fires
+// notifications for anything not already fired this hour.
+function checkPredictedHourAlerts() {
+  if (!state.notificationsEnabled) return;
+  if (!notificationsSupported() || Notification.permission !== "granted") return;
+  const pm = window.overnightData?.predMap;
+  if (!pm) return; // predictions haven't been computed yet
+  const nowLocalHour = new Date().getHours();
+  const stamp = hourStamp();
+
+  // Helper: convert a UTC hour (what predMap stores) to a local hour
+  const utcToLocalHour = (utcH) => {
+    if (utcH == null) return null;
+    const d = new Date(); d.setUTCHours(utcH, 0, 0, 0);
+    return d.getHours();
+  };
+
+  for (const key of state.favorites) {
+    const recipe = RECIPES.find(r => r.key === key);
+    if (!recipe) continue;
+    // For a combo recipe, "predicted buy hour" = when to buy the components.
+    // Fire for each unique component buy hour that matches.
+    const alerts = [];
+    for (const c of recipe.components) {
+      const p = pm[c.id];
+      if (!p) continue;
+      const localBuy = utcToLocalHour(p.buyHour);
+      if (localBuy === nowLocalHour) alerts.push({ kind: "buy", itemId: c.id, itemName: state.mapping?.[c.id]?.name || `#${c.id}` });
+    }
+    // Product sell hour
+    const prod = pm[recipe.id];
+    if (prod) {
+      const localSell = utcToLocalHour(prod.sellHour);
+      if (localSell === nowLocalHour) alerts.push({ kind: "sell", itemId: recipe.id, itemName: recipe.name });
+    }
+
+    for (const a of alerts) {
+      const dedup = `${key}|${a.kind}|${a.itemId}|${stamp}`;
+      if (state.alertsFired.has(dedup)) continue;
+      state.alertsFired.add(dedup);
+      try {
+        new Notification(
+          a.kind === "buy" ? `Buy window: ${a.itemName}` : `Sell window: ${a.itemName}`,
+          {
+            body: `Predicted ${a.kind} hour for ${recipe.name} — favorited item`,
+            tag: dedup,
+          }
+        );
+      } catch (_) { /* browser may block if page isn't focused — dedup already recorded so we won't retry this hour */ }
+    }
+  }
+  // Garbage-collect old dedup entries so state.alertsFired doesn't grow
+  // unbounded. Keep only entries stamped for the current hour.
+  for (const k of state.alertsFired) {
+    if (!k.endsWith(stamp)) state.alertsFired.delete(k);
+  }
+}
+
 /* ---------------- Refresh loop ---------------- */
 async function refresh() {
   const btn = document.getElementById("refresh-btn");
@@ -3190,6 +3316,10 @@ async function refresh() {
     state.avg24h = avg24h;
     state.lastFetched = Date.now();
     renderGrid();
+    // Fire any predicted-hour alerts for favorited items. Cheap — a couple
+    // of hash-set lookups per favorite — and runs post-render so it doesn't
+    // block the UI.
+    try { checkPredictedHourAlerts(); } catch (e) { console.warn("Alert check failed:", e); }
   } catch (e) {
     console.error("Refresh failed:", e);
   } finally {
@@ -3727,6 +3857,20 @@ async function init() {
     renderGrid();
   });
   document.getElementById("refresh-btn").addEventListener("click", refresh);
+  // Notifications button — click toggles alerts on/off. On first enable we
+  // request Notification permission (needs a user gesture in most browsers).
+  const notifyBtn = document.getElementById("notify-btn");
+  if (notifyBtn) {
+    notifyBtn.addEventListener("click", toggleNotifications);
+    // If user had alerts enabled last session but permission has since been
+    // revoked, silently disable so the button icon matches reality.
+    if (state.notificationsEnabled && notificationsSupported()
+        && Notification.permission !== "granted") {
+      state.notificationsEnabled = false;
+      localStorage.setItem("osrs-combo-notifications-enabled", "0");
+    }
+    updateNotifyButton();
+  }
 
   // Sidebar collapse toggle
   const layoutEl = document.getElementById("layout");
