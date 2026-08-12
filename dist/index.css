@@ -1421,6 +1421,56 @@ footer {
 #layout:not(.mode-overnight) .ov-time-filter { display: none; }
 
 
+/* ---------------- Market mode ----------------
+   Indexes are 10 hand-listed items — none of the realtime sidebar filters
+   apply. Hide the whole filter stack; keep only the Sort dropdown since it
+   still functions (name / value / source). */
+.mode-market .filter-group:has(#search),
+.mode-market .filter-group:has(#hide-stale-products),
+.mode-market .filter-group:has(#hide-stale-components),
+.mode-market .filter-group:has(#hide-low-volume),
+.mode-market .filter-group:has(#ge-slots),
+.mode-market .filter-group:has(#categories),
+.mode-market .filter-group.cost-range,
+.mode-market .filter-group.toggles,
+.mode-market .ov-time-filter,
+.mode-market .view-toggle,
+.mode-market .filter-group:has(#sort) {
+  display: none;
+}
+/* Market cards: a compact index-value panel. Value gets emphasis; the
+   Wiki/Custom chip differentiates data source. */
+.market-card { cursor: pointer; }
+.market-head { padding: 12px 14px 8px; }
+.market-stats {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  padding: 10px 14px 12px;
+  font-size: 0.86rem;
+}
+.market-card .stat-row { display: contents; }
+.market-card .stat-label { color: var(--muted, #9aa0a6); }
+.market-card .stat-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+.market-card .stat-row:first-of-type .stat-value {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--gold, #f5c518);
+}
+.market-desc {
+  grid-column: 1 / -1;
+  color: var(--muted, #9aa0a6);
+  font-size: 0.75rem;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+
+
 /* ---------------- History mode ---------------- */
 .mode-history .filter-group:has(#hide-stale-products),
 .mode-history .filter-group:has(#hide-stale-components),
