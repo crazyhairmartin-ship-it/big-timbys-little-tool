@@ -53,15 +53,34 @@ async function throttle(items, limit, worker) {
   }));
 }
 
-// Tracked item ids — the products and components of every recipe.
+// Tracked item ids — union of everything the app actually shows a chart for:
+// - combo recipe products + components (dist/app.js RECIPES literal)
+// - skilling recipe products + components (dist/skilling-recipes.js)
+// - market-index basket items (dist/market-indexes.js)
+// Previously we only extracted from app.js which left ~40% of the app's
+// visible item set unrepresented, so the tuner optimized for a narrower
+// pool than users actually see.
 const here = dirname(fileURLToPath(import.meta.url));
-const appSrc = readFileSync(join(here, "../dist/app.js"), "utf8");
-const recipesLiteral = appSrc.match(/const RECIPES = \[[\s\S]*?\n\];/)[0];
-const ids = [...new Set([...recipesLiteral.matchAll(/\bid:(\d+)/g)].map(m => Number(m[1])))];
+const idSet = new Set();
+function harvestIds(path, label) {
+  try {
+    const src = readFileSync(join(here, path), "utf8");
+    const hits = [...src.matchAll(/\bid:\s*(\d+)/g), ...src.matchAll(/"id"\s*:\s*(\d+)/g)];
+    for (const m of hits) idSet.add(Number(m[1]));
+    console.error(`tune: harvested ${hits.length} id refs from ${label}`);
+  } catch (e) {
+    console.warn(`tune: could not read ${label} (${e.message}) — skipping`);
+  }
+}
+harvestIds("../dist/app.js", "app.js (combo recipes)");
+harvestIds("../dist/skilling-recipes.js", "skilling-recipes.js");
+harvestIds("../dist/market-indexes.js", "market-indexes.js");
+const ids = [...idSet];
 if (!ids.length) {
-  console.error("tune: no item ids extracted from dist/app.js — aborting");
+  console.error("tune: no item ids extracted — aborting");
   process.exit(1);
 }
+console.error(`tune: ${ids.length} unique item ids across all sources`);
 
 // Recorded price-history store, fetched the same way the app fetches it.
 const storeById = new Map();
