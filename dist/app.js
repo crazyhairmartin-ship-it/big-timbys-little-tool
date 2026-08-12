@@ -1982,11 +1982,246 @@ function renderSkilling() {
   grid.appendChild(frag);
 }
 
+/* ---------------- Market Indexes ----------------
+   Aggregate DJIA-style indexes: sum(basket item prices) / divisor. Live
+   values come from state.prices; historical values are computed on modal
+   open by fetching each basket item's /timeseries and summing per timestamp
+   with forward-fill on sparse items. Basket + divisor definitions come from
+   dist/market-indexes.js (scraped from the wiki + hand-curated customs).
+---------------------------------------------------- */
+function computeIndexValue(idx) {
+  let sum = 0, contributing = 0;
+  for (const item of idx.items) {
+    const p = state.prices[item.id];
+    if (!p || (p.high == null && p.low == null)) continue;
+    // Mid-price matches the wiki's "guide price" convention. Missing sides
+    // fall back to the other side of the spread rather than dropping.
+    const mid = ((p.high ?? p.low) + (p.low ?? p.high)) / 2;
+    sum += mid;
+    contributing++;
+  }
+  return {
+    value: sum / idx.divisor,
+    contributing,
+    total: idx.items.length,
+  };
+}
+
+function renderMarket() {
+  const grid = document.getElementById("grid");
+  const tableWrap = document.getElementById("table-wrap");
+  tableWrap.hidden = true;
+  grid.hidden = false;
+  grid.replaceChildren();
+
+  if (typeof MARKET_INDEXES === "undefined" || !Array.isArray(MARKET_INDEXES)) {
+    grid.appendChild(el("div", { class: "empty", text: "Market indexes data not loaded." }));
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  for (const idx of MARKET_INDEXES) frag.appendChild(renderIndexCard(idx));
+  grid.appendChild(frag);
+}
+
+function renderIndexCard(idx) {
+  const card = el("article", { class: "card market-card" });
+  card.onclick = () => openIndexModal(idx);
+  const { value, contributing, total } = computeIndexValue(idx);
+
+  const titleBox = el("div", { class: "card-title" });
+  titleBox.appendChild(el("div", { class: "card-name", text: idx.name }));
+  const catRow = el("div", { class: "card-cat-row" },
+    el("span", { class: "card-cat", text: idx.source === "wiki" ? "Wiki" : "Custom" }),
+    el("span", { class: "skill-chip", text: `${total} items` })
+  );
+  titleBox.appendChild(catRow);
+  card.appendChild(el("div", { class: "card-head market-head" }, titleBox));
+
+  const stats = el("div", { class: "card-stats market-stats" });
+  const row = (label, val) => {
+    const r = el("div", { class: "stat-row" });
+    r.appendChild(el("span", { class: "stat-label", text: label }));
+    r.appendChild(el("span", { class: "stat-value", text: val }));
+    return r;
+  };
+  stats.appendChild(row("Current value", contributing > 0 ? fmtGp(Math.round(value)) : "—"));
+  stats.appendChild(row("Divisor", String(idx.divisor)));
+  if (contributing < total) {
+    stats.appendChild(row("Priced items", `${contributing} / ${total}`));
+  }
+  if (idx.description) {
+    const d = el("div", { class: "market-desc", text: idx.description });
+    stats.appendChild(d);
+  }
+  card.appendChild(stats);
+  return card;
+}
+
+// Active index (parallel to activeModalRecipe). When set, loadModalChart/
+// drawActiveTab is bypassed in favour of the index-specific pipeline.
+let activeModalIndex = null;
+
+async function openIndexModal(idx) {
+  activeModalRecipe = null;
+  activeModalIndex = idx;
+  activeChartTab = "combined";
+  modalTitle.textContent = idx.name;
+  // Reset chart tabs to a single "Combined" — indexes don't have per-item
+  // sub-views in this pass.
+  document.getElementById("chart-tabs").replaceChildren();
+  // Clear the stats panel — index modal has no per-item detail rows.
+  const details = document.getElementById("modal-details");
+  if (details) details.replaceChildren();
+  if (typeof modal.showModal === "function") modal.showModal();
+  else modal.setAttribute("open", "");
+  await loadIndexChart(idx);
+}
+
+const INDEX_FETCH_CONCURRENCY = 5;
+
+async function loadIndexChart(idx) {
+  const preset = TIMEFRAME_PRESETS[activeTimeframe] || TIMEFRAME_PRESETS.week;
+  modalStatus.textContent = `Loading ${idx.name}: ${idx.items.length} items @ ${preset.step} step…`;
+  drawChartMessage("Loading…");
+
+  try {
+    const cutoff = Date.now() - preset.windowMs;
+    const seriesById = new Map();
+    let cursor = 0;
+    async function worker() {
+      while (cursor < idx.items.length) {
+        const item = idx.items[cursor++];
+        const raw = await fetchTimeseries(item.id, preset.step).catch(() => []);
+        const points = (raw || [])
+          .filter(p => p.timestamp && (p.avgHighPrice != null || p.avgLowPrice != null))
+          .filter(p => p.timestamp * 1000 >= cutoff)
+          .map(p => ({
+            ts: p.timestamp * 1000,
+            mid: ((p.avgHighPrice ?? p.avgLowPrice) + (p.avgLowPrice ?? p.avgHighPrice)) / 2,
+          }))
+          .sort((a, b) => a.ts - b.ts);
+        seriesById.set(item.id, points);
+      }
+    }
+    await Promise.all(Array.from({length: INDEX_FETCH_CONCURRENCY}, worker));
+
+    // Build the index series by walking the union of timestamps and summing
+    // each item's most-recent mid price (forward-fill for sparse items).
+    const cursors = new Map();
+    const allTs = new Set();
+    for (const [id, points] of seriesById) {
+      cursors.set(id, { points, cursor: -1 });
+      for (const p of points) allTs.add(p.ts);
+    }
+    const sortedTs = [...allTs].sort((a, b) => a - b);
+
+    const indexPoints = [];
+    for (const ts of sortedTs) {
+      let sum = 0, contributing = 0;
+      for (const s of cursors.values()) {
+        while (s.cursor + 1 < s.points.length && s.points[s.cursor + 1].ts <= ts) s.cursor++;
+        const cp = s.cursor >= 0 ? s.points[s.cursor] : null;
+        if (cp && cp.mid != null) { sum += cp.mid; contributing++; }
+      }
+      // Require at least half the basket priced to emit a point — otherwise
+      // early-window points where most items haven't traded yet distort the
+      // series with artificially low values.
+      if (contributing >= idx.items.length / 2) {
+        indexPoints.push({ ts, value: sum / idx.divisor });
+      }
+    }
+
+    if (!indexPoints.length) {
+      drawChartMessage("No data");
+      modalStatus.textContent = "No data";
+      return;
+    }
+
+    modalStatus.textContent = `${indexPoints.length} points · ${preset.step} step · ${idx.items.length} basket items`;
+    drawIndexChart(indexPoints);
+  } catch (e) {
+    modalStatus.textContent = `Error: ${e.message}`;
+    drawChartMessage("Error loading data");
+  }
+}
+
+function drawIndexChart(points) {
+  const ctx = modalChart.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = modalChart.clientWidth;
+  const cssH = modalChart.clientHeight;
+  modalChart.width  = cssW * dpr;
+  modalChart.height = cssH * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const w = cssW, h = cssH;
+  ctx.clearRect(0, 0, w, h);
+  const padL = 70, padR = 16, padT = 14, padB = 28;
+  const chartH = h - padT - padB;
+
+  const tsMin = points[0].ts, tsMax = points[points.length - 1].ts;
+  const xs = ts => padL + ((ts - tsMin) / (tsMax - tsMin || 1)) * (w - padL - padR);
+
+  const vs = points.map(p => p.value);
+  const vMin = Math.min(...vs), vMax = Math.max(...vs);
+  const vRange = (vMax - vMin) || 1;
+  const yMin = vMin - vRange * 0.05;
+  const yMax = vMax + vRange * 0.05;
+  const yRange = yMax - yMin;
+  const ys = v => padT + (1 - (v - yMin) / yRange) * chartH;
+
+  // Y grid + labels
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.fillStyle = "#7d86b0";
+  ctx.font = "11px -apple-system, sans-serif";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  const yTicks = 4;
+  for (let i = 0; i <= yTicks; i++) {
+    const v = yMin + (yRange * i) / yTicks;
+    const y = ys(v);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(w - padR, y);
+    ctx.stroke();
+    ctx.fillText(fmtGpShort(v), padL - 6, y);
+  }
+
+  // X-axis labels
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const xTicks = 5;
+  const spanDays = (tsMax - tsMin) / 86_400_000;
+  for (let i = 0; i <= xTicks; i++) {
+    const t = tsMin + ((tsMax - tsMin) * i) / xTicks;
+    const x = xs(t);
+    const d = new Date(t);
+    const label = spanDays > 60
+      ? d.toLocaleDateString([], { month: "short", year: "2-digit" })
+      : spanDays > 2
+        ? d.toLocaleDateString([], { month: "short", day: "numeric" })
+        : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    ctx.fillText(label, x, padT + chartH + 6);
+  }
+
+  // Index line
+  ctx.strokeStyle = "#f5c518";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = xs(p.ts), y = ys(p.value);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
 function renderGrid() {
   if (state.mode === "overnight" && window.Overnight) { window.Overnight.renderOvernight(); return; }
   if (state.mode === "skilling-overnight" && window.Overnight) { window.Overnight.renderOvernight(); return; }
   if (state.mode === "history" && window.Flips) { window.Flips.renderHistory(); return; }
   if (state.mode === "skilling") { renderSkilling(); return; }
+  if (state.mode === "market") { renderMarket(); return; }
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
   // Skilling recipes live in their own mode — exclude them from the
@@ -2149,16 +2384,22 @@ timeframeButtons.addEventListener("click", (e) => {
   if (!btn) return;
   for (const b of timeframeButtons.children) b.classList.toggle("active", b === btn);
   activeTimeframe = btn.dataset.tf;
-  if (activeModalRecipe) loadModalChart(activeModalRecipe);
+  if (activeModalIndex) loadIndexChart(activeModalIndex);
+  else if (activeModalRecipe) loadModalChart(activeModalRecipe);
 });
 
 // Modal refresh button — invalidates the chart cache and re-fetches
 document.getElementById("modal-refresh").addEventListener("click", async (e) => {
-  if (!activeModalRecipe) return;
-  e.currentTarget.classList.add("spinning");
-  chartCache = { recipeKey: null, timeframe: null, byId: {} };
-  await loadModalChart(activeModalRecipe);
-  e.currentTarget.classList.remove("spinning");
+  const btn = e.currentTarget;
+  btn.classList.add("spinning");
+  if (activeModalIndex) {
+    // Index charts don't cache to chartCache; re-fetching is just re-loading.
+    await loadIndexChart(activeModalIndex);
+  } else if (activeModalRecipe) {
+    chartCache = { recipeKey: null, timeframe: null, byId: {} };
+    await loadModalChart(activeModalRecipe);
+  }
+  if (btn) btn.classList.remove("spinning");
 });
 
 function detailRow(label, value, opts = {}) {
@@ -2202,6 +2443,7 @@ function renderModalLinks(id, name) {
 
 function openModal(recipe) {
   activeModalRecipe = recipe;
+  activeModalIndex = null;  // clear the index-mode flag so the modal's timeframe/refresh listeners route correctly
   activeChartTab = "combined";  // default each open to the combined overlay
   modalTitle.textContent = recipe.name;
   if (typeof modal.showModal === "function") modal.showModal();
@@ -2934,10 +3176,12 @@ async function init() {
     document.getElementById("mode-history").classList.toggle("active", m === "history");
     document.getElementById("mode-skilling").classList.toggle("active", m === "skilling");
     document.getElementById("mode-skilling-overnight").classList.toggle("active", m === "skilling-overnight");
+    document.getElementById("mode-market").classList.toggle("active", m === "market");
     document.getElementById("layout").classList.toggle("mode-overnight", m === "overnight");
     document.getElementById("layout").classList.toggle("mode-history", m === "history");
     document.getElementById("layout").classList.toggle("mode-skilling", m === "skilling");
     document.getElementById("layout").classList.toggle("mode-skilling-overnight", m === "skilling-overnight");
+    document.getElementById("layout").classList.toggle("mode-market", m === "market");
     if (prev === "history" && m !== "history" && window.Flips?.onModeExit) {
       window.Flips.onModeExit();
     }
@@ -3021,6 +3265,7 @@ async function init() {
   document.getElementById("mode-history").addEventListener("click", () => setMode("history"));
   document.getElementById("mode-skilling").addEventListener("click", () => setMode("skilling"));
   document.getElementById("mode-skilling-overnight").addEventListener("click", () => setMode("skilling-overnight"));
+  document.getElementById("mode-market").addEventListener("click", () => setMode("market"));
 
   // Skilling sidebar wiring.
   const skillSel = document.getElementById("skilling-skill");
