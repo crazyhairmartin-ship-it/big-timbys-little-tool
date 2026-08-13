@@ -391,6 +391,21 @@ if (typeof SKILLING_RECIPES !== "undefined" && Array.isArray(SKILLING_RECIPES)) 
   RECIPES.push(...SKILLING_RECIPES);
 }
 
+// Component-recipe detection: a recipe's product IS a component in another
+// recipe iff its id appears in some other recipe's component list.
+// Examples: Godsword blade is a recipe (3 shards → 1 blade) whose product
+// then feeds every specific Godsword recipe (hilt + blade → godsword).
+// The allocator uses this to optionally exclude these intermediates from
+// the GE-slot count (they're really sub-crafts running in parallel to real
+// flips, not full slot consumers in the same sense).
+const _componentItemIds = new Set();
+for (const r of RECIPES) {
+  for (const c of r.components || []) _componentItemIds.add(c.id);
+}
+function isComponentProducingRecipe(recipe) {
+  return _componentItemIds.has(recipe.id);
+}
+
 /* ---------------- Skill requirements ----------------
    Skill level needed to perform the combination, sourced from the OSRS
    Wiki {{Recipe}} templates. Keyed by recipe key. Trivial level-1 gates
@@ -2132,19 +2147,31 @@ function renderIndexCard(idx) {
    sub-millisecond compute, trivial to explain.
 ---------------------------------------------------- */
 function allocateRecipes(opts) {
-  const { budget, horizon, maxRecipes, maxPerRecipePct, requireConf, skipSkilling } = opts;
+  const {
+    budget, horizon, slots, maxPerRecipePct, minRoiPct,
+    requireConf, skipSkilling, hideStale,
+    freeSkillingSupplies, freeComponentCombines,
+  } = opts;
   if (!budget || budget <= 0) return { allocations: [], totalCost: 0, totalProfit: 0, note: "Enter a budget" };
   const horizonMult = horizon === "1d" ? 6 : 1;
   const perRecipeCap = maxPerRecipePct > 0 && maxPerRecipePct < 100
     ? budget * (maxPerRecipePct / 100)
     : Infinity;
+  const minRoi = (minRoiPct || 0) / 100;
 
-  // Pull the currently-visible items with their calc — reuses whatever
-  // filter/strategy the user has set.
+  // Pull the currently-viable candidates. Each carries flags for the slot-
+  // accounting logic below: `freeSlot` recipes still get allocated capital
+  // but don't count against the GE-slot budget.
   const candidates = [];
   const pm = window.overnightData?.predMap || {};
   for (const r of RECIPES) {
     if (skipSkilling && r.skill) continue;
+    // Stale filter — if any leg (product or component) has a price older than
+    // the STALE_MS threshold, the calc.margin is a fossil. Skip.
+    if (hideStale) {
+      if (isItemStale(r.id)) continue;
+      if (r.components.some(c => isItemStale(c.id))) continue;
+    }
     const calc = calcMargin(r);
     if (!calc.allPresent) continue;
     if (!(calc.margin > 0)) continue;
@@ -2152,6 +2179,10 @@ function allocateRecipes(opts) {
     if (calc.limitFlipsPer4h == null) continue;   // can't cap without GE limit info
     const maxUnits = calc.limitFlipsPer4h * horizonMult;
     if (maxUnits <= 0) continue;
+    // Min-ROI gate — filters out the low-ROI tail so we don't recommend
+    // filler items to top up the budget with negligible profit.
+    const roi = calc.margin / calc.totalCost;
+    if (roi < minRoi) continue;
     // Confidence gate — only when the recipe has predictions AND the user asked
     // for it. Recipes with no prediction (most combos when overnight hasn't
     // been analysed yet) pass through by default.
@@ -2162,33 +2193,32 @@ function allocateRecipes(opts) {
       if (conf == null || p.confidence < conf) conf = p.confidence;
     }
     if (requireConf && (conf == null || conf < 0.6)) continue;
-    // Expected profit if we take the full 4h/1d capacity of this recipe.
-    // Sorting by THIS (not ROI density) makes the greedy prefer recipes
-    // that can actually absorb capital — you get more absolute profit
-    // by taking 4M into a mid-ROI bulk flip than 200k into a 40%-ROI
-    // niche item with a maxUnits of 2.
+    // Free-slot flags: user-configurable exclusions from slot count.
+    const isSkillingSupply = !!r.skill && freeSkillingSupplies;
+    const isComponentCombine = isComponentProducingRecipe(r) && freeComponentCombines;
+    const freeSlot = isSkillingSupply || isComponentCombine;
     const expectedProfit = calc.margin * maxUnits;
-    candidates.push({ recipe: r, calc, maxUnits, expectedProfit, conf });
+    candidates.push({ recipe: r, calc, maxUnits, expectedProfit, conf, roi, freeSlot });
   }
-  // Sort by expected total profit × confidence² (confidence² matches the
-  // Recommended sort's rankScore intuition; unfavoured items with no
-  // prediction get the 0.5² baseline treatment).
+  // Sort by expected total profit × confidence² so recipes that can actually
+  // absorb capital rise to the top.
   candidates.sort((a, b) => {
     const aw = a.expectedProfit * ((a.conf ?? 0.5) ** 2);
     const bw = b.expectedProfit * ((b.conf ?? 0.5) ** 2);
     return bw - aw;
   });
 
-  // Greedy fill: walk the FULL candidate list until budget runs out or we
-  // hit the max-recipes ceiling. Each recipe is capped by its 4h buy-limit
-  // AND by the per-recipe budget cap (so one high-ROI item can't eat 90%
-  // of a large budget).
+  // Greedy fill: walk candidates by expected-profit. Stop when the GE-slot
+  // budget is exhausted (excluding free-slot recipes) or we run out of
+  // candidates. Free-slot recipes are still allocated capital — they just
+  // don't consume a slot in the count.
   let remainingBudget = budget;
-  let recipesUsed = 0;
+  let slotsUsed = 0;
   const allocations = [];
+  let hitSlotCap = false;
   for (const cand of candidates) {
     if (remainingBudget <= 0) break;
-    if (recipesUsed >= maxRecipes) break;
+    if (!cand.freeSlot && slotsUsed >= slots) { hitSlotCap = true; continue; }
     // How much of THIS recipe can we buy?
     //   - Budget-limited by remaining budget
     //   - Diversification-limited by per-recipe cap (percentage of total budget)
@@ -2206,9 +2236,11 @@ function allocateRecipes(opts) {
       cost,
       profit,
       confidence: cand.conf,
+      freeSlot: cand.freeSlot,
+      roi: cand.roi,
     });
     remainingBudget -= cost;
-    recipesUsed += 1;
+    if (!cand.freeSlot) slotsUsed += 1;
   }
   const totalCost = allocations.reduce((s, a) => s + a.cost, 0);
   const totalProfit = allocations.reduce((s, a) => s + a.profit, 0);
@@ -2218,16 +2250,17 @@ function allocateRecipes(opts) {
     totalCost,
     totalProfit,
     remainingBudget,
-    recipesUsed,
+    slotsUsed,
+    slots,
     candidatesConsidered: candidates.length,
     deployedPct,
-    // If we ran out of viable recipes before deploying the budget, note why —
-    // helps the user diagnose "why didn't it use my 300M?" without needing to
-    // dig into the code.
+    // If we ran out of viable recipes before deploying the budget, tell the
+    // user why so they can adjust inputs (relax min ROI, enable free slots,
+    // extend horizon, etc.) rather than wondering why it stopped.
     exhaustedReason:
       remainingBudget <= 0 ? "budget fully deployed"
-      : recipesUsed >= maxRecipes ? `hit max-recipes cap (${maxRecipes})`
-      : "ran out of candidates that clear filters + per-recipe cap",
+      : hitSlotCap ? `slot cap (${slots}) reached before budget — more capital available but no free slots left. Enable free-slot toggles or raise the slot cap.`
+      : `no more candidates above ${minRoiPct}% ROI — either relax the min-ROI or raise the confidence/stale filters`,
   };
 }
 
@@ -2262,6 +2295,7 @@ function renderAllocate() {
       el("div", { class: "allocate-summary-value", text: val })));
   };
   row("Recipes allocated", String(alloc.allocations.length));
+  row("Slots used", `${alloc.slotsUsed} / ${alloc.slots}`);
   row("Capital deployed", `${fmtGp(alloc.totalCost)} (${alloc.deployedPct.toFixed(1)}%)`);
   row("Budget remaining", fmtGp(alloc.remainingBudget));
   row("Expected profit", fmtGp(Math.round(alloc.totalProfit)));
@@ -2288,6 +2322,18 @@ function renderAllocationCard(a) {
   );
   if (a.confidence != null) {
     catRow.appendChild(el("span", { class: "skill-chip", text: Math.round(a.confidence * 100) + "% reliable" }));
+  }
+  if (a.freeSlot) {
+    catRow.appendChild(el("span", { class: "skill-chip", text: "free slot",
+      attrs: { title: "This recipe is a skilling supply or component combine — excluded from the GE-slot count per your toggles." }}));
+  }
+  // Stale badge — a recommendation using stale prices is a bad recommendation
+  // even if the calc says it's profitable. Only appears when the user has NOT
+  // hidden stale items (i.e. they've opted in to seeing them).
+  const stale = isItemStale(a.recipe.id) || a.recipe.components.some(c => isItemStale(c.id));
+  if (stale) {
+    catRow.appendChild(el("span", { class: "stale-chip", text: "stale prices",
+      attrs: { title: "One or more items in this recipe haven't traded recently — profit numbers may be fossils." }}));
   }
   const nameDiv = el("div", { class: "card-name", text: a.recipe.name });
   const titleBox = el("div", { class: "card-title" }, nameDiv, catRow);
@@ -4093,27 +4139,47 @@ async function init() {
     allocateBtn.addEventListener("click", () => {
       const budget = parseGp(document.getElementById("allocate-budget").value);
       const horizon = document.getElementById("allocate-horizon").value;
-      const maxRecipes = Math.max(1, Math.min(200, parseInt(document.getElementById("allocate-max-recipes").value, 10) || 30));
-      const maxPerRecipePct = Math.max(1, Math.min(100, parseFloat(document.getElementById("allocate-max-pct").value) || 25));
+      const slots = Math.max(1, Math.min(8, parseInt(document.getElementById("allocate-slots").value, 10) || 8));
+      const minRoiPct = Math.max(0, parseFloat(document.getElementById("allocate-min-roi").value) || 0);
+      const maxPerRecipePct = Math.max(1, Math.min(100, parseFloat(document.getElementById("allocate-max-pct").value) || 100));
       const requireConf = document.getElementById("allocate-require-conf").checked;
       const skipSkilling = document.getElementById("allocate-skip-skilling").checked;
-      state.allocation = allocateRecipes({ budget, horizon, maxRecipes, maxPerRecipePct, requireConf, skipSkilling });
+      const hideStale = document.getElementById("allocate-hide-stale").checked;
+      const freeSkillingSupplies = document.getElementById("allocate-free-supplies").checked;
+      const freeComponentCombines = document.getElementById("allocate-free-components").checked;
+      state.allocation = allocateRecipes({
+        budget, horizon, slots, minRoiPct, maxPerRecipePct,
+        requireConf, skipSkilling, hideStale,
+        freeSkillingSupplies, freeComponentCombines,
+      });
       // Persist inputs so they survive reload.
       localStorage.setItem("osrs-combo-allocate-budget", document.getElementById("allocate-budget").value);
       localStorage.setItem("osrs-combo-allocate-horizon", horizon);
-      localStorage.setItem("osrs-combo-allocate-max-recipes", String(maxRecipes));
+      localStorage.setItem("osrs-combo-allocate-slots", String(slots));
+      localStorage.setItem("osrs-combo-allocate-min-roi", String(minRoiPct));
       localStorage.setItem("osrs-combo-allocate-max-pct", String(maxPerRecipePct));
+      localStorage.setItem("osrs-combo-allocate-hide-stale", hideStale ? "1" : "0");
+      localStorage.setItem("osrs-combo-allocate-free-supplies", freeSkillingSupplies ? "1" : "0");
+      localStorage.setItem("osrs-combo-allocate-free-components", freeComponentCombines ? "1" : "0");
       renderGrid();
     });
     // Restore persisted inputs on load
-    const savedBudget = localStorage.getItem("osrs-combo-allocate-budget");
-    if (savedBudget) document.getElementById("allocate-budget").value = savedBudget;
-    const savedHorizon = localStorage.getItem("osrs-combo-allocate-horizon");
-    if (savedHorizon) document.getElementById("allocate-horizon").value = savedHorizon;
-    const savedMaxRecipes = localStorage.getItem("osrs-combo-allocate-max-recipes");
-    if (savedMaxRecipes) document.getElementById("allocate-max-recipes").value = savedMaxRecipes;
-    const savedMaxPct = localStorage.getItem("osrs-combo-allocate-max-pct");
-    if (savedMaxPct) document.getElementById("allocate-max-pct").value = savedMaxPct;
+    const restore = (id, key, isCheckbox) => {
+      const v = localStorage.getItem(key);
+      if (v == null) return;
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (isCheckbox) el.checked = v === "1";
+      else el.value = v;
+    };
+    restore("allocate-budget", "osrs-combo-allocate-budget");
+    restore("allocate-horizon", "osrs-combo-allocate-horizon");
+    restore("allocate-slots", "osrs-combo-allocate-slots");
+    restore("allocate-min-roi", "osrs-combo-allocate-min-roi");
+    restore("allocate-max-pct", "osrs-combo-allocate-max-pct");
+    restore("allocate-hide-stale", "osrs-combo-allocate-hide-stale", true);
+    restore("allocate-free-supplies", "osrs-combo-allocate-free-supplies", true);
+    restore("allocate-free-components", "osrs-combo-allocate-free-components", true);
   }
 
   // Sidebar collapse toggle
