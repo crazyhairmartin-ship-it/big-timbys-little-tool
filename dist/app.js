@@ -2153,7 +2153,6 @@ function allocateRecipes(opts) {
     freeSkillingSupplies, freeComponentCombines,
   } = opts;
   if (!budget || budget <= 0) return { allocations: [], totalCost: 0, totalProfit: 0, note: "Enter a budget" };
-  const horizonMult = horizon === "1d" ? 6 : 1;
   const perRecipeCap = maxPerRecipePct > 0 && maxPerRecipePct < 100
     ? budget * (maxPerRecipePct / 100)
     : Infinity;
@@ -2181,8 +2180,18 @@ function allocateRecipes(opts) {
     if (!calc.allPresent) continue;
     if (!(calc.margin > 0)) continue;
     if (!(calc.totalCost > 0)) continue;
-    if (calc.limitFlipsPer4h == null) continue;   // can't cap without GE limit info
-    const maxUnits = calc.limitFlipsPer4h * horizonMult;
+    // maxUnits = the realistic daily flip count bounded by:
+    //   1. Output 24h trade volume  }
+    //   2. Every component's 24h vol } — via calc.maxFlips
+    //   3. Daily GE buy limits       }
+    // For a 4h horizon we divide by 6 (assumes vol is roughly uniform
+    // across the day). If maxFlips is null (no volume data at all), fall
+    // back to buy-limit alone rather than dropping the recipe.
+    const dailyCap = calc.maxFlips ?? (calc.limitFlipsPer4h != null ? calc.limitFlipsPer4h * 6 : null);
+    if (dailyCap == null || dailyCap <= 0) continue;
+    // 4h uses floor(daily/6). If that rounds to 0, the recipe has too little
+    // 4h capacity to be worth surfacing — skip rather than fake it up to 1.
+    const maxUnits = horizon === "1d" ? dailyCap : Math.floor(dailyCap / 6);
     if (maxUnits <= 0) continue;
     // Cheap early-out: if this recipe can't POSSIBLY contribute enough
     // profit to matter (even at full capacity), skip it before the
