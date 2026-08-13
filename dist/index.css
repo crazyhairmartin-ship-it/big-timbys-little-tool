@@ -1588,6 +1588,34 @@ footer {
   font-weight: 600;
 }
 
+/* Supply-strategy override chip — shown on allocation cards when the
+   allocator picked a supply strategy DIFFERENT from the user's global
+   preference (e.g. an insta-buy pick under a slow-buy default because
+   .low was null or stale). Amber for insta-buy (a mild "action needed"
+   signal), blue for slow-buy. */
+.strategy-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.strategy-chip-insta-buy {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+}
+.strategy-chip-slow-buy {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #60a5fa;
+}
+
 /* Per-item "hit buy limit" toggle — lives on each buy row. Neutral by
    default so it doesn't shout; marked state uses the amber/red band to
    read as "excluded" without being alarming. */
