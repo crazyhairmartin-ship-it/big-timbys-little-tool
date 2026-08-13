@@ -1544,6 +1544,49 @@ footer {
   line-height: 1.3;
   margin-top: 2px;
 }
+/* Component-buy breakdown on allocation cards */
+.allocate-buys {
+  padding: 8px 14px 12px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.allocate-buys-title {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.allocate-buy-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.allocate-buy-name {
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.allocate-buy-qty {
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+.allocate-sell-row {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+}
+.allocate-sell-row .allocate-buy-name,
+.allocate-sell-row .allocate-buy-qty {
+  color: var(--green, #4ade80);
+  font-weight: 600;
+}
 
 /* ---------------- Market mode ----------------
    Indexes are 10 hand-listed items — none of the realtime sidebar filters

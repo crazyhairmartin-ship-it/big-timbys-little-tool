@@ -2249,6 +2249,15 @@ function allocateRecipes(opts) {
     // caps it may only get a slice that IS below threshold. Skip those so
     // we don't waste a slot on a token allocation.
     if (profit < minProfitAbsolute) continue;
+    // Buy-order count: how many discrete GE buys the user has to place for
+    // this recipe. A "6× Adamant set" recipe with 4 components = 24 buy
+    // orders. Aggregate across recipes tells the user how much GE juggling
+    // this allocation actually requires — feasibility check that "5 slots
+    // used" misses.
+    let buyOrderCount = 0;
+    for (const c of cand.recipe.components) buyOrderCount += c.qty * count;
+    for (const s of (cand.recipe.supplies || [])) buyOrderCount += s.qty * count;
+
     allocations.push({
       recipe: cand.recipe,
       calc: cand.calc,
@@ -2258,6 +2267,7 @@ function allocateRecipes(opts) {
       confidence: cand.conf,
       freeSlot: cand.freeSlot,
       roi: cand.roi,
+      buyOrderCount,
     });
     remainingBudget -= cost;
     if (!cand.freeSlot) slotsUsed += 1;
@@ -2272,6 +2282,7 @@ function allocateRecipes(opts) {
     remainingBudget,
     slotsUsed,
     slots,
+    horizon,   // carried through so the summary can name the correct time window
     candidatesConsidered: candidates.length,
     deployedPct,
     // If we ran out of viable recipes before deploying the budget, tell the
@@ -2314,8 +2325,24 @@ function renderAllocate() {
       el("div", { class: "allocate-summary-label", text: label }),
       el("div", { class: "allocate-summary-value", text: val })));
   };
+  // Aggregate: total distinct GE buy orders across all allocations. Each
+  // Adamant set = 4 component buys × N sets. Real "8 slot" feasibility is
+  // about whether the sum can plausibly cycle through the concurrent slots
+  // in the chosen horizon.
+  const totalBuys = alloc.allocations.reduce((s, a) => s + (a.buyOrderCount || 0), 0);
+  // Rough feasibility rule of thumb: with 8 concurrent slots and ~15min
+  // average fill time, you can cycle ~32 orders/hour. 4h ≈ 128, 1d ≈ 768.
+  // The number is fuzzy — instant items fill in seconds, rare items take
+  // hours — but as an at-a-glance warning it prevents ridiculous outputs.
+  const horizonLabel = alloc.horizon === "1d" ? "day" : "4h window";
+  const feasibleBudget = alloc.horizon === "1d" ? 768 : 128;
+  const feasibilityNote = totalBuys > feasibleBudget
+    ? ` ⚠ May not fit — cycling ~32 orders/hr through 8 slots gives you roughly ${feasibleBudget} in one ${horizonLabel}`
+    : "";
+
   row("Recipes allocated", String(alloc.allocations.length));
   row("Slots used", `${alloc.slotsUsed} / ${alloc.slots}`);
+  row("Total GE buy orders", `${totalBuys.toLocaleString()}${feasibilityNote}`);
   row("Capital deployed", `${fmtGp(alloc.totalCost)} (${alloc.deployedPct.toFixed(1)}%)`);
   row("Budget remaining", fmtGp(alloc.remainingBudget));
   row("Expected profit", fmtGp(Math.round(alloc.totalProfit)));
@@ -2372,6 +2399,45 @@ function renderAllocationCard(a) {
   stats.appendChild(row("Margin / craft", fmtGp(Math.round(a.calc.margin))));
   stats.appendChild(row("ROI", ((a.calc.margin / a.calc.totalCost) * 100).toFixed(2) + "%"));
   card.appendChild(stats);
+
+  // Component-buy breakdown: what actually goes into the GE for each craft.
+  // "Buy 6× Adamant set" is really "buy 6 helms + 6 chests + 6 legs + 6 kites",
+  // and users need to see that to judge feasibility inside a 4h/1d window.
+  const buys = el("div", { class: "allocate-buys" });
+  buys.appendChild(el("div", { class: "allocate-buys-title", text: "Buys needed" }));
+  for (const c of a.recipe.components) {
+    const name = state.mapping?.[c.id]?.name || `#${c.id}`;
+    const unitCount = c.qty * a.count;
+    const unitPrice = supplyPrice(state.prices[c.id]);
+    const priceText = unitPrice != null ? ` @ ${fmtGp(unitPrice)}` : "";
+    const row = el("div", { class: "allocate-buy-row" });
+    row.appendChild(el("span", { class: "allocate-buy-name", text: name }));
+    row.appendChild(el("span", { class: "allocate-buy-qty", text: `${unitCount.toLocaleString()}×${priceText}` }));
+    buys.appendChild(row);
+  }
+  // Supplies (runes, gems etc.) — always priced live, shown here too so the
+  // user knows they need those on hand.
+  for (const s of a.recipe.supplies || []) {
+    const name = state.mapping?.[s.id]?.name || `#${s.id}`;
+    const unitCount = s.qty * a.count;
+    const unitPrice = supplyPrice(state.prices[s.id]);
+    const priceText = unitPrice != null ? ` @ ${fmtGp(unitPrice)}` : "";
+    const row = el("div", { class: "allocate-buy-row" });
+    row.appendChild(el("span", { class: "allocate-buy-name", text: name + " (supply)" }));
+    row.appendChild(el("span", { class: "allocate-buy-qty", text: `${unitCount.toLocaleString()}×${priceText}` }));
+    buys.appendChild(row);
+  }
+  // Product line — different label style so it doesn't blend with buys.
+  const productName = state.mapping?.[a.recipe.id]?.name || a.recipe.name;
+  const productQty = (a.recipe.resultQty || 1) * a.count;
+  const productPrice = productSell(state.prices[a.recipe.id]);
+  const productPriceText = productPrice != null ? ` @ ${fmtGp(productPrice)}` : "";
+  const sellRow = el("div", { class: "allocate-buy-row allocate-sell-row" });
+  sellRow.appendChild(el("span", { class: "allocate-buy-name", text: "Sell " + productName }));
+  sellRow.appendChild(el("span", { class: "allocate-buy-qty", text: `${productQty.toLocaleString()}×${productPriceText}` }));
+  buys.appendChild(sellRow);
+
+  card.appendChild(buys);
   return card;
 }
 
