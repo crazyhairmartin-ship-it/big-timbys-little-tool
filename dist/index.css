@@ -1988,6 +1988,145 @@ footer {
   border-color: var(--accent, #f5c518);
 }
 
+/* Component-combines curator modal — a scrollable checkable list of every
+   recipe classified as a component combine. Unchecking excludes the recipe
+   from allocation. Same visual language as the other modals in the app. */
+#combines-modal {
+  border: none;
+  border-radius: 12px;
+  padding: 0;
+  width: min(560px, 96vw);
+  max-height: 82vh;
+  background: var(--panel, #1c1c1f);
+  color: inherit;
+  overflow: hidden;
+}
+#combines-modal::backdrop { background: rgba(0, 0, 0, 0.55); }
+.combines-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.combines-modal-header h2 { margin: 0; font-size: 15px; }
+#combines-modal-close {
+  background: transparent;
+  border: 0;
+  color: var(--text-2);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+#combines-modal-close:hover { color: var(--text-1); background: rgba(255, 255, 255, 0.06); }
+.combines-modal-body {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 18px 18px;
+  max-height: calc(82vh - 60px);
+}
+.combines-modal-intro {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0 0 12px;
+}
+.combines-modal-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+#combines-modal-search {
+  flex: 1;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 12.5px;
+}
+.link-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.link-btn:hover { color: var(--text-1); border-color: var(--text-2); background: rgba(255, 255, 255, 0.04); }
+.combines-modal-list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px;
+  min-height: 240px;
+}
+.combines-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.combines-row:hover { background: rgba(255, 255, 255, 0.04); }
+.combines-row input[type="checkbox"] { flex-shrink: 0; }
+.combines-row-name { flex: 1; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; }
+.combines-row-cat {
+  color: var(--text-2);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.combines-row.excluded .combines-row-name { color: var(--text-2); text-decoration: line-through; }
+.combines-empty { padding: 20px; text-align: center; color: var(--text-2); font-size: 12px; }
+.combines-modal-footer {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sidebar "View / curate list" button — subtle, small, sits under the free-
+   components toggle. The count badge (e.g. "3 excluded") only shows when
+   the exclusion set is non-empty. */
+.combines-list-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-family: inherit;
+}
+.combines-list-btn:hover { color: var(--text-1); border-color: var(--text-2); background: rgba(255, 255, 255, 0.04); }
+.combines-count-badge {
+  padding: 1px 7px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .history-table {
   width: 100%;
   border-collapse: collapse;

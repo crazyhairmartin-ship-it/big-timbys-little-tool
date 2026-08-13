@@ -253,8 +253,12 @@
       <label class="toggle"><input type="checkbox" id="allocate-hide-stale" checked /> Hide stale items</label>
       <label class="toggle" title="Filters to recipes whose product has an overnight predictive score of ≥ 60%. Components without predictions are allowed through — only the item you're selling is gated."><input type="checkbox" id="allocate-require-conf" /> Require ≥ 60% product confidence</label>
       <label class="toggle"><input type="checkbox" id="allocate-skip-skilling" /> Skip skilling recipes</label>
+      <label class="toggle" title="Hide recipes that require active crafting time (e.g. Oathplate armour). Leaves click-and-collect GE-clerk combines only."><input type="checkbox" id="allocate-only-zero-time" /> Only zero-time combines (skip crafts like Oathplate)</label>
       <label class="toggle"><input type="checkbox" id="allocate-free-supplies" /> Skilling supplies don't consume slots</label>
       <label class="toggle"><input type="checkbox" id="allocate-free-components" /> Component combines (godsword blades etc.) don't consume slots</label>
+      <button type="button" id="allocate-combines-list-btn" class="combines-list-btn">
+        View / curate list <span id="allocate-combines-count" class="combines-count-badge"></span>
+      </button>
     </div>
     <div class="filter-group allocate-sidebar-block">
       <button id="allocate-btn" class="btn-primary" style="width:100%">Calculate allocation</button>
@@ -389,16 +393,39 @@
   </div>
 </dialog>
 
+<dialog id="combines-modal">
+  <header class="modal-header combines-modal-header">
+    <h2>Component combines</h2>
+    <button id="combines-modal-close" type="button" aria-label="Close">✕</button>
+  </header>
+  <div class="combines-modal-body">
+    <p class="combines-modal-intro">
+      Recipes classified as "component combines" — their output is a component in another
+      craft (e.g. Godsword blade → Godsword). Uncheck to exclude a recipe from allocation
+      entirely (persists across reloads). Checked = included.
+    </p>
+    <div class="combines-modal-controls">
+      <input type="text" id="combines-modal-search" placeholder="Filter by name…" autocomplete="off" />
+      <button id="combines-include-all" type="button" class="link-btn">Include all</button>
+      <button id="combines-exclude-all" type="button" class="link-btn">Exclude all</button>
+    </div>
+    <div id="combines-modal-list" class="combines-modal-list"></div>
+    <div class="combines-modal-footer">
+      <span id="combines-modal-count"></span>
+    </div>
+  </div>
+</dialog>
+
 <footer>
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=24"></script>
-<script src="skilling-recipes.js?v=24"></script>
-<script src="market-indexes.js?v=24"></script>
-<script src="app.js?v=24"></script>
-<script src="overnight.js?v=24"></script>
-<script src="flips-core.js?v=24"></script>
-<script src="flips.js?v=24"></script>
+<script src="overnight-core.js?v=25"></script>
+<script src="skilling-recipes.js?v=25"></script>
+<script src="market-indexes.js?v=25"></script>
+<script src="app.js?v=25"></script>
+<script src="overnight.js?v=25"></script>
+<script src="flips-core.js?v=25"></script>
+<script src="flips.js?v=25"></script>
 </body>
 </html>
