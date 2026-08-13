@@ -2326,23 +2326,29 @@ function renderAllocate() {
       el("div", { class: "allocate-summary-value", text: val })));
   };
   // Aggregate: total distinct GE buy orders across all allocations. Each
-  // Adamant set = 4 component buys × N sets. Real "8 slot" feasibility is
-  // about whether the sum can plausibly cycle through the concurrent slots
-  // in the chosen horizon.
+  // Adamant set = 4 component buys × N sets. Whether the sum is feasible
+  // in the chosen horizon depends entirely on item liquidity — bulk flips
+  // fill in seconds, rare items sit for hours. Showing the number without
+  // a hardcoded threshold puts the judgment call where it belongs (with
+  // the user). The tooltip explains what to think about.
   const totalBuys = alloc.allocations.reduce((s, a) => s + (a.buyOrderCount || 0), 0);
-  // Rough feasibility rule of thumb: with 8 concurrent slots and ~15min
-  // average fill time, you can cycle ~32 orders/hour. 4h ≈ 128, 1d ≈ 768.
-  // The number is fuzzy — instant items fill in seconds, rare items take
-  // hours — but as an at-a-glance warning it prevents ridiculous outputs.
-  const horizonLabel = alloc.horizon === "1d" ? "day" : "4h window";
-  const feasibleBudget = alloc.horizon === "1d" ? 768 : 128;
-  const feasibilityNote = totalBuys > feasibleBudget
-    ? ` ⚠ May not fit — cycling ~32 orders/hr through 8 slots gives you roughly ${feasibleBudget} in one ${horizonLabel}`
-    : "";
+  const totalBuysTooltip = "Sum of component + supply buy orders across all allocations. "
+    + "Feasibility in one buy window depends on how fast each item fills at your offer price: "
+    + "bulk items (runes, common potions) fill in seconds; popular gear fills in a few minutes; "
+    + "rare items can sit for hours. 8 concurrent slots means you can rotate through many more "
+    + "orders than 8 as items fill — but a diverse allocation of low-liquidity items may not "
+    + "cycle through in a single 4h window.";
 
   row("Recipes allocated", String(alloc.allocations.length));
   row("Slots used", `${alloc.slotsUsed} / ${alloc.slots}`);
-  row("Total GE buy orders", `${totalBuys.toLocaleString()}${feasibilityNote}`);
+  // Buy-orders row with tooltip — hover for the honest "feasibility depends
+  // on liquidity" explanation, no arbitrary threshold warning.
+  {
+    const cell = el("div", { class: "allocate-summary-cell", attrs: { title: totalBuysTooltip } });
+    cell.appendChild(el("div", { class: "allocate-summary-label", text: "Total GE buy orders" }));
+    cell.appendChild(el("div", { class: "allocate-summary-value", text: totalBuys.toLocaleString() }));
+    summary.appendChild(cell);
+  }
   row("Capital deployed", `${fmtGp(alloc.totalCost)} (${alloc.deployedPct.toFixed(1)}%)`);
   row("Budget remaining", fmtGp(alloc.remainingBudget));
   row("Expected profit", fmtGp(Math.round(alloc.totalProfit)));
