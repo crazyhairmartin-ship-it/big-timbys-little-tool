@@ -255,9 +255,12 @@
       <label class="toggle"><input type="checkbox" id="allocate-skip-skilling" /> Skip skilling recipes</label>
       <label class="toggle" title="Hide recipes that require active crafting time (e.g. Oathplate armour). Leaves click-and-collect GE-clerk combines only."><input type="checkbox" id="allocate-only-zero-time" /> Only zero-time combines (skip crafts like Oathplate)</label>
       <label class="toggle"><input type="checkbox" id="allocate-free-supplies" /> Skilling supplies don't consume slots</label>
-      <label class="toggle"><input type="checkbox" id="allocate-free-components" /> Component combines (godsword blades etc.) don't consume slots</label>
+      <button type="button" id="allocate-supplies-list-btn" class="combines-list-btn">
+        View / curate supplies <span id="allocate-supplies-count" class="combines-count-badge"></span>
+      </button>
+      <label class="toggle" title="Small-margin, fast-fill items whose slot use is effectively zero. Applies at two levels: (1) filler recipes like godsword blade, blessed spirit shield, zamorakian hasta — whose crafts don't consume a slot; (2) bulk components like crushed infernal shale — whose purchase inside a parent recipe doesn't count. NOT armour sets, Zenyte jewellery, Barrows pieces, or full uncharged weapons."><input type="checkbox" id="allocate-free-components" /> Filler intermediates + fast-fill components don't consume slots</label>
       <button type="button" id="allocate-combines-list-btn" class="combines-list-btn">
-        View / curate list <span id="allocate-combines-count" class="combines-count-badge"></span>
+        View / curate fillers <span id="allocate-combines-count" class="combines-count-badge"></span>
       </button>
     </div>
     <div class="filter-group allocate-sidebar-block">
@@ -393,16 +396,42 @@
   </div>
 </dialog>
 
+<dialog id="supplies-modal">
+  <header class="modal-header combines-modal-header">
+    <h2>Skilling recipes (supplies)</h2>
+    <button id="supplies-modal-close" type="button" aria-label="Close">✕</button>
+  </header>
+  <div class="combines-modal-body">
+    <p class="combines-modal-intro">
+      Every skilling recipe the allocator considers. The "Skilling supplies don't consume slots"
+      toggle applies to ALL of these by default — which is often too broad. Uncheck any recipe
+      you want excluded from allocation entirely (persists across reloads).
+    </p>
+    <div class="combines-modal-controls">
+      <input type="text" id="supplies-modal-search" placeholder="Filter by name or category…" autocomplete="off" />
+      <button id="supplies-include-all" type="button" class="link-btn">Include all</button>
+      <button id="supplies-exclude-all" type="button" class="link-btn">Exclude all</button>
+    </div>
+    <div id="supplies-modal-list" class="combines-modal-list"></div>
+    <div class="combines-modal-footer">
+      <span id="supplies-modal-count"></span>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="combines-modal">
   <header class="modal-header combines-modal-header">
-    <h2>Component combines</h2>
+    <h2>Filler intermediates</h2>
     <button id="combines-modal-close" type="button" aria-label="Close">✕</button>
   </header>
   <div class="combines-modal-body">
     <p class="combines-modal-intro">
-      Recipes classified as "component combines" — their output is a component in another
-      craft (e.g. Godsword blade → Godsword). Uncheck to exclude a recipe from allocation
-      entirely (persists across reloads). Checked = included.
+      Small-margin, fast-fill entries — their slot use is effectively zero when the
+      "Filler intermediates + fast-fill components don't consume slots" toggle is on.
+      Includes both <strong>filler recipes</strong> (godsword blade, blessed spirit shield,
+      zamorakian hasta) and <strong>bulk components</strong> (crushed infernal shale) that
+      barely affect the parent craft's margin. Uncheck a recipe row to exclude that recipe
+      from allocation entirely; uncheck a component row to remove it from the fast-fill pool.
     </p>
     <div class="combines-modal-controls">
       <input type="text" id="combines-modal-search" placeholder="Filter by name…" autocomplete="off" />
@@ -420,12 +449,12 @@
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=26"></script>
-<script src="skilling-recipes.js?v=26"></script>
-<script src="market-indexes.js?v=26"></script>
-<script src="app.js?v=26"></script>
-<script src="overnight.js?v=26"></script>
-<script src="flips-core.js?v=26"></script>
-<script src="flips.js?v=26"></script>
+<script src="overnight-core.js?v=28"></script>
+<script src="skilling-recipes.js?v=28"></script>
+<script src="market-indexes.js?v=28"></script>
+<script src="app.js?v=28"></script>
+<script src="overnight.js?v=28"></script>
+<script src="flips-core.js?v=28"></script>
+<script src="flips.js?v=28"></script>
 </body>
 </html>

@@ -52,7 +52,7 @@ const RECIPES = [
   { key:"ancient-godsword", id:26233, name:"Ancient godsword", cat:"Godswords", components:[{id:11798,qty:1},{id:26370,qty:1}] },
   { key:"armadyl-godsword", id:11802, name:"Armadyl godsword", cat:"Godswords", components:[{id:11798,qty:1},{id:11810,qty:1}] },
   { key:"bandos-godsword", id:11804, name:"Bandos godsword", cat:"Godswords", components:[{id:11798,qty:1},{id:11812,qty:1}] },
-  { key:"godsword-blade", id:11798, name:"Godsword blade", cat:"Godswords", components:[{id:11820,qty:1},{id:11818,qty:1},{id:11822,qty:1}] },
+  { key:"godsword-blade", id:11798, name:"Godsword blade", cat:"Godswords", freeSlotFiller:true, components:[{id:11820,qty:1},{id:11818,qty:1},{id:11822,qty:1}] },
   { key:"saradomin-godsword", id:11806, name:"Saradomin godsword", cat:"Godswords", components:[{id:11798,qty:1},{id:11814,qty:1}] },
   { key:"zamorak-godsword", id:11808, name:"Zamorak godsword", cat:"Godswords", components:[{id:11798,qty:1},{id:11816,qty:1}] },
 
@@ -120,7 +120,7 @@ const RECIPES = [
   { key:"decomb-scales-helm",   id:12934, name:"Zulrah's scales ← Serpentine helm (crack)", cat:"Decombines", components:[{id:12929,qty:1}], resultQty:20000 },
 
   { key:"arcane-spirit-shield", id:12825, name:"Arcane spirit shield", cat:"Spirit Shields", components:[{id:12831,qty:1},{id:12827,qty:1}] },
-  { key:"blessed-spirit-shield", id:12831, name:"Blessed spirit shield", cat:"Spirit Shields", components:[{id:12829,qty:1},{id:12833,qty:1}] },
+  { key:"blessed-spirit-shield", id:12831, name:"Blessed spirit shield", cat:"Spirit Shields", freeSlotFiller:true, components:[{id:12829,qty:1},{id:12833,qty:1}] },
   { key:"elysian-spirit-shield", id:12817, name:"Elysian spirit shield", cat:"Spirit Shields", components:[{id:12831,qty:1},{id:12819,qty:1}] },
   { key:"spectral-spirit-shield", id:12821, name:"Spectral spirit shield", cat:"Spirit Shields", components:[{id:12831,qty:1},{id:12823,qty:1}] },
 
@@ -161,7 +161,7 @@ const RECIPES = [
   { key:"ursine-chainmace-u", id:27657, name:"Ursine chainmace (u)", cat:"Wilderness", components:[{id:22542,qty:1},{id:27667,qty:1}] },
   { key:"voidwaker", id:27690, name:"Voidwaker", cat:"Wilderness", components:[{id:27684,qty:1},{id:27681,qty:1},{id:27687,qty:1}], extraCost:500000 },
   { key:"webweaver-bow-u", id:27652, name:"Webweaver bow (u)", cat:"Wilderness", components:[{id:22547,qty:1},{id:27670,qty:1}] },
-  { key:"zamorakian-hasta", id:11889, name:"Zamorakian hasta", cat:"Misc", components:[{id:11824,qty:1}], extraCost:150000 },
+  { key:"zamorakian-hasta", id:11889, name:"Zamorakian hasta", cat:"Misc", freeSlotFiller:true, components:[{id:11824,qty:1}], extraCost:150000 },
 
   // No enchant runes — same pattern as Necklace of rupture: the etched fang is the whole recipe.
   { key:"amulet-of-rancour", id:29801, name:"Amulet of rancour", cat:"Zenyte", components:[{id:19553,qty:1},{id:33534,qty:1}] },
@@ -377,6 +377,11 @@ const RECIPES = [
   // `takesTime: true` = active crafting required (~ a few minutes per piece),
   // not a click-and-go GE-clerk combine. The allocator's "hide non-instant
   // combines" filter drops these when the user only wants zero-time flips.
+  // Both inputs are components (both are bought at the GE to combine into
+  // the output). Crushed infernal shale is in FREE_SLOT_ITEM_IDS so when
+  // the "Filler intermediates don't consume slots" toggle is on, the shale
+  // buy skips the slot count — small margin, trades fast enough that its
+  // slot use is effectively zero.
   { key:"oathplate-helm", id:30750, name:"Oathplate helm", cat:"Oathplate", takesTime:true, components:[{id:30848,qty:2520},{id:30765,qty:450}] },
   { key:"oathplate-chest", id:30753, name:"Oathplate chest", cat:"Oathplate", takesTime:true, components:[{id:30848,qty:2520},{id:30765,qty:450}] },
   { key:"oathplate-legs", id:30756, name:"Oathplate legs", cat:"Oathplate", takesTime:true, components:[{id:30848,qty:2520},{id:30765,qty:450}] },
@@ -394,25 +399,52 @@ if (typeof SKILLING_RECIPES !== "undefined" && Array.isArray(SKILLING_RECIPES)) 
   RECIPES.push(...SKILLING_RECIPES);
 }
 
-// Component-recipe detection: a recipe's product IS a component in another
-// recipe iff its id appears in some NON-skilling recipe's component list.
-// Examples: Godsword blade (3 shards → blade) is a component combine — its
-// product feeds the specific godsword recipes (hilt + blade → godsword).
-// Adamantite bar is NOT — its only consumers are skilling recipes (which
-// belong under the "Skilling supplies" toggle, not this one).
-// The allocator uses this to optionally exclude these intermediates from
-// the GE-slot budget (they're sub-crafts running in parallel to real
-// flips, not full slot consumers in the same sense).
+// Free-slot filler classification. NARROW hand-curated set of small-margin
+// intermediates that fit the "small fraction of parent craft cost, buys
+// quickly, consistent price" description. Godsword blade (~20% of a
+// godsword), Blessed spirit shield (~2-5% of Arcane/Elysian), Zamorakian
+// hasta (simple 1-buy conversion). EMPHATICALLY NOT armour sets, Zenyte
+// jewellery, Barrows pieces, spirit shields, uncharged weapons — those
+// are substantial crafts in their own right.
+//
+// Recipes opt in via `freeSlotFiller: true` in the recipe definition. The
+// allocator's "Filler intermediates don't consume slots" toggle uses THIS
+// set (not the broader "output is a component elsewhere" heuristic).
+function isFreeSlotFiller(recipe) {
+  return recipe.freeSlotFiller === true;
+}
+function freeSlotFillerRecipes() {
+  return RECIPES
+    .filter(r => r.freeSlotFiller === true)
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ITEM-LEVEL free-slot set. Some raw materials are bulk-liquid enough that
+// their purchase doesn't meaningfully tie up a GE slot — you place the buy,
+// it fills instantly. When the "Filler intermediates" toggle is on, any
+// recipe's slotsPerUnit is reduced by the number of components/supplies
+// whose ID is in this set. Distinct concept from freeSlotFiller (recipe
+// vs item level) but shares the same "fast-fill, doesn't hold a slot"
+// intuition.
+//
+// Hand-curated. Add sparingly — misclassifying a slow-fill item here
+// over-counts feasibility.
+const FREE_SLOT_ITEM_IDS = new Set([
+  30848,   // Crushed infernal shale — bulk raw material for Oathplate crafting
+]);
+
+// LEGACY wider classifier — kept for reference and any future use case that
+// wants "any intermediate feeding a non-skilling combine". No longer drives
+// the free-slot toggle (too broad — see freeSlotFillerRecipes above).
 const _componentItemIds = new Set();
 for (const r of RECIPES) {
-  if (r.skill) continue;   // skilling recipes drive their OWN toggle, not this one
+  if (r.skill) continue;
   for (const c of r.components || []) _componentItemIds.add(c.id);
 }
 function isComponentProducingRecipe(recipe) {
   return _componentItemIds.has(recipe.id);
 }
-// Convenience for the popover UI — the deduped, sorted list of recipes
-// currently classified as component combines. Same rule as above.
 function componentCombineRecipes() {
   return RECIPES
     .filter(r => _componentItemIds.has(r.id))
@@ -739,6 +771,11 @@ const state = {
   // apply to any recipe). Persisted to localStorage so a user's curation
   // survives reloads.
   excludedRecipes: new Set(JSON.parse(localStorage.getItem("osrs-combo-excluded-recipes") || "[]")),
+  // Item-id set for user-unchecked entries in the FREE_SLOT_ITEM_IDS pool.
+  // The pool is a hand-curated seed; this override set lets the user
+  // remove specific items from the fast-fill treatment. Stored as strings
+  // (JSON.parse rehydrates numeric ids as strings; treat both consistently).
+  excludedFreeSlotItems: new Set(JSON.parse(localStorage.getItem("osrs-combo-excluded-freeslot-items") || "[]").map(String)),
   // Snapshot of previous margins so we can show a trend arrow on cards.
   // Keyed by recipe.key; cleared on full refresh after capture.
   lastMargin: {},
@@ -1033,6 +1070,24 @@ function setRecipeExcluded(key, excluded) {
   if (excluded) state.excludedRecipes.add(key);
   else state.excludedRecipes.delete(key);
   saveExcludedRecipes();
+}
+
+/* ---------------- Free-slot item overrides ---------------- */
+const EXCLUDED_FREESLOT_ITEMS_KEY = "osrs-combo-excluded-freeslot-items";
+function saveExcludedFreeSlotItems() {
+  try { localStorage.setItem(EXCLUDED_FREESLOT_ITEMS_KEY,
+    JSON.stringify(Array.from(state.excludedFreeSlotItems))); } catch {}
+}
+function setFreeSlotItemExcluded(id, excluded) {
+  const key = String(id);
+  if (excluded) state.excludedFreeSlotItems.add(key);
+  else state.excludedFreeSlotItems.delete(key);
+  saveExcludedFreeSlotItems();
+}
+// True if the item is still an active member of the fast-fill pool — i.e.
+// hand-marked in FREE_SLOT_ITEM_IDS AND the user hasn't unchecked it.
+function isFreeSlotItemActive(id) {
+  return FREE_SLOT_ITEM_IDS.has(id) && !state.excludedFreeSlotItems.has(String(id));
 }
 
 /* ---------------- News markers ----------------
@@ -2493,13 +2548,25 @@ function allocateRecipes(opts) {
     // free-slot recipes STILL get budget but their buy orders don't count
     // against slotBudget. Useful for AFK skilling supplies that fill instantly.
     const isSkillingSupply = !!r.skill && freeSkillingSupplies;
-    const isComponentCombine = isComponentProducingRecipe(r) && freeComponentCombines;
+    // Free-slot for combines uses the NARROW hand-curated filler set — not
+    // the wider isComponentProducingRecipe heuristic. Otherwise armour sets,
+    // Zenyte jewellery, Barrows pieces, etc. would all skip the slot count,
+    // which was never the intent of the toggle.
+    const isComponentCombine = isFreeSlotFiller(r) && freeComponentCombines;
     const freeSlot = isSkillingSupply || isComponentCombine;
     // slotsPerUnit = distinct GE buy orders per single craft = components +
-    // supplies. Recipes with 0 buys (rare — synthesized items with no inputs)
-    // fall back to 1 so they don't sort as infinite profit-per-slot.
+    // supplies. When freeComponentCombines is on, subtract components/supplies
+    // whose id is in the ACTIVE fast-fill set (FREE_SLOT_ITEM_IDS minus any
+    // items the user has unchecked in the popover). Recipes with 0 effective
+    // buys fall back to 1 so they don't sort as infinite profit-per-slot.
+    const compFree = freeComponentCombines
+      ? (r.components || []).filter(c => isFreeSlotItemActive(c.id)).length
+      : 0;
+    const suppFree = freeComponentCombines
+      ? (r.supplies || []).filter(s => isFreeSlotItemActive(s.id)).length
+      : 0;
     const slotsPerUnit = Math.max(1,
-      (r.components?.length || 0) + (r.supplies?.length || 0));
+      (r.components?.length || 0) + (r.supplies?.length || 0) - compFree - suppFree);
     const expectedProfit = calc.margin * maxUnits;
     candidates.push({ recipe: r, calc, maxUnits, expectedProfit, conf, roi, freeSlot, slotsPerUnit, supplyStrategyUsed });
   }
@@ -2703,6 +2770,16 @@ function renderAllocationCard(a) {
   const catRow = el("div", { class: "card-cat-row" },
     el("span", { class: "card-cat", text: a.recipe.cat }),
   );
+  // Product price trend — the same 5m-vs-1h delta shown on Realtime cards.
+  // On an allocation card this tells the user whether the item's price is
+  // trending in a direction that would widen (or shrink) their margin
+  // between now and when the buy orders fill. Only shown when the trend
+  // is significant enough to matter (trendOf returns null under threshold).
+  const productTrend = trendOf(a.recipe.id);
+  if (productTrend) {
+    // buyerView=false for the product: rising product price is good (green).
+    catRow.appendChild(trendChip(productTrend, false));
+  }
   if (a.confidence != null) {
     catRow.appendChild(el("span", { class: "skill-chip", text: Math.round(a.confidence * 100) + "% reliable" }));
   }
@@ -2747,6 +2824,23 @@ function renderAllocationCard(a) {
   stats.appendChild(row("Margin / craft", fmtGp(Math.round(a.calc.margin))));
   stats.appendChild(row("ROI", ((a.calc.margin / a.calc.totalCost) * 100).toFixed(2) + "%"));
   card.appendChild(stats);
+
+  // Card-level "hide from allocation" button. Adds recipe.key to
+  // state.excludedRecipes and re-runs the allocator so the card immediately
+  // disappears and a fallback pick takes its slot. The curator popover
+  // shows the hidden set (including recipes hidden this way, not just
+  // component combines) so the user can unhide later.
+  const hideBtn = el("button", {
+    class: "allocate-hide-btn",
+    text: "🚫 hide this craft",
+    attrs: { title: "Permanently exclude this recipe from allocation (persists across reloads). Manage via the sidebar 'View / curate list' popover." },
+  });
+  hideBtn.onclick = (e) => {
+    e.stopPropagation();
+    setRecipeExcluded(a.recipe.key, true);
+    document.getElementById("allocate-btn").click();
+  };
+  card.appendChild(hideBtn);
 
   // Component-buy breakdown: what actually goes into the GE for each craft.
   // "Buy 6× Adamant set" is really "buy 6 helms + 6 chests + 6 legs + 6 kites",
@@ -4766,94 +4860,204 @@ async function init() {
     restore("allocate-free-components", "osrs-combo-allocate-free-components", true);
   }
 
-  /* ---------------- Component-combines list popover ----------------
-   * A modal listing every recipe classified as a "component combine" (see
-   * isComponentProducingRecipe). Each row has a checkbox — unchecked =
-   * excluded from allocation entirely. Persisted via saveExcludedRecipes.
-   * A filter box narrows the list; "Include all" / "Exclude all" bulk edit.
+  /* ---------------- Curator popover factory ----------------
+   * Two popovers with identical structure: one for component combines,
+   * one for skilling recipes (aka "supplies"). Each lists the recipes in
+   * its classification with a checkbox per row — unchecked = excluded
+   * from allocation entirely (persists via state.excludedRecipes). Search
+   * box + Include-all / Exclude-all bulk controls. Backed by a shared
+   * factory so the two popovers stay consistent as they evolve.
+   *
+   * Both share state.excludedRecipes — an unhide from either popover
+   * flips the same underlying Set. The combines popover additionally
+   * surfaces "Other hidden recipes" (anything excluded but not in the
+   * combines classification) so card-hidden recipes stay unhideable.
    */
-  const combinesModal = document.getElementById("combines-modal");
-  const combinesBtn   = document.getElementById("allocate-combines-list-btn");
-  const combinesCountBadge = document.getElementById("allocate-combines-count");
-  function updateExcludedBadge() {
-    if (!combinesCountBadge) return;
-    // Count how many of the CURRENT combine set are excluded (not stale
-    // exclusions for recipes that no longer classify).
-    const combines = componentCombineRecipes();
-    let n = 0;
-    for (const r of combines) if (state.excludedRecipes.has(r.key)) n++;
-    combinesCountBadge.textContent = n > 0 ? `${n} excluded` : "";
-    combinesCountBadge.style.display = n > 0 ? "" : "none";
-  }
-  updateExcludedBadge();
+  function wireCuratorPopover(cfg) {
+    const modal   = document.getElementById(cfg.modalId);
+    const btn     = document.getElementById(cfg.btnId);
+    const badge   = document.getElementById(cfg.badgeId);
+    if (!modal || !btn) return { update: () => {} };
+    const listEl   = document.getElementById(cfg.listId);
+    const searchEl = document.getElementById(cfg.searchId);
+    const countEl  = document.getElementById(cfg.countId);
+    const closeBtn = document.getElementById(cfg.closeId);
+    const includeAllBtn = document.getElementById(cfg.includeAllId);
+    const excludeAllBtn = document.getElementById(cfg.excludeAllId);
 
-  if (combinesBtn && combinesModal) {
-    const listEl   = document.getElementById("combines-modal-list");
-    const searchEl = document.getElementById("combines-modal-search");
-    const countEl  = document.getElementById("combines-modal-count");
-    const closeBtn = document.getElementById("combines-modal-close");
-    const includeAllBtn = document.getElementById("combines-include-all");
-    const excludeAllBtn = document.getElementById("combines-exclude-all");
-
-    function renderCombinesList() {
+    // Rows come from two kinds of source: recipes (unchecking excludes from
+    // allocation via state.excludedRecipes) and items (unchecking removes
+    // from the fast-fill pool via state.excludedFreeSlotItems). Both render
+    // identically; the checkbox handler branches on `entry.kind`.
+    function isEntryExcluded(entry) {
+      if (entry.kind === "item") return state.excludedFreeSlotItems.has(String(entry.id));
+      return state.excludedRecipes.has(entry.recipe.key);
+    }
+    function setEntryExcluded(entry, excluded) {
+      if (entry.kind === "item") setFreeSlotItemExcluded(entry.id, excluded);
+      else setRecipeExcluded(entry.recipe.key, excluded);
+    }
+    function entryMatches(entry, q) {
+      if (!q) return true;
+      const name = entry.kind === "item" ? entry.name : entry.recipe.name;
+      const cat  = entry.kind === "item" ? "" : (entry.recipe.cat || "");
+      return name.toLowerCase().includes(q) || cat.toLowerCase().includes(q);
+    }
+    function collectPrimary() {
+      const out = [];
+      for (const r of cfg.getScope()) out.push({ kind: "recipe", recipe: r });
+      if (cfg.getItems) for (const it of cfg.getItems()) out.push({ kind: "item", ...it });
+      return out;
+    }
+    function updateBadge() {
+      let n = 0;
+      for (const entry of collectPrimary()) if (isEntryExcluded(entry)) n++;
+      badge.textContent = n > 0 ? `${n} excluded` : "";
+      badge.style.display = n > 0 ? "" : "none";
+    }
+    function render() {
       const q = (searchEl.value || "").trim().toLowerCase();
-      const all = componentCombineRecipes();
-      const filtered = q ? all.filter(r => r.name.toLowerCase().includes(q)) : all;
+      const primary = collectPrimary().filter(e => entryMatches(e, q));
+      // Optional secondary section (used by combines popover for "Other hidden")
+      const secondary = cfg.getSecondary
+        ? cfg.getSecondary().map(r => ({ kind: "recipe", recipe: r })).filter(e => entryMatches(e, q))
+        : [];
+
       listEl.replaceChildren();
-      for (const r of filtered) {
-        const excluded = state.excludedRecipes.has(r.key);
+      const makeRow = (entry) => {
+        const excluded = isEntryExcluded(entry);
         const row = el("label", { class: "combines-row" + (excluded ? " excluded" : "") });
         const cb = el("input", { attrs: { type: "checkbox" } });
         cb.checked = !excluded;
         cb.addEventListener("change", () => {
-          setRecipeExcluded(r.key, !cb.checked);
+          setEntryExcluded(entry, !cb.checked);
           row.classList.toggle("excluded", !cb.checked);
-          updateExcludedBadge();
-          updateCountLine();
+          updateBadge();
+          updateCount();
+          syncAllCuratorBadges();
         });
+        const displayName = entry.kind === "item" ? entry.name : entry.recipe.name;
+        const displayCat  = entry.kind === "item" ? "component" : entry.recipe.cat;
         row.appendChild(cb);
-        row.appendChild(el("span", { class: "combines-row-name", text: r.name }));
-        if (r.cat) row.appendChild(el("span", { class: "combines-row-cat", text: r.cat }));
-        listEl.appendChild(row);
+        row.appendChild(el("span", { class: "combines-row-name", text: displayName }));
+        if (displayCat) row.appendChild(el("span", { class: "combines-row-cat", text: displayCat }));
+        return row;
+      };
+      if (primary.length) {
+        if (cfg.primaryHeader) {
+          listEl.appendChild(el("div", { class: "combines-section-header",
+            text: `${cfg.primaryHeader} · ${primary.length}` }));
+        }
+        for (const e of primary) listEl.appendChild(makeRow(e));
       }
-      if (!filtered.length) {
+      if (secondary.length) {
+        listEl.appendChild(el("div", { class: "combines-section-header",
+          text: `${cfg.secondaryHeader} · ${secondary.length}` }));
+        for (const e of secondary) listEl.appendChild(makeRow(e));
+      }
+      if (!primary.length && !secondary.length) {
         listEl.appendChild(el("div", { class: "combines-empty",
-          text: q ? "No matches." : "No component combines classified — check the classifier logic." }));
+          text: q ? "No matches." : cfg.emptyText }));
       }
     }
-    function updateCountLine() {
-      const total = componentCombineRecipes().length;
+    function updateCount() {
+      const primary = collectPrimary();
       let excluded = 0;
-      for (const r of componentCombineRecipes()) if (state.excludedRecipes.has(r.key)) excluded++;
-      countEl.textContent = `${total - excluded} included · ${excluded} excluded · ${total} total`;
+      for (const e of primary) if (isEntryExcluded(e)) excluded++;
+      const parts = [
+        `${primary.length - excluded} included · ${excluded} excluded · ${primary.length} ${cfg.noun}`,
+      ];
+      if (cfg.getSecondary) {
+        const otherHidden = cfg.getSecondary().length;
+        if (otherHidden > 0) parts.push(`+ ${otherHidden} other hidden`);
+      }
+      countEl.textContent = parts.join(" · ");
     }
-    combinesBtn.addEventListener("click", () => {
+    btn.addEventListener("click", () => {
       searchEl.value = "";
-      renderCombinesList();
-      updateCountLine();
-      if (typeof combinesModal.showModal === "function") combinesModal.showModal();
-      else combinesModal.setAttribute("open", "");
+      render();
+      updateCount();
+      if (typeof modal.showModal === "function") modal.showModal();
+      else modal.setAttribute("open", "");
     });
-    closeBtn.addEventListener("click", () => combinesModal.close());
-    combinesModal.addEventListener("click", (e) => {
-      if (e.target === combinesModal) combinesModal.close();
-    });
-    searchEl.addEventListener("input", renderCombinesList);
+    closeBtn.addEventListener("click", () => modal.close());
+    modal.addEventListener("click", (e) => { if (e.target === modal) modal.close(); });
+    searchEl.addEventListener("input", render);
     includeAllBtn.addEventListener("click", () => {
-      for (const r of componentCombineRecipes()) state.excludedRecipes.delete(r.key);
-      saveExcludedRecipes();
-      updateExcludedBadge();
-      renderCombinesList();
-      updateCountLine();
+      for (const entry of collectPrimary()) setEntryExcluded(entry, false);
+      updateBadge();
+      render();
+      updateCount();
+      syncAllCuratorBadges();
     });
     excludeAllBtn.addEventListener("click", () => {
-      for (const r of componentCombineRecipes()) state.excludedRecipes.add(r.key);
-      saveExcludedRecipes();
-      updateExcludedBadge();
-      renderCombinesList();
-      updateCountLine();
+      for (const entry of collectPrimary()) setEntryExcluded(entry, true);
+      updateBadge();
+      render();
+      updateCount();
+      syncAllCuratorBadges();
     });
+    // Prime the badge on load so the sidebar reflects any persisted exclusions.
+    updateBadge();
+    return { update: updateBadge };
   }
+  // Cross-popover badge sync: unhide from card OR either popover updates
+  // both sidebar badges. Populated below after both curators are wired.
+  const _curators = [];
+  function syncAllCuratorBadges() { for (const c of _curators) c.update(); }
+
+  // Fillers popover: primary = freeSlotFillerRecipes() (recipes) +
+  // FREE_SLOT_ITEM_IDS entries (items). Both participate in the same toggle
+  // ("Filler intermediates + fast-fill components don't consume slots") so
+  // both belong in the same checklist. Unchecking a recipe excludes it from
+  // allocation entirely; unchecking an item removes it from the fast-fill
+  // pool. Secondary = card-hidden recipes not otherwise scoped.
+  _curators.push(wireCuratorPopover({
+    modalId: "combines-modal",
+    btnId: "allocate-combines-list-btn",
+    badgeId: "allocate-combines-count",
+    listId: "combines-modal-list",
+    searchId: "combines-modal-search",
+    countId: "combines-modal-count",
+    closeId: "combines-modal-close",
+    includeAllId: "combines-include-all",
+    excludeAllId: "combines-exclude-all",
+    noun: "entries",
+    primaryHeader: "Fillers + fast-fill components",
+    secondaryHeader: "Other hidden recipes",
+    emptyText: "No filler entries — add freeSlotFiller:true to recipes or ids to FREE_SLOT_ITEM_IDS.",
+    getScope: () => freeSlotFillerRecipes(),
+    getItems: () => Array.from(FREE_SLOT_ITEM_IDS)
+      .map(id => ({ id, name: state.mapping?.[id]?.name || `#${id}` }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    getSecondary: () => {
+      const fillerKeys = new Set(freeSlotFillerRecipes().map(r => r.key));
+      const skillKeys = new Set(RECIPES.filter(r => r.skill).map(r => r.key));
+      // "Other hidden" excludes recipes that live in the supplies popover
+      // (skilling), so unhiding is scoped: skilling stays in supplies view,
+      // non-skilling non-filler hides show here.
+      return RECIPES.filter(r =>
+        state.excludedRecipes.has(r.key) && !fillerKeys.has(r.key) && !skillKeys.has(r.key)
+      ).sort((a, b) => a.name.localeCompare(b.name));
+    },
+  }));
+  // Supplies popover: primary = every skilling recipe.
+  _curators.push(wireCuratorPopover({
+    modalId: "supplies-modal",
+    btnId: "allocate-supplies-list-btn",
+    badgeId: "allocate-supplies-count",
+    listId: "supplies-modal-list",
+    searchId: "supplies-modal-search",
+    countId: "supplies-modal-count",
+    closeId: "supplies-modal-close",
+    includeAllId: "supplies-include-all",
+    excludeAllId: "supplies-exclude-all",
+    noun: "skilling recipes",
+    primaryHeader: null,
+    emptyText: "No skilling recipes loaded.",
+    getScope: () => RECIPES.filter(r => r.skill).slice().sort((a, b) =>
+      (a.cat || "").localeCompare(b.cat || "") || a.name.localeCompare(b.name)),
+  }));
 
   // Sidebar collapse toggle
   const layoutEl = document.getElementById("layout");
