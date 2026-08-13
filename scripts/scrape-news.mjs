@@ -26,6 +26,32 @@ const UA = "big-timbys-little-tool/0.1 (news marker scraper; crazyhairmartin@gma
 const BACKFILL_DAYS = 370;   // price data caps at 365d; small buffer for edge dates
 const MS_PER_DAY = 86_400_000;
 
+/* URL validation for scraped post links.
+ *
+ * The OSRS wiki is user-editable, so the {{Update|url=...}} template value
+ * is untrusted input. Without this check a hostile wiki edit could inject a
+ * javascript: URL that would fire when a user clicks the corresponding
+ * news marker in the browser (window.open executes javascript: URIs in the
+ * opener's context — noopener/noreferrer do NOT block that). The scraper
+ * skips any post whose URL fails validation; the click handler in app.js
+ * enforces the same allowlist as defense-in-depth.
+ *
+ * Allowlist: the two Jagex-controlled news domains + the wiki fallback.
+ * If a legitimate future news domain shows up (unlikely), extend here.
+ */
+const NEWS_URL_ALLOWED_HOSTS = new Set([
+  "secure.runescape.com",
+  "www.runescape.com",
+  "oldschool.runescape.wiki",
+]);
+function isSafeNewsUrl(raw) {
+  if (typeof raw !== "string" || !raw) return false;
+  let u;
+  try { u = new URL(raw); } catch { return false; }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  return NEWS_URL_ALLOWED_HOSTS.has(u.hostname.toLowerCase());
+}
+
 /* -------------- RSS parsing (existing behaviour) -------------- */
 function parseRss(xml) {
   const items = [];
@@ -46,6 +72,10 @@ function parseRss(xml) {
     if (!title || !link || !date) continue;
     const ts = Date.parse(date);
     if (!isFinite(ts)) continue;
+    if (!isSafeNewsUrl(link)) {
+      console.warn(`[rss]  skip unsafe url: ${link}`);
+      continue;
+    }
     items.push({ ts, title, url: link, category: cat || "News", source: "rss" });
   }
   return items;
@@ -123,8 +153,21 @@ async function fetchWikiCategory(categoryTitle) {
       const urlM = body.match(WIKI_URL_RE);
       const catM = body.match(WIKI_CAT_RE);
       const title = String(p.title).replace(/^Update:/, "").trim();
-      const canonicalUrl = (urlM ? urlM[1].trim() : null)
-        || `https://oldschool.runescape.wiki/w/${encodeURIComponent(String(p.title).replace(/ /g, "_"))}`;
+      // Fallback is a wiki-hosted URL built from the (Jagex-side-untrusted
+      // but wiki-namespaced) page title — the URL constructor path traversal
+      // caveats don't apply because we encode the whole segment and then
+      // validate via isSafeNewsUrl below.
+      const wikiFallback = `https://oldschool.runescape.wiki/w/${encodeURIComponent(String(p.title).replace(/ /g, "_"))}`;
+      const templateUrl = urlM ? urlM[1].trim() : null;
+      // Prefer the template URL only if it passes validation; otherwise fall
+      // back to the wiki page URL (which is always safe by construction).
+      // See isSafeNewsUrl comment for why raw template values are untrusted.
+      const canonicalUrl = (templateUrl && isSafeNewsUrl(templateUrl))
+        ? templateUrl
+        : wikiFallback;
+      if (templateUrl && !isSafeNewsUrl(templateUrl)) {
+        console.warn(`[wiki] ${p.title}: template url rejected (${templateUrl}) — using wiki fallback`);
+      }
       posts.push({
         ts, title,
         url: canonicalUrl,
