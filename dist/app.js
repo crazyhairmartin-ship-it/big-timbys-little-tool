@@ -2148,7 +2148,7 @@ function renderIndexCard(idx) {
 ---------------------------------------------------- */
 function allocateRecipes(opts) {
   const {
-    budget, horizon, slots, maxPerRecipePct, minRoiPct,
+    budget, horizon, slots, maxPerRecipePct, minContribPct,
     requireConf, skipSkilling, hideStale,
     freeSkillingSupplies, freeComponentCombines,
   } = opts;
@@ -2157,7 +2157,12 @@ function allocateRecipes(opts) {
   const perRecipeCap = maxPerRecipePct > 0 && maxPerRecipePct < 100
     ? budget * (maxPerRecipePct / 100)
     : Infinity;
-  const minRoi = (minRoiPct || 0) / 100;
+  // Minimum absolute profit a single recipe must contribute to be worth
+  // recommending. Framed as a % of the total budget so it scales with the
+  // portfolio: a 0.05% floor on 300M = 150k minimum, on 1M = 500 gp minimum.
+  // "5% ROI on 100 gp" = 5 gp profit, which is 0.0000017% of 300M — that's
+  // the noise this filter kills.
+  const minProfitAbsolute = budget * ((minContribPct || 0) / 100);
 
   // Pull the currently-viable candidates. Each carries flags for the slot-
   // accounting logic below: `freeSlot` recipes still get allocated capital
@@ -2179,10 +2184,11 @@ function allocateRecipes(opts) {
     if (calc.limitFlipsPer4h == null) continue;   // can't cap without GE limit info
     const maxUnits = calc.limitFlipsPer4h * horizonMult;
     if (maxUnits <= 0) continue;
-    // Min-ROI gate — filters out the low-ROI tail so we don't recommend
-    // filler items to top up the budget with negligible profit.
+    // Cheap early-out: if this recipe can't POSSIBLY contribute enough
+    // profit to matter (even at full capacity), skip it before the
+    // confidence lookup. Saves per-item work on the long tail.
+    if (calc.margin * maxUnits < minProfitAbsolute) continue;
     const roi = calc.margin / calc.totalCost;
-    if (roi < minRoi) continue;
     // Confidence gate — only when the recipe has predictions AND the user asked
     // for it. Recipes with no prediction (most combos when overnight hasn't
     // been analysed yet) pass through by default.
@@ -2229,6 +2235,11 @@ function allocateRecipes(opts) {
     if (count <= 0) continue;
     const cost = count * cand.calc.totalCost;
     const profit = count * cand.calc.margin;
+    // Second-pass contribution check — the recipe COULD contribute enough
+    // (early-out passed above at max-units), but after budget/per-recipe
+    // caps it may only get a slice that IS below threshold. Skip those so
+    // we don't waste a slot on a token allocation.
+    if (profit < minProfitAbsolute) continue;
     allocations.push({
       recipe: cand.recipe,
       calc: cand.calc,
@@ -2260,7 +2271,7 @@ function allocateRecipes(opts) {
     exhaustedReason:
       remainingBudget <= 0 ? "budget fully deployed"
       : hitSlotCap ? `slot cap (${slots}) reached before budget — more capital available but no free slots left. Enable free-slot toggles or raise the slot cap.`
-      : `no more candidates above ${minRoiPct}% ROI — either relax the min-ROI or raise the confidence/stale filters`,
+      : `no more candidates can contribute > ${minContribPct}% of budget (${fmtGp(Math.round(minProfitAbsolute))}) in profit — lower the min-contribution or relax the other filters`,
   };
 }
 
@@ -4140,7 +4151,7 @@ async function init() {
       const budget = parseGp(document.getElementById("allocate-budget").value);
       const horizon = document.getElementById("allocate-horizon").value;
       const slots = Math.max(1, Math.min(8, parseInt(document.getElementById("allocate-slots").value, 10) || 8));
-      const minRoiPct = Math.max(0, parseFloat(document.getElementById("allocate-min-roi").value) || 0);
+      const minContribPct = Math.max(0, parseFloat(document.getElementById("allocate-min-contrib").value) || 0);
       const maxPerRecipePct = Math.max(1, Math.min(100, parseFloat(document.getElementById("allocate-max-pct").value) || 100));
       const requireConf = document.getElementById("allocate-require-conf").checked;
       const skipSkilling = document.getElementById("allocate-skip-skilling").checked;
@@ -4148,7 +4159,7 @@ async function init() {
       const freeSkillingSupplies = document.getElementById("allocate-free-supplies").checked;
       const freeComponentCombines = document.getElementById("allocate-free-components").checked;
       state.allocation = allocateRecipes({
-        budget, horizon, slots, minRoiPct, maxPerRecipePct,
+        budget, horizon, slots, minContribPct, maxPerRecipePct,
         requireConf, skipSkilling, hideStale,
         freeSkillingSupplies, freeComponentCombines,
       });
@@ -4156,7 +4167,7 @@ async function init() {
       localStorage.setItem("osrs-combo-allocate-budget", document.getElementById("allocate-budget").value);
       localStorage.setItem("osrs-combo-allocate-horizon", horizon);
       localStorage.setItem("osrs-combo-allocate-slots", String(slots));
-      localStorage.setItem("osrs-combo-allocate-min-roi", String(minRoiPct));
+      localStorage.setItem("osrs-combo-allocate-min-contrib", String(minContribPct));
       localStorage.setItem("osrs-combo-allocate-max-pct", String(maxPerRecipePct));
       localStorage.setItem("osrs-combo-allocate-hide-stale", hideStale ? "1" : "0");
       localStorage.setItem("osrs-combo-allocate-free-supplies", freeSkillingSupplies ? "1" : "0");
@@ -4175,7 +4186,7 @@ async function init() {
     restore("allocate-budget", "osrs-combo-allocate-budget");
     restore("allocate-horizon", "osrs-combo-allocate-horizon");
     restore("allocate-slots", "osrs-combo-allocate-slots");
-    restore("allocate-min-roi", "osrs-combo-allocate-min-roi");
+    restore("allocate-min-contrib", "osrs-combo-allocate-min-contrib");
     restore("allocate-max-pct", "osrs-combo-allocate-max-pct");
     restore("allocate-hide-stale", "osrs-combo-allocate-hide-stale", true);
     restore("allocate-free-supplies", "osrs-combo-allocate-free-supplies", true);
