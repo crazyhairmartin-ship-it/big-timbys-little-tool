@@ -1606,6 +1606,28 @@ footer {
   font-weight: 600;
 }
 
+/* Per-card "hide this craft" button — footer of the allocation card. Muted
+   by default; hover picks up the red accent used by the hit-limit chip. */
+.allocate-hide-btn {
+  display: block;
+  width: calc(100% - 28px);
+  margin: 8px 14px 14px;
+  padding: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.allocate-hide-btn:hover {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.08);
+}
+
 /* Supply-strategy override chip — shown on allocation cards when the
    allocator picked a supply strategy DIFFERENT from the user's global
    preference (e.g. an insta-buy pick under a slow-buy default because
@@ -2091,6 +2113,20 @@ footer {
 }
 .combines-row.excluded .combines-row-name { color: var(--text-2); text-decoration: line-through; }
 .combines-empty { padding: 20px; text-align: center; color: var(--text-2); font-size: 12px; }
+/* Section header inside the curator list — separates "Component combines"
+   from "Other hidden recipes" (in the combines popover), and pins the
+   count next to the label so the user knows scope at a glance. */
+.combines-section-header {
+  padding: 8px 8px 4px;
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+}
+.combines-section-header:first-child { margin-top: 0; }
 .combines-modal-footer {
   margin-top: 10px;
   font-size: 11.5px;
