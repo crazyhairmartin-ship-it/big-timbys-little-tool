@@ -1080,6 +1080,25 @@ function supplyPrice(p) {
   if (!p) return null;
   return state.supplyStrategy === "slow-buy" ? (p.low ?? null) : (p.high ?? null);
 }
+// Same as supplyPrice() but honours an explicit strategy override instead of
+// state.supplyStrategy. Used by the allocator (and the allocator's card render)
+// to price a specific recipe under whichever strategy actually wins for it —
+// so a global "slow-buy" preference can still surface an insta-buy pick when
+// insta-buy is more profitable (e.g. stale .low in a downtrending market, or
+// a null .low that would otherwise drop the recipe entirely).
+function supplyPriceAt(p, strategy) {
+  if (!p) return null;
+  return strategy === "slow-buy" ? (p.low ?? null) : (p.high ?? null);
+}
+// Compute calcMargin under an arbitrary supply strategy. Restores the global
+// state after — the mutation is scoped to this function call. Cheaper than
+// threading a strategy param through calcMargin's callers (many of them read
+// state.supplyStrategy indirectly).
+function calcMarginAt(recipe, strategy) {
+  const prev = state.supplyStrategy;
+  state.supplyStrategy = strategy;
+  try { return calcMargin(recipe); } finally { state.supplyStrategy = prev; }
+}
 function supplyTime(p) {
   if (!p) return null;
   return state.supplyStrategy === "slow-buy" ? (p.lowTime ?? null) : (p.highTime ?? null);
@@ -2268,10 +2287,37 @@ function allocateRecipes(opts) {
     if (isHitLimited(r.id)) continue;
     if (r.components.some(c => isHitLimited(c.id))) continue;
     if ((r.supplies || []).some(s => isHitLimited(s.id))) continue;
-    const calc = calcMargin(r);
-    if (!calc.allPresent) continue;
-    if (!(calc.margin > 0)) continue;
-    if (!(calc.totalCost > 0)) continue;
+    // Per-recipe supply-strategy pick: score this recipe under BOTH slow-buy
+    // and insta-buy, then choose whichever yields higher profit-per-slot for
+    // this specific recipe. Honours user preference on ties. Reasons an
+    // insta-buy pick can win under a "slow-buy" default:
+    //   1. Missing .low — the recipe would otherwise drop entirely.
+    //   2. Stale .low in a downtrending market — .high is fresher and lower.
+    //   3. Rare bid-ask crossover where .high < .low outright.
+    // The card gets a badge when the chosen strategy differs from user's global
+    // preference so the user knows they need to insta-buy for THAT recipe.
+    const calcSlow = calcMarginAt(r, "slow-buy");
+    const calcInsta = calcMarginAt(r, "insta-buy");
+    const slowViable = calcSlow.allPresent && calcSlow.margin > 0 && calcSlow.totalCost > 0;
+    const instaViable = calcInsta.allPresent && calcInsta.margin > 0 && calcInsta.totalCost > 0;
+    if (!slowViable && !instaViable) continue;
+    let calc, supplyStrategyUsed;
+    if (slowViable && instaViable) {
+      // Both viable — pick the one with higher margin per craft (equivalent
+      // to higher profit-per-slot since slotsPerUnit is strategy-independent).
+      // On exact tie, honour the user's global preference so nothing changes
+      // for the normal case.
+      const preferSlow = state.supplyStrategy === "slow-buy";
+      const slowBetter = calcSlow.margin > calcInsta.margin;
+      const instaBetter = calcInsta.margin > calcSlow.margin;
+      if (slowBetter) { calc = calcSlow; supplyStrategyUsed = "slow-buy"; }
+      else if (instaBetter) { calc = calcInsta; supplyStrategyUsed = "insta-buy"; }
+      else { calc = preferSlow ? calcSlow : calcInsta; supplyStrategyUsed = preferSlow ? "slow-buy" : "insta-buy"; }
+    } else if (slowViable) {
+      calc = calcSlow; supplyStrategyUsed = "slow-buy";
+    } else {
+      calc = calcInsta; supplyStrategyUsed = "insta-buy";
+    }
     // maxUnits = the realistic flip count bounded by:
     //   1. Output 24h trade volume  }
     //   2. Every component's 24h vol } — via calc.maxFlips (daily)
@@ -2314,7 +2360,7 @@ function allocateRecipes(opts) {
     const slotsPerUnit = Math.max(1,
       (r.components?.length || 0) + (r.supplies?.length || 0));
     const expectedProfit = calc.margin * maxUnits;
-    candidates.push({ recipe: r, calc, maxUnits, expectedProfit, conf, roi, freeSlot, slotsPerUnit });
+    candidates.push({ recipe: r, calc, maxUnits, expectedProfit, conf, roi, freeSlot, slotsPerUnit, supplyStrategyUsed });
   }
   // Sort by profit-per-slot-use × conf². With slots as the binding constraint,
   // greedy "most profit per scarce buy-slot" produces the highest total profit
@@ -2380,6 +2426,7 @@ function allocateRecipes(opts) {
       roi: cand.roi,
       buyOrderCount,
       slotUseCount,
+      supplyStrategyUsed: cand.supplyStrategyUsed,
     });
     remainingBudget -= cost;
     if (!cand.freeSlot) slotsUsedTotal += slotUseCount;
@@ -2522,6 +2569,18 @@ function renderAllocationCard(a) {
     catRow.appendChild(el("span", { class: "skill-chip", text: "free slot",
       attrs: { title: "This recipe is a skilling supply or component combine — excluded from the GE-slot count per your toggles." }}));
   }
+  // Supply-strategy override chip — the allocator scored this recipe under
+  // BOTH insta-buy and slow-buy, and picked whichever gave higher margin.
+  // Only shown when the winning strategy differs from the user's global
+  // preference (i.e. this recipe needs you to switch behaviour for it).
+  if (a.supplyStrategyUsed && a.supplyStrategyUsed !== state.supplyStrategy) {
+    const label = a.supplyStrategyUsed === "insta-buy" ? "insta-buy supplies" : "slow-buy supplies";
+    const tip = a.supplyStrategyUsed === "insta-buy"
+      ? "Slow-buy was less profitable (or unavailable) for this recipe — pay the current insta-buy price on supplies to unlock this margin."
+      : "Slow-buying supplies is more profitable here — place buy orders at the low price instead of insta-buying.";
+    catRow.appendChild(el("span", { class: "strategy-chip strategy-chip-" + a.supplyStrategyUsed,
+      text: label, attrs: { title: tip } }));
+  }
   // Stale badge — a recommendation using stale prices is a bad recommendation
   // even if the calc says it's profitable. Only appears when the user has NOT
   // hidden stale items (i.e. they've opted in to seeing them).
@@ -2574,10 +2633,15 @@ function renderAllocationCard(a) {
     };
     return btn;
   };
+  // Prices in this list must match the strategy the allocator actually used
+  // for THIS recipe, not the global state. Otherwise a "insta-buy supplies"
+  // recipe shows slow-buy prices in its breakdown and the numbers don't add
+  // up to the summary cost.
+  const strat = a.supplyStrategyUsed || state.supplyStrategy;
   for (const c of a.recipe.components) {
     const name = state.mapping?.[c.id]?.name || `#${c.id}`;
     const unitCount = c.qty * a.count;
-    const unitPrice = supplyPrice(state.prices[c.id]);
+    const unitPrice = supplyPriceAt(state.prices[c.id], strat);
     const priceText = unitPrice != null ? ` @ ${fmtGp(unitPrice)}` : "";
     const row = el("div", { class: "allocate-buy-row" });
     row.appendChild(el("span", { class: "allocate-buy-name", text: name }));
@@ -2590,7 +2654,7 @@ function renderAllocationCard(a) {
   for (const s of a.recipe.supplies || []) {
     const name = state.mapping?.[s.id]?.name || `#${s.id}`;
     const unitCount = s.qty * a.count;
-    const unitPrice = supplyPrice(state.prices[s.id]);
+    const unitPrice = supplyPriceAt(state.prices[s.id], strat);
     const priceText = unitPrice != null ? ` @ ${fmtGp(unitPrice)}` : "";
     const row = el("div", { class: "allocate-buy-row" });
     row.appendChild(el("span", { class: "allocate-buy-name", text: name + " (supply)" }));
