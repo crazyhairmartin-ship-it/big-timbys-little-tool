@@ -1730,6 +1730,50 @@ footer {
 .hit-limit-chip-timer { color: rgba(252, 165, 165, 0.75); font-variant-numeric: tabular-nums; }
 .hit-limit-chip-x { color: rgba(252, 165, 165, 0.6); font-size: 13px; line-height: 1; margin-left: 2px; }
 
+/* Hidden-recipes banner — same layout as the hit-limit banner but grey
+   instead of red, to signal "permanent user hide" (not "time-limited buy
+   limit"). Chip has a × to unhide directly from the Allocate view. */
+.hidden-recipes-banner {
+  padding: 10px 14px 12px;
+  margin-bottom: 12px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+}
+.hidden-recipes-banner-title {
+  color: #94a3b8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.hidden-recipes-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hidden-recipes-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px 3px 9px;
+  font-size: 11px;
+  background: rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.hidden-recipes-chip:hover {
+  background: rgba(148, 163, 184, 0.24);
+  border-color: rgba(148, 163, 184, 0.5);
+  color: var(--text-1);
+}
+.hidden-recipes-chip-name { font-weight: 600; }
+.hidden-recipes-chip-x { color: rgba(203, 213, 225, 0.65); font-size: 13px; line-height: 1; margin-left: 2px; }
+
 /* ---------------- Market mode ----------------
    Indexes are 10 hand-listed items — none of the realtime sidebar filters
    apply. Hide the whole filter stack; keep only the Sort dropdown since it

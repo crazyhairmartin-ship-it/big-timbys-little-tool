@@ -2665,12 +2665,54 @@ function allocateRecipes(opts) {
   };
 }
 
+// Banner listing every recipe the user has permanently hidden via the card
+// "🚫 hide this craft" button (state.excludedRecipes). Each chip has a ×
+// to unhide directly, so the user doesn't have to hunt through the curator
+// popovers to bring a recipe back. Renders unconditionally so it stays
+// visible even when the allocation grid is empty.
+function renderHiddenRecipesBanner(grid) {
+  if (!state.excludedRecipes.size) return;
+  // Resolve keys → recipe objects. Filter out any stale keys that no
+  // longer match a live recipe (e.g. after a rename in the data).
+  const keyToRecipe = new Map(RECIPES.map(r => [r.key, r]));
+  const hiddenRecipes = Array.from(state.excludedRecipes)
+    .map(k => keyToRecipe.get(k))
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!hiddenRecipes.length) return;
+  const banner = el("div", { class: "hidden-recipes-banner" });
+  banner.appendChild(el("div", { class: "hidden-recipes-banner-title",
+    text: `${hiddenRecipes.length} craft${hiddenRecipes.length === 1 ? "" : "s"} hidden from allocation` }));
+  const chips = el("div", { class: "hidden-recipes-chip-row" });
+  for (const r of hiddenRecipes) {
+    const chip = el("button", { class: "hidden-recipes-chip",
+      attrs: { title: `Click to unhide "${r.name}" and include it in allocation again.` } });
+    chip.appendChild(el("span", { class: "hidden-recipes-chip-name", text: r.name }));
+    chip.appendChild(el("span", { class: "hidden-recipes-chip-x", text: "×" }));
+    chip.onclick = (e) => {
+      e.stopPropagation();
+      setRecipeExcluded(r.key, false);
+      document.getElementById("allocate-btn").click();
+    };
+    chips.appendChild(chip);
+  }
+  banner.appendChild(chips);
+  grid.appendChild(banner);
+}
+
 function renderAllocate() {
   const grid = document.getElementById("grid");
   const tableWrap = document.getElementById("table-wrap");
   tableWrap.hidden = true;
   grid.hidden = false;
   grid.replaceChildren();
+
+  // Render the "hidden recipes" banner FIRST — before any early-return
+  // paths — so the user can always unhide crafts even when the current
+  // allocation is empty or the calculator hasn't been run yet. Otherwise
+  // hiding your last viable craft would leave you with an empty grid and
+  // no way to bring it back without opening a curator popover.
+  renderHiddenRecipesBanner(grid);
 
   const alloc = state.allocation;
   if (!alloc) {
@@ -5041,7 +5083,8 @@ async function init() {
       ).sort((a, b) => a.name.localeCompare(b.name));
     },
   }));
-  // Supplies popover: primary = every skilling recipe.
+  // Supplies popover: primary = every skilling recipe. Grouped by category
+  // (Construction / Cooking / Fletching / etc.) so the user can scan by skill.
   _curators.push(wireCuratorPopover({
     modalId: "supplies-modal",
     btnId: "allocate-supplies-list-btn",
@@ -5053,7 +5096,7 @@ async function init() {
     includeAllId: "supplies-include-all",
     excludeAllId: "supplies-exclude-all",
     noun: "skilling recipes",
-    primaryHeader: null,
+    primaryHeader: "Skilling recipes",
     emptyText: "No skilling recipes loaded.",
     getScope: () => RECIPES.filter(r => r.skill).slice().sort((a, b) =>
       (a.cat || "").localeCompare(b.cat || "") || a.name.localeCompare(b.name)),
