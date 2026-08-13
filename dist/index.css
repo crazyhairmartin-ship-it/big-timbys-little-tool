@@ -1588,6 +1588,80 @@ footer {
   font-weight: 600;
 }
 
+/* Per-item "hit buy limit" toggle — lives on each buy row. Neutral by
+   default so it doesn't shout; marked state uses the amber/red band to
+   read as "excluded" without being alarming. */
+.hit-limit-btn {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.hit-limit-btn:hover {
+  background: var(--bg-2);
+  color: var(--text-1);
+  border-color: var(--text-2);
+}
+.hit-limit-btn.hit {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #f87171;
+  font-weight: 600;
+}
+.hit-limit-btn.hit:hover {
+  background: rgba(239, 68, 68, 0.22);
+}
+
+/* Sidebar-level banner listing every currently-marked hit-limit item, with
+   a chip per item that shows the remaining time and unmarks on click. */
+.hit-limit-banner {
+  padding: 10px 14px 12px;
+  margin-bottom: 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 10px;
+}
+.hit-limit-banner-title {
+  color: #f87171;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.hit-limit-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hit-limit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px 3px 9px;
+  font-size: 11px;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.hit-limit-chip:hover {
+  background: rgba(239, 68, 68, 0.28);
+}
+.hit-limit-chip-name { font-weight: 600; color: #f87171; }
+.hit-limit-chip-timer { color: rgba(252, 165, 165, 0.75); font-variant-numeric: tabular-nums; }
+.hit-limit-chip-x { color: rgba(252, 165, 165, 0.6); font-size: 13px; line-height: 1; margin-left: 2px; }
+
 /* ---------------- Market mode ----------------
    Indexes are 10 hand-listed items — none of the realtime sidebar filters
    apply. Hide the whole filter stack; keep only the Sort dropdown since it

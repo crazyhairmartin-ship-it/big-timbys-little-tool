@@ -710,6 +710,10 @@ const state = {
   // and consumed by renderAllocate(). Persists across mode switches so the
   // user can leave/return without re-running.
   allocation: null,
+  // Per-item "hit buy limit" marks. Keyed by item id → epoch-ms when the 4h
+  // GE buy-limit window expires. Any recipe touching an unexpired item is
+  // filtered out of the allocator. Persisted to localStorage; pruned on read.
+  hitLimits: loadHitLimits(),
   // Snapshot of previous margins so we can show a trend arrow on cards.
   // Keyed by recipe.key; cleared on full refresh after capture.
   lastMargin: {},
@@ -934,6 +938,67 @@ function saveHistory() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.history)); } catch (_) {}
   }
 }
+/* ---------------- Hit-buy-limit tracking ----------------
+ * OSRS GE buy limits reset every 4h. When the user has personally hit an
+ * item's buy limit, no allocator recommendation involving that item can be
+ * acted on until the window rolls over. We store a map of {itemId: expiresAt
+ * epoch-ms}, prune expired entries on read, and let allocateRecipes() filter
+ * candidates that touch a still-blocked item. Marks are per-item (not per-
+ * recipe) so a marked component blocks every recipe using it.
+ */
+const HIT_LIMIT_KEY = "osrs-combo-hitlimits";
+const HIT_LIMIT_MS = 4 * 60 * 60 * 1000;
+function loadHitLimits() {
+  try {
+    const raw = localStorage.getItem(HIT_LIMIT_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    const now = Date.now();
+    const clean = {};
+    for (const [id, exp] of Object.entries(parsed)) {
+      if (typeof exp === "number" && exp > now) clean[id] = exp;
+    }
+    return clean;
+  } catch { return {}; }
+}
+function saveHitLimits() {
+  try { localStorage.setItem(HIT_LIMIT_KEY, JSON.stringify(state.hitLimits)); } catch {}
+}
+function pruneHitLimits() {
+  const now = Date.now();
+  let changed = false;
+  for (const [id, exp] of Object.entries(state.hitLimits)) {
+    if (exp <= now) { delete state.hitLimits[id]; changed = true; }
+  }
+  if (changed) saveHitLimits();
+}
+function isHitLimited(id) {
+  const exp = state.hitLimits[id];
+  return typeof exp === "number" && exp > Date.now();
+}
+function markHitLimit(id) {
+  state.hitLimits[id] = Date.now() + HIT_LIMIT_MS;
+  saveHitLimits();
+}
+function unmarkHitLimit(id) {
+  delete state.hitLimits[id];
+  saveHitLimits();
+}
+function toggleHitLimit(id) {
+  if (isHitLimited(id)) unmarkHitLimit(id);
+  else markHitLimit(id);
+}
+function fmtHitLimitRemaining(id) {
+  const exp = state.hitLimits[id];
+  if (!exp) return "";
+  const ms = exp - Date.now();
+  if (ms <= 0) return "expired";
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 function recordSample(recipe, calc) {
   const key = recipe.key;
   if (!state.history[key]) state.history[key] = [];
@@ -2146,6 +2211,16 @@ function renderIndexCard(idx) {
    percent or two of the optimal LP-relaxation solution — good enough,
    sub-millisecond compute, trivial to explain.
 ---------------------------------------------------- */
+// Horizon vocabulary — string codes map to hours. Extending the set (1h /
+// 2h / 8h / 12h) required an internal representation that isn't hard-coded
+// to two branches. hoursForHorizon() is the single source of truth; every
+// consumer downstream works in hours.
+const HORIZON_HOURS = { "1h": 1, "2h": 2, "4h": 4, "8h": 8, "12h": 12, "1d": 24 };
+function hoursForHorizon(h) { return HORIZON_HOURS[h] ?? 24; }
+// A single GE buy-limit window is 4h wide. This tells us how many windows
+// fit in the horizon — for the slot-budget calc below.
+function buyWindowsForHorizon(h) { return Math.max(1, Math.ceil(hoursForHorizon(h) / 4)); }
+
 function allocateRecipes(opts) {
   const {
     budget, horizon, slots, maxPerRecipePct, minContribPct,
@@ -2156,6 +2231,18 @@ function allocateRecipes(opts) {
   const perRecipeCap = maxPerRecipePct > 0 && maxPerRecipePct < 100
     ? budget * (maxPerRecipePct / 100)
     : Infinity;
+  // Ensure any expired hit-limits are cleared before we filter candidates —
+  // otherwise a 3h59m-old entry would still block, then vanish on next tick.
+  pruneHitLimits();
+  const horizonH = hoursForHorizon(horizon);
+  const windows = buyWindowsForHorizon(horizon);
+  // NEW slot model: total buy orders that can be placed in this horizon =
+  // slots × number-of-buy-windows. For a 4h horizon that's `slots` orders
+  // total; for 1d that's `slots × 6`. Under 4h we still assume one full
+  // window of concurrent slots (the buy-limit reset schedule doesn't cap
+  // slots themselves, only per-item volume). This replaces the old "each
+  // recipe = 1 slot" model which massively over-counted feasibility.
+  const slotBudget = slots * windows;
   // Minimum absolute profit a single recipe must contribute to be worth
   // recommending. Framed as a % of the total budget so it scales with the
   // portfolio: a 0.05% floor on 300M = 150k minimum, on 1M = 500 gp minimum.
@@ -2176,22 +2263,26 @@ function allocateRecipes(opts) {
       if (isItemStale(r.id)) continue;
       if (r.components.some(c => isItemStale(c.id))) continue;
     }
+    // Hit-limit gate: skip any recipe whose product, any component, or any
+    // supply is currently marked as buy-limit-hit (window not yet reset).
+    if (isHitLimited(r.id)) continue;
+    if (r.components.some(c => isHitLimited(c.id))) continue;
+    if ((r.supplies || []).some(s => isHitLimited(s.id))) continue;
     const calc = calcMargin(r);
     if (!calc.allPresent) continue;
     if (!(calc.margin > 0)) continue;
     if (!(calc.totalCost > 0)) continue;
-    // maxUnits = the realistic daily flip count bounded by:
+    // maxUnits = the realistic flip count bounded by:
     //   1. Output 24h trade volume  }
-    //   2. Every component's 24h vol } — via calc.maxFlips
+    //   2. Every component's 24h vol } — via calc.maxFlips (daily)
     //   3. Daily GE buy limits       }
-    // For a 4h horizon we divide by 6 (assumes vol is roughly uniform
-    // across the day). If maxFlips is null (no volume data at all), fall
-    // back to buy-limit alone rather than dropping the recipe.
+    // Scaled by (horizonH / 24). Linear-in-time is the best simple model
+    // given we only have daily rollups; it's slightly conservative for buy-
+    // limit-dominated recipes at short horizons (the buy-limit window may
+    // still allow more), which is the direction we want to err in.
     const dailyCap = calc.maxFlips ?? (calc.limitFlipsPer4h != null ? calc.limitFlipsPer4h * 6 : null);
     if (dailyCap == null || dailyCap <= 0) continue;
-    // 4h uses floor(daily/6). If that rounds to 0, the recipe has too little
-    // 4h capacity to be worth surfacing — skip rather than fake it up to 1.
-    const maxUnits = horizon === "1d" ? dailyCap : Math.floor(dailyCap / 6);
+    const maxUnits = Math.floor(dailyCap * horizonH / 24);
     if (maxUnits <= 0) continue;
     // Cheap early-out: if this recipe can't POSSIBLY contribute enough
     // profit to matter (even at full capacity), skip it before the
@@ -2201,62 +2292,82 @@ function allocateRecipes(opts) {
     // Confidence gate — only when the recipe has predictions AND the user asked
     // for it. Recipes with no prediction (most combos when overnight hasn't
     // been analysed yet) pass through by default.
-    let conf = null;
-    for (const id of [r.id, ...r.components.map(c => c.id)]) {
-      const p = pm[id];
-      if (!p || p.confidence == null) { conf = null; break; }
-      if (conf == null || p.confidence < conf) conf = p.confidence;
-    }
+    // Confidence signal: use the PRODUCT's overnight prediction only. Legacy
+    // logic AND-gated across every component, but the overnight pass rarely
+    // scores raw materials — so any recipe with an unscored rune/bar/log was
+    // dropped even at 80% product confidence. That made the "require 60%"
+    // toggle appear to filter everything. Components without a prediction now
+    // silently pass; they still affect sort weight only through the product.
+    const productPred = pm[r.id];
+    const conf = productPred?.confidence ?? null;
     if (requireConf && (conf == null || conf < 0.6)) continue;
-    // Free-slot flags: user-configurable exclusions from slot count.
+    // Free-slot flags: user-configurable exclusions from the slot-budget
+    // count. Same UI toggles; semantics changed to match the new model —
+    // free-slot recipes STILL get budget but their buy orders don't count
+    // against slotBudget. Useful for AFK skilling supplies that fill instantly.
     const isSkillingSupply = !!r.skill && freeSkillingSupplies;
     const isComponentCombine = isComponentProducingRecipe(r) && freeComponentCombines;
     const freeSlot = isSkillingSupply || isComponentCombine;
+    // slotsPerUnit = distinct GE buy orders per single craft = components +
+    // supplies. Recipes with 0 buys (rare — synthesized items with no inputs)
+    // fall back to 1 so they don't sort as infinite profit-per-slot.
+    const slotsPerUnit = Math.max(1,
+      (r.components?.length || 0) + (r.supplies?.length || 0));
     const expectedProfit = calc.margin * maxUnits;
-    candidates.push({ recipe: r, calc, maxUnits, expectedProfit, conf, roi, freeSlot });
+    candidates.push({ recipe: r, calc, maxUnits, expectedProfit, conf, roi, freeSlot, slotsPerUnit });
   }
-  // Sort by expected total profit × confidence² so recipes that can actually
-  // absorb capital rise to the top.
+  // Sort by profit-per-slot-use × conf². With slots as the binding constraint,
+  // greedy "most profit per scarce buy-slot" produces the highest total profit
+  // deployment. Sorting by absolute expected profit (the old key) would let
+  // one fat 5-component recipe eat the entire slot budget; profit-density
+  // keeps the mix balanced. Free-slot recipes still sort by density but don't
+  // decrement the budget when picked.
   candidates.sort((a, b) => {
-    const aw = a.expectedProfit * ((a.conf ?? 0.5) ** 2);
-    const bw = b.expectedProfit * ((b.conf ?? 0.5) ** 2);
+    const aw = (a.expectedProfit / a.slotsPerUnit) * ((a.conf ?? 0.5) ** 2);
+    const bw = (b.expectedProfit / b.slotsPerUnit) * ((b.conf ?? 0.5) ** 2);
     return bw - aw;
   });
 
-  // Greedy fill: walk candidates by expected-profit. Stop when the GE-slot
-  // budget is exhausted (excluding free-slot recipes) or we run out of
-  // candidates. Free-slot recipes are still allocated capital — they just
-  // don't consume a slot in the count.
+  // Greedy fill: walk candidates by profit-per-slot. Each recipe's slot cost
+  // = count × slotsPerUnit. Stop when the slot budget is exhausted (excluding
+  // free-slot recipes) or budget is spent.
   let remainingBudget = budget;
-  let slotsUsed = 0;
+  let slotsUsedTotal = 0;   // in slot-uses (buy orders), NOT recipes
   const allocations = [];
   let hitSlotCap = false;
   for (const cand of candidates) {
     if (remainingBudget <= 0) break;
-    if (!cand.freeSlot && slotsUsed >= slots) { hitSlotCap = true; continue; }
+    const slotsRemaining = slotBudget - slotsUsedTotal;
+    if (!cand.freeSlot && slotsRemaining <= 0) { hitSlotCap = true; continue; }
     // How much of THIS recipe can we buy?
     //   - Budget-limited by remaining budget
     //   - Diversification-limited by per-recipe cap (percentage of total budget)
-    //   - Supply-limited by 4h GE buy limit × horizon
+    //   - Volume-limited by maxUnits (calc.maxFlips × horizonH/24)
+    //   - Slot-limited by remaining slot budget ÷ slotsPerUnit (free recipes exempt)
     const budgetLimited = Math.floor(remainingBudget / cand.calc.totalCost);
     const perRecipeLimited = Math.floor(perRecipeCap / cand.calc.totalCost);
-    const count = Math.min(cand.maxUnits, budgetLimited, perRecipeLimited);
+    const slotLimited = cand.freeSlot ? Infinity
+      : Math.floor(slotsRemaining / cand.slotsPerUnit);
+    const count = Math.min(cand.maxUnits, budgetLimited, perRecipeLimited, slotLimited);
     if (count <= 0) continue;
     const cost = count * cand.calc.totalCost;
     const profit = count * cand.calc.margin;
     // Second-pass contribution check — the recipe COULD contribute enough
     // (early-out passed above at max-units), but after budget/per-recipe
     // caps it may only get a slice that IS below threshold. Skip those so
-    // we don't waste a slot on a token allocation.
+    // we don't waste slots on a token allocation.
     if (profit < minProfitAbsolute) continue;
     // Buy-order count: how many discrete GE buys the user has to place for
-    // this recipe. A "6× Adamant set" recipe with 4 components = 24 buy
-    // orders. Aggregate across recipes tells the user how much GE juggling
-    // this allocation actually requires — feasibility check that "5 slots
-    // used" misses.
+    // this recipe. Under the new model this IS the slot-use count, so it
+    // also drives the slot budget bookkeeping below.
     let buyOrderCount = 0;
     for (const c of cand.recipe.components) buyOrderCount += c.qty * count;
     for (const s of (cand.recipe.supplies || [])) buyOrderCount += s.qty * count;
+    // slotsPerUnit counts DISTINCT components/supplies (not qty), so
+    // slotUseCount here (for slot-budget bookkeeping) is count × slotsPerUnit,
+    // not buyOrderCount — a 6× Adamant set = 6 crafts × 4 distinct-item buys
+    // = 24 slot-uses of 6-unit orders (each order stacks the qty for that item).
+    const slotUseCount = count * cand.slotsPerUnit;
 
     allocations.push({
       recipe: cand.recipe,
@@ -2268,9 +2379,10 @@ function allocateRecipes(opts) {
       freeSlot: cand.freeSlot,
       roi: cand.roi,
       buyOrderCount,
+      slotUseCount,
     });
     remainingBudget -= cost;
-    if (!cand.freeSlot) slotsUsed += 1;
+    if (!cand.freeSlot) slotsUsedTotal += slotUseCount;
   }
   const totalCost = allocations.reduce((s, a) => s + a.cost, 0);
   const totalProfit = allocations.reduce((s, a) => s + a.profit, 0);
@@ -2280,9 +2392,12 @@ function allocateRecipes(opts) {
     totalCost,
     totalProfit,
     remainingBudget,
-    slotsUsed,
-    slots,
-    horizon,   // carried through so the summary can name the correct time window
+    slotsUsed: slotsUsedTotal,   // slot-uses (buy orders), not recipe count
+    slots,                       // concurrent slot cap (per window)
+    slotBudget,                  // total buy orders allowed = slots × windows
+    windows,                     // buy-limit windows the horizon covers
+    horizon,                     // horizon code, e.g. "4h" / "1d"
+    horizonH,                    // horizon in hours (for display)
     candidatesConsidered: candidates.length,
     deployedPct,
     // If we ran out of viable recipes before deploying the budget, tell the
@@ -2290,7 +2405,7 @@ function allocateRecipes(opts) {
     // extend horizon, etc.) rather than wondering why it stopped.
     exhaustedReason:
       remainingBudget <= 0 ? "budget fully deployed"
-      : hitSlotCap ? `slot cap (${slots}) reached before budget — more capital available but no free slots left. Enable free-slot toggles or raise the slot cap.`
+      : hitSlotCap ? `slot budget (${slotBudget} = ${slots} slots × ${windows} × 4h windows) exhausted before budget — extend the horizon, raise the slot count, or enable free-slot toggles for supplies/component combines.`
       : `no more candidates can contribute > ${minContribPct}% of budget (${fmtGp(Math.round(minProfitAbsolute))}) in profit — lower the min-contribution or relax the other filters`,
   };
 }
@@ -2325,36 +2440,63 @@ function renderAllocate() {
       el("div", { class: "allocate-summary-label", text: label }),
       el("div", { class: "allocate-summary-value", text: val })));
   };
-  // Aggregate: total distinct GE buy orders across all allocations. Each
-  // Adamant set = 4 component buys × N sets. Whether the sum is feasible
-  // in the chosen horizon depends entirely on item liquidity — bulk flips
-  // fill in seconds, rare items sit for hours. Showing the number without
-  // a hardcoded threshold puts the judgment call where it belongs (with
-  // the user). The tooltip explains what to think about.
+  // Slot-budget line: total buy orders placed vs the slot budget. Under the
+  // new model this IS the binding constraint (not "recipes allocated"), so
+  // it's the second thing the user should see. The tooltip explains WHY the
+  // total isn't just `slots` — it scales with horizon in 4h windows.
+  const slotTooltip = `Total distinct GE buy orders you'll place across all allocations. `
+    + `Slot budget = ${alloc.slots} slots × ${alloc.windows} × 4h windows (buy-limit resets) = ${alloc.slotBudget}. `
+    + `Free-slot recipes (via the toggles) don't count against this total.`;
+  // Total buy-order COUNT — the number of actual buy fills, which can be
+  // higher than slot-uses when a recipe buys 6× of one component in a single
+  // slot. Same tooltip caveats about liquidity — bulk items fill fast, rare
+  // items sit for hours.
   const totalBuys = alloc.allocations.reduce((s, a) => s + (a.buyOrderCount || 0), 0);
-  const totalBuysTooltip = "Sum of component + supply buy orders across all allocations. "
-    + "Feasibility in one buy window depends on how fast each item fills at your offer price: "
-    + "bulk items (runes, common potions) fill in seconds; popular gear fills in a few minutes; "
-    + "rare items can sit for hours. 8 concurrent slots means you can rotate through many more "
-    + "orders than 8 as items fill — but a diverse allocation of low-liquidity items may not "
-    + "cycle through in a single 4h window.";
 
   row("Recipes allocated", String(alloc.allocations.length));
-  row("Slots used", `${alloc.slotsUsed} / ${alloc.slots}`);
-  // Buy-orders row with tooltip — hover for the honest "feasibility depends
-  // on liquidity" explanation, no arbitrary threshold warning.
   {
-    const cell = el("div", { class: "allocate-summary-cell", attrs: { title: totalBuysTooltip } });
-    cell.appendChild(el("div", { class: "allocate-summary-label", text: "Total GE buy orders" }));
-    cell.appendChild(el("div", { class: "allocate-summary-value", text: totalBuys.toLocaleString() }));
+    const cell = el("div", { class: "allocate-summary-cell", attrs: { title: slotTooltip } });
+    cell.appendChild(el("div", { class: "allocate-summary-label", text: "Slot budget used" }));
+    cell.appendChild(el("div", { class: "allocate-summary-value", text: `${alloc.slotsUsed} / ${alloc.slotBudget}` }));
     summary.appendChild(cell);
   }
+  row("Total buy fills", totalBuys.toLocaleString());
   row("Capital deployed", `${fmtGp(alloc.totalCost)} (${alloc.deployedPct.toFixed(1)}%)`);
   row("Budget remaining", fmtGp(alloc.remainingBudget));
   row("Expected profit", fmtGp(Math.round(alloc.totalProfit)));
   row("Expected ROI", ((alloc.totalProfit / alloc.totalCost) * 100).toFixed(2) + "%");
   row("Stopped because", alloc.exhaustedReason);
   grid.appendChild(summary);
+
+  // Hit-limit banner — items the user has marked as "buy limit hit". These
+  // are EXCLUDED from the allocation above, so the user needs a visible
+  // reminder + a per-item unmark button so they can free items back up as
+  // buy-limit windows expire (or if they marked one by mistake). Times shown
+  // are the remaining wait before the mark auto-expires.
+  const marked = Object.keys(state.hitLimits);
+  if (marked.length) {
+    const banner = el("div", { class: "hit-limit-banner" });
+    banner.appendChild(el("div", { class: "hit-limit-banner-title",
+      text: `${marked.length} item${marked.length === 1 ? "" : "s"} excluded (buy limit hit)` }));
+    const chips = el("div", { class: "hit-limit-chip-row" });
+    for (const id of marked) {
+      const name = state.mapping?.[id]?.name || `#${id}`;
+      const chip = el("button", { class: "hit-limit-chip",
+        attrs: { title: `Click to unmark. Auto-expires in ${fmtHitLimitRemaining(id)}.` } });
+      chip.appendChild(el("span", { class: "hit-limit-chip-name", text: name }));
+      chip.appendChild(el("span", { class: "hit-limit-chip-timer", text: fmtHitLimitRemaining(id) }));
+      chip.appendChild(el("span", { class: "hit-limit-chip-x", text: "×" }));
+      chip.onclick = (e) => {
+        e.stopPropagation();
+        unmarkHitLimit(id);
+        // Re-run allocator so the just-freed item can enter the mix again.
+        document.getElementById("allocate-btn").click();
+      };
+      chips.appendChild(chip);
+    }
+    banner.appendChild(chips);
+    grid.appendChild(banner);
+  }
 
   const frag = document.createDocumentFragment();
   for (const a of alloc.allocations) frag.appendChild(renderAllocationCard(a));
@@ -2411,6 +2553,27 @@ function renderAllocationCard(a) {
   // and users need to see that to judge feasibility inside a 4h/1d window.
   const buys = el("div", { class: "allocate-buys" });
   buys.appendChild(el("div", { class: "allocate-buys-title", text: "Buys needed" }));
+  // Small factory for the per-item hit-limit toggle button. Marking an item
+  // hides every recipe using it from the allocator for 4h (the GE buy-limit
+  // reset window). Clicking triggers a re-run of the allocator so the user
+  // immediately sees the fallback picks.
+  const makeHitBtn = (id) => {
+    const hit = isHitLimited(id);
+    const btn = el("button", {
+      class: "hit-limit-btn" + (hit ? " hit" : ""),
+      text: hit ? `🚫 hit · ${fmtHitLimitRemaining(id)}` : "🚫 hit limit",
+      attrs: { title: hit
+        ? `Marked as buy-limit hit. Excluded from allocation until ${fmtHitLimitRemaining(id)} from now. Click to unmark.`
+        : `Mark this item as buy-limit hit to exclude every recipe using it from allocation for the next 4h.`,
+      },
+    });
+    btn.onclick = (e) => {
+      e.stopPropagation();  // don't open the recipe modal
+      toggleHitLimit(id);
+      document.getElementById("allocate-btn").click();
+    };
+    return btn;
+  };
   for (const c of a.recipe.components) {
     const name = state.mapping?.[c.id]?.name || `#${c.id}`;
     const unitCount = c.qty * a.count;
@@ -2419,6 +2582,7 @@ function renderAllocationCard(a) {
     const row = el("div", { class: "allocate-buy-row" });
     row.appendChild(el("span", { class: "allocate-buy-name", text: name }));
     row.appendChild(el("span", { class: "allocate-buy-qty", text: `${unitCount.toLocaleString()}×${priceText}` }));
+    row.appendChild(makeHitBtn(c.id));
     buys.appendChild(row);
   }
   // Supplies (runes, gems etc.) — always priced live, shown here too so the
@@ -2431,6 +2595,7 @@ function renderAllocationCard(a) {
     const row = el("div", { class: "allocate-buy-row" });
     row.appendChild(el("span", { class: "allocate-buy-name", text: name + " (supply)" }));
     row.appendChild(el("span", { class: "allocate-buy-qty", text: `${unitCount.toLocaleString()}×${priceText}` }));
+    row.appendChild(makeHitBtn(s.id));
     buys.appendChild(row);
   }
   // Product line — different label style so it doesn't blend with buys.
