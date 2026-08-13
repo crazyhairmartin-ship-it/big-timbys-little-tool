@@ -3658,6 +3658,24 @@ modalChart.addEventListener("mouseleave", () => {
   modalChart.style.cursor = "";
   if (chartGeom && chartGeom.points && chartGeom.points.length) drawChart(chartGeom.points, { showCost: chartGeom.showCost });
 });
+// Allowlist of hosts that news-post URLs may point to. news.json is scraped
+// from the OSRS wiki (user-editable) so a hostile edit could theoretically
+// inject a javascript: URL — window.open() executes those in the opener's
+// origin regardless of noopener/noreferrer. The scraper enforces the same
+// allowlist server-side; this is defense-in-depth for the case where a
+// stale, pre-fix news.json is still cached in a client.
+const NEWS_URL_ALLOWED_HOSTS = new Set([
+  "secure.runescape.com",
+  "www.runescape.com",
+  "oldschool.runescape.wiki",
+]);
+function isSafeNewsUrl(raw) {
+  if (typeof raw !== "string" || !raw) return false;
+  let u;
+  try { u = new URL(raw); } catch { return false; }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  return NEWS_URL_ALLOWED_HOSTS.has(u.hostname.toLowerCase());
+}
 // Click a news marker → open the underlying post in a new tab. Skips any
 // other click behaviour (there's no other click on the chart canvas today).
 modalChart.addEventListener("click", (e) => {
@@ -3667,6 +3685,10 @@ modalChart.addEventListener("click", (e) => {
   const y = e.clientY - rect.top;
   const hit = newsMarkerAt(x, y, chartGeom);
   if (!hit) return;
+  if (!isSafeNewsUrl(hit.post.url)) {
+    console.warn("Refused to open unsafe news url:", hit.post.url);
+    return;
+  }
   window.open(hit.post.url, "_blank", "noopener,noreferrer");
 });
 
