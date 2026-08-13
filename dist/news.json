@@ -1,7 +1,11 @@
 {
-  "generatedAt": "2026-08-13T16:16:38.022Z",
-  "source": "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
-  "count": 15,
+  "generatedAt": "2026-08-13T17:20:41.103Z",
+  "sources": [
+    "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
+    "https://oldschool.runescape.wiki/api.php"
+  ],
+  "backfillDays": 370,
+  "count": 159,
   "posts": [
     {
       "ts": 1786579200000,
@@ -88,9 +92,873 @@
       "category": "Community"
     },
     {
+      "ts": 1784851200000,
+      "title": "Golden Gnomes 2026 Nominations Now Open!",
+      "url": "https://secure.runescape.com/m=news/golden-gnomes-2026-nominations-now-open?oldschool=1",
+      "category": "Community"
+    },
+    {
       "ts": 1784764800000,
       "title": "Monopoly: RuneScape Edition Preorder Now!",
       "url": "https://secure.runescape.com/m=news/monopoly-runescape-edition-preorder-now?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1784678400000,
+      "title": "Summer Sweep-Up Gear & PvM Changes",
+      "url": "https://secure.runescape.com/m=news/summer-sweep-up-gear--pvm-changes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1784505600000,
+      "title": "The Official OSRS Podcast Episode 15 With Mod Jerv",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-15-with-mod-jerv?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1784160000000,
+      "title": "Jagex Launcher for Linux Beta OUT NOW!",
+      "url": "https://secure.runescape.com/m=news/jagex-launcher-for-linux-beta-out-now?oldschool=1",
+      "category": "Website"
+    },
+    {
+      "ts": 1784160000000,
+      "title": "Wyrmscraig Launches July 29!",
+      "url": "https://secure.runescape.com/m=news/wyrmscraig-launches-july-29?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1784073600000,
+      "title": "The Blood Moon Rises & Bank Tags Tweaks",
+      "url": "https://secure.runescape.com/m=news/the-blood-moon-rises--bank-tags-tweaks?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1783900800000,
+      "title": "The Official OSRS Podcast Episode 14 With Mod Ed",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-14-with-mod-ed?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1783641600000,
+      "title": "Community Event: The Crusader Classic",
+      "url": "https://secure.runescape.com/m=news/community-event-the-crusader-classic?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1783641600000,
+      "title": "Community Spotlight- RS Art Community",
+      "url": "https://secure.runescape.com/m=news/community-spotlight-rs-art-community?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1783468800000,
+      "title": "The Blood Moon Rises Tweaks & Fixes",
+      "url": "https://secure.runescape.com/m=news/the-blood-moon-rises-tweaks--fixes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1783468800000,
+      "title": "Last Chance For Makeship Jumbo Boss Plushies!",
+      "url": "https://secure.runescape.com/m=news/last-chance-for-makeship-jumbo-boss-plushies?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1782777600000,
+      "title": "The Blood Moon Rises - Out Today!",
+      "url": "https://secure.runescape.com/m=news/the-blood-moon-rises---out-today?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1782777600000,
+      "title": "The Blood Moon Rises - Known Issues & Fixes",
+      "url": "https://secure.runescape.com/m=news/the-blood-moon-rises---known-issues--fixes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1782432000000,
+      "title": "Wyrmscraig - Unique Rewards",
+      "url": "https://secure.runescape.com/m=news/wyrmscraig---unique-rewards?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1782086400000,
+      "title": "Deadman All Stars Concludes",
+      "url": "https://secure.runescape.com/m=news/deadman-all-stars-concludes?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1781913600000,
+      "title": "Deadman All Stars Season 3 Finale - Live Now!",
+      "url": "https://secure.runescape.com/m=news/deadman-all-stars-season-3-finale---live-now?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1781654400000,
+      "title": "Bank Tags, Trouver System Rework & More!",
+      "url": "https://secure.runescape.com/m=news/bank-tags-trouver-system-rework--more?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1781568000000,
+      "title": "The Fractured Archive - First Rewards Proposal",
+      "url": "https://secure.runescape.com/m=news/the-fractured-archive---first-rewards-proposal?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1781481600000,
+      "title": "GE Improvements: Beyond Max Cash",
+      "url": "https://secure.runescape.com/m=news/ge-improvements-beyond-max-cash?oldschool=1",
+      "category": "News"
+    },
+    {
+      "ts": 1781481600000,
+      "title": "Boku Payment Method - Retirement",
+      "url": "https://secure.runescape.com/m=news/boku-payment-method---retirement?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1781222400000,
+      "title": "The Full Transition to Jagex Accounts",
+      "url": "https://secure.runescape.com/m=news/the-full-transition-to-jagex-accounts?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1780704000000,
+      "title": "Deadman All Stars Season 3 Launch!",
+      "url": "https://secure.runescape.com/m=news/deadman-all-stars-season-3-launch?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1780531200000,
+      "title": "Summer Sweep-Up 2026",
+      "url": "https://secure.runescape.com/m=news/summer-sweep-up-2026?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1780444800000,
+      "title": "New Regional Worlds Launch TODAY!",
+      "url": "https://secure.runescape.com/m=news/new-regional-worlds-launch-today?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1780358400000,
+      "title": "Community Spotlight: South American Community",
+      "url": "https://secure.runescape.com/m=news/community-spotlight-south-american-community?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1780358400000,
+      "title": "RuneScape- Dragonwilds Launches September 15th, 2026 on PC, Switch 2, PS5 & Xbox",
+      "url": "https://secure.runescape.com/m=news/runescape-dragonwilds-launches-september-15th-2026-on-pc-switch-2-ps5--xbox?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1780012800000,
+      "title": "Wyrmscraig - Activities & Lock In Poll",
+      "url": "https://secure.runescape.com/m=news/wyrmscraig---activities--lock-in-poll?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1780012800000,
+      "title": "Summer Campfire 2026",
+      "url": "https://secure.runescape.com/m=news/summer-campfire-2026?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1779840000000,
+      "title": "Changes to Sailing & LMS Rewards Eligibility",
+      "url": "https://secure.runescape.com/m=news/changes-to-sailing--lms-rewards-eligibility?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1779753600000,
+      "title": "Summer Campfire - Announcement",
+      "url": "https://secure.runescape.com/m=news/summer-campfire---announcement?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1779408000000,
+      "title": "Rubium Mining & Smithing Changes",
+      "url": "https://secure.runescape.com/m=news/rubium-mining--smithing-changes-?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1779235200000,
+      "title": "The Red Reef is Out Today!",
+      "url": "https://secure.runescape.com/m=news/the-red-reef-is-out-today?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1778630400000,
+      "title": "Sailing Changes and Gem Bag Expansion",
+      "url": "https://secure.runescape.com/m=news/sailing-changes-and-gem-bag-expansion?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1778457600000,
+      "title": "Sailing Update: Buffs, Changes & More",
+      "url": "https://secure.runescape.com/m=news/a=13/sailing-update-buffs-changes--more?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1778025600000,
+      "title": "Further Leagues VI Changes",
+      "url": "https://secure.runescape.com/m=news/further-leagues-vi-changes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1777420800000,
+      "title": "More Leagues VI Fixes",
+      "url": "https://secure.runescape.com/m=news/more-leagues-vi-fixes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1777334400000,
+      "title": "Relaunching Our Merch Store: More Variety & A Better Experience!",
+      "url": "https://secure.runescape.com/m=news/relaunching-our-merch-store-more-variety--a-better-experience?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1776902400000,
+      "title": "Leagues VI Changes",
+      "url": "https://secure.runescape.com/m=news/leagues-vi-changes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1776816000000,
+      "title": "Leechfin Fishing Proposal Revised",
+      "url": "https://secure.runescape.com/m=news/update-leechfin-fishing-proposal-revised?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1776729600000,
+      "title": "Community Spotlight: Leagues Discord Leaders",
+      "url": "https://secure.runescape.com/m=news/community-spotlight-leagues-discord-leaders?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1776384000000,
+      "title": "RuneFest Returns for 2026!",
+      "url": "https://secure.runescape.com/m=news/runefest-returns-for-2026?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1776384000000,
+      "title": "Leagues VI: Demonic Pacts - Fixes & Issues",
+      "url": "https://secure.runescape.com/m=news/leagues-vi-demonic-pacts---fixes--issues?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1776211200000,
+      "title": "Leagues VI: Demonic Pacts - Launches Today!",
+      "url": "https://secure.runescape.com/m=news/leagues-vi-demonic-pacts---launches-today?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1775952000000,
+      "title": "The Official OSRS Podcast Episode 13 With Odablock",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-13-with-odablock?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1775692800000,
+      "title": "Brazilian Game Worlds Are Live!",
+      "url": "https://secure.runescape.com/m=news/brazilian-game-worlds-are-live?oldschool=1",
+      "category": "Website"
+    },
+    {
+      "ts": 1775606400000,
+      "title": "Demonic Pacts - Overview",
+      "url": "https://secure.runescape.com/m=news/demonic-pacts---overview?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1775606400000,
+      "title": "Game Status Information Centre",
+      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
+      "category": "Website"
+    },
+    {
+      "ts": 1775606400000,
+      "title": "Pirate Encounters Design & Rewards",
+      "url": "https://secure.runescape.com/m=news/pirate-encounters-design--rewards-?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1775520000000,
+      "title": "Mobile Character Switcher Out Now!",
+      "url": "https://secure.runescape.com/m=news/mobile-character-switcher-out-now?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1775520000000,
+      "title": "AN INVITATION",
+      "url": "https://secure.runescape.com/m=news/an-invitation?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1775174400000,
+      "title": "The Official OSRS Podcast Episode 12 With J1mmy",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-12-with-j1mmy?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1775001600000,
+      "title": "Remaining Getting Around Changes",
+      "url": "https://secure.runescape.com/m=news/remaining-getting-around-changes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1775001600000,
+      "title": "Compatibility for the Jagex Launcher on Mac",
+      "url": "https://secure.runescape.com/m=news/compatibility-for-the-jagex-launcher-on-mac?oldschool=1",
+      "category": "Website"
+    },
+    {
+      "ts": 1774915200000,
+      "title": "The Organised Chaos Saga",
+      "url": "https://secure.runescape.com/m=news/the-organised-chaos-saga?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1774483200000,
+      "title": "Gathering QoL, Trouver Changes & more!",
+      "url": "https://secure.runescape.com/m=news/gathering-qol-trouver-changes--more?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1774396800000,
+      "title": "Easter 2026 & PvP QoL Improvements",
+      "url": "https://secure.runescape.com/m=news/easter-2026--pvp-qol-improvements?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1774224000000,
+      "title": "Get Ready For Leagues VI: Demonic Pacts - April 15th",
+      "url": "https://secure.runescape.com/m=news/get-ready-for-leagues-vi-demonic-pacts---april-15th?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1773792000000,
+      "title": "Boat Combat Fixes",
+      "url": "https://secure.runescape.com/m=news/boat-combat-fixes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1773187200000,
+      "title": "More from the Getting Around Poll",
+      "url": "https://secure.runescape.com/m=news/more-from-the-getting-around-poll?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1773100800000,
+      "title": "Membership & Bonds Price Change",
+      "url": "https://secure.runescape.com/m=news/membership--bonds-price-change?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1772755200000,
+      "title": "Mobile Character Switcher Coming Soon!",
+      "url": "https://secure.runescape.com/m=news/mobile-character-switcher-coming-soon?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1772668800000,
+      "title": "The Fractured Archive - Rewards Primer",
+      "url": "https://secure.runescape.com/m=news/the-fractured-archive---rewards-primer?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1772582400000,
+      "title": "Cow Boss and Skill Guide & Level-Up Changes",
+      "url": "https://secure.runescape.com/m=news/cow-boss-and-skill-guide--level-up-changes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1772064000000,
+      "title": "Deadman All Stars Season 3 Live Finale Tickets Onsale in 24 Hours!",
+      "url": "https://secure.runescape.com/m=news/a=97/deadman-all-stars-season-3-live-finale-tickets-onsale-in-24-hours?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1771977600000,
+      "title": "Cow Boss is Out Today!",
+      "url": "https://secure.runescape.com/m=news/a=97/cow-boss-is-out-today?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1771718400000,
+      "title": "The Official OSRS Podcast Episode 11 With Soup",
+      "url": "https://secure.runescape.com/m=news/a=97/the-official-osrs-podcast-episode-11-with-soup?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1771372800000,
+      "title": "25th Anniversary Event: 25 Years, 25 Mementos!",
+      "url": "https://secure.runescape.com/m=news/25th-anniversary-event-25-years-25-mementos?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1771286400000,
+      "title": "Blood Moon Rises Rewards",
+      "url": "https://secure.runescape.com/m=news/blood-moon-rises-rewards?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1771286400000,
+      "title": "Update on Deadman All-Stars Ticket Sales",
+      "url": "https://secure.runescape.com/m=news/update-on-deadman-all-stars-ticket-sales?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1770768000000,
+      "title": "Music System Improvements & Deadman Tweaks",
+      "url": "https://secure.runescape.com/m=news/music-system-improvements--deadman-tweaks?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1770681600000,
+      "title": "Game Jam VII",
+      "url": "https://secure.runescape.com/m=news/game-jam-vii?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1770163200000,
+      "title": "Deadman: Annihilation Tweaks, Shellbane Gryphon CAs & More!",
+      "url": "https://secure.runescape.com/m=news/deadman-annihilation-tweaks-shellbane-gryphon-cas--more?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1769990400000,
+      "title": "Sailing Player Designed Island Winner",
+      "url": "https://secure.runescape.com/m=news/sailing-player-designed-island-winner?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1769558400000,
+      "title": "Deadman: Annihilation Drops This Friday!",
+      "url": "https://secure.runescape.com/m=news/deadman-annihilation-drops-this-friday?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1769299200000,
+      "title": "The Blood Moon Rises - Overview",
+      "url": "https://secure.runescape.com/m=news/the-blood-moon-rises---overview-?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1769299200000,
+      "title": "Deadman: Annihilation & All-Stars 3",
+      "url": "https://secure.runescape.com/m=news/deadman-annihilation--all-stars-3?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1769299200000,
+      "title": "Leagues VI: Demonic Pacts - Announcement",
+      "url": "https://secure.runescape.com/m=news/leagues-vi-demonic-pacts---announcement?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1769299200000,
+      "title": "Sailing Into 2026",
+      "url": "https://secure.runescape.com/m=news/sailing-into-2026?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1769299200000,
+      "title": "Sailing Player-Designed Island Competition Finalists",
+      "url": "https://secure.runescape.com/m=news/sailing-player-designed-island-competition-finalists?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1769299200000,
+      "title": "The Fractured Archive - First Look",
+      "url": "https://secure.runescape.com/m=news/the-fractured-archive---first-look?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1769299200000,
+      "title": "Winter Summit 2026 - Overview",
+      "url": "https://secure.runescape.com/m=news/winter-summit-2026---overview?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1769299200000,
+      "title": "Old School Roadmap (25 January 2026)",
+      "url": "https://secure.runescape.com/m=news/old-school-roadmap?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1769126400000,
+      "title": "Deadman: Annihilation - Everything You Need To Know",
+      "url": "https://secure.runescape.com/m=news/deadman-annihilation---everything-you-need-to-know?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1768953600000,
+      "title": "Holy Moleys and the Hooded Slayer Helm are Here!",
+      "url": "https://secure.runescape.com/m=news/holy-moleys-and-the-hooded-slayer-helm-are-here?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1768435200000,
+      "title": "25 Years of RuneScape",
+      "url": "https://secure.runescape.com/m=news/25-years-of-runescape?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1768348800000,
+      "title": "New Player Improvements Round 2",
+      "url": "https://secure.runescape.com/m=news/a=1/new-player-improvements-round-2?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1768176000000,
+      "title": "The Official OSRS Podcast Episode 10 With Mod Ash",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-10-with-mod-ash?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1767830400000,
+      "title": "Getting Around",
+      "url": "https://secure.runescape.com/m=news/getting-around?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1767744000000,
+      "title": "QoL Tweaks & Fixes",
+      "url": "https://secure.runescape.com/m=news/a=1/qol-tweaks--fixes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1767484800000,
+      "title": "The Official OSRS Podcast Episode 9 With Torvesta & Skill Specs",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-9-with-torvesta--skill-specs?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1766966400000,
+      "title": "The Official OSRS Podcast Episode 8 With B0aty",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-8-with-b0aty?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1766275200000,
+      "title": "The Official OSRS Podcast Episode 7 With Solo Mission",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-7-with-solo-mission?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1765929600000,
+      "title": "More Sailing and Interface Changes",
+      "url": "https://secure.runescape.com/m=news/more-sailing-and-interface-changes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1765670400000,
+      "title": "The Official OSRS Podcast Episode 6 With Mod Rice",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-6-with-mod-rice?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1765411200000,
+      "title": "Player Designed Island Competition",
+      "url": "https://secure.runescape.com/m=news/player-designed-island-competition?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1765324800000,
+      "title": "Christmas Event 2025",
+      "url": "https://secure.runescape.com/m=news/christmas-event-2025?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1765324800000,
+      "title": "Player Support: 2025 Roundup",
+      "url": "https://secure.runescape.com/m=news/player-support-2025-roundup?oldschool=1",
+      "category": "News"
+    },
+    {
+      "ts": 1765065600000,
+      "title": "The Official OSRS Podcast Episode 5 With Mod North",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-5-with-mod-north?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1764720000000,
+      "title": "Sailing XP Review & Further Fixes",
+      "url": "https://secure.runescape.com/m=news/sailing-xp-review--further-fixes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1764720000000,
+      "title": "An Update On the Sailing XP Review",
+      "url": "https://secure.runescape.com/m=news/an-update-on-the-sailing-xp-review?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1764460800000,
+      "title": "The Official OSRS Podcast Episode 4 With Guzu",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-4-with-guzu?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1764115200000,
+      "title": "Sailing: Week One Feedback & Fixes",
+      "url": "https://secure.runescape.com/m=news/sailing-week-one-feedback--fixes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1763856000000,
+      "title": "The Official OSRS Podcast Episode 3 With Alan Walker",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-3-with-alan-walker?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1763510400000,
+      "title": "Sailing is OUT TODAY!",
+      "url": "https://secure.runescape.com/m=news/sailing-is-out-today?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1763510400000,
+      "title": "Sailing - Known Issues & Fixes",
+      "url": "https://secure.runescape.com/m=news/sailing---known-issues--fixes-?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1763251200000,
+      "title": "The Official OSRS Podcast Episode 2 With Mod Elena",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-2-with-mod-elena?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1763078400000,
+      "title": "OSRS x Alan Walker - Sailing (Official Music Video)",
+      "url": "https://secure.runescape.com/m=news/osrs-x-alan-walker---sailing-official-music-video?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1762992000000,
+      "title": "Spudworks: DDoS Protection & Security",
+      "url": "https://secure.runescape.com/m=news/spudworks-ddos-protection--security?oldschool=1",
+      "category": "Website"
+    },
+    {
+      "ts": 1762732800000,
+      "title": "Deadman: Annihilation Overview & Rewards Blog",
+      "url": "https://secure.runescape.com/m=news/deadman-annihilation-overview--rewards-blog?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1762646400000,
+      "title": "The Official OSRS Podcast Episode 1 With Mod Kieren",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-1-with-mod-kieren?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1762560000000,
+      "title": "Behind The Scenes of Sailing: Dev Diary",
+      "url": "https://secure.runescape.com/m=news/behind-the-scenes-of-sailing-dev-diary?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1762300800000,
+      "title": "Sailing Technical Pre-Release",
+      "url": "https://secure.runescape.com/m=news/sailing-technical-pre-release?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1762214400000,
+      "title": "Prepare for Sailing - Launching November 19th!",
+      "url": "https://secure.runescape.com/m=news/prepare-for-sailing---launching-november-19th?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1762214400000,
+      "title": "The Official OSRS Podcast Season 1",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-season-1?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1762128000000,
+      "title": "Chess.com x Old School Runescape",
+      "url": "https://secure.runescape.com/m=news/chesscom-x-old-school-runescape?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1761696000000,
+      "title": "New Renderer Beta Pause",
+      "url": "https://secure.runescape.com/m=news/new-renderer-beta-pause?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1761523200000,
+      "title": "An Update on New Renderer Beta and HD",
+      "url": "https://secure.runescape.com/m=news/an-update-on-new-renderer-beta-and-hd?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1761264000000,
+      "title": "Sailing Launches on November 19th!",
+      "url": "https://secure.runescape.com/m=news/sailing-launches-on-november-19th?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1761177600000,
+      "title": "Grid Master - Competition Winners",
+      "url": "https://secure.runescape.com/m=news/grid-master---competition-winners?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1761091200000,
+      "title": "Grid Master Rewards, Poll & New Player Improvements",
+      "url": "https://secure.runescape.com/m=news/grid-master-rewards-poll--new-player-improvements?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1760486400000,
+      "title": "Grid Master - Out Today!",
+      "url": "https://secure.runescape.com/m=news/grid-master---out-today?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1760400000000,
+      "title": "Introducing Poll System Improvements",
+      "url": "https://secure.runescape.com/m=news/introducing-poll-system-improvements?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1760140800000,
+      "title": "OSRS x Gielinor Games: Exclusive Collab",
+      "url": "https://secure.runescape.com/m=news/a=13/osrs-x-gielinor-games-exclusive-collab?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1760054400000,
+      "title": "New Player Improvements - 2025 and Beyond",
+      "url": "https://secure.runescape.com/m=news/new-player-improvements---2025-and-beyond?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1759881600000,
+      "title": "2025 Annual Survey",
+      "url": "https://secure.runescape.com/m=news/a=13/2025-annual-survey?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1759708800000,
+      "title": "Upcoming Updates - New Worlds & Downtime",
+      "url": "https://secure.runescape.com/m=news/a=13/upcoming-updates---new-worlds--downtime?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1759276800000,
+      "title": "Interface Uplift Round 2",
+      "url": "https://secure.runescape.com/m=news/interface-uplift-round-2?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1758758400000,
+      "title": "Last Chance For Official Makeship Plushies!",
+      "url": "https://secure.runescape.com/m=news/last-chance-for-official-makeship-plushies?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1758672000000,
+      "title": "Interface Uplift",
+      "url": "https://secure.runescape.com/m=news/interface-uplift?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1758240000000,
+      "title": "Player Support Roadmap - September Check In",
+      "url": "https://secure.runescape.com/m=news/player-support-roadmap---september-check-in?oldschool=1",
+      "category": "News"
+    },
+    {
+      "ts": 1758153600000,
+      "title": "Sailing Slayer Creatures, Unique Drops & More",
+      "url": "https://secure.runescape.com/m=news/sailing-slayer-creatures-unique-drops--more?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1758067200000,
+      "title": "Poll 85 - Bridges, Boots, Ropes & Roots",
+      "url": "https://secure.runescape.com/m=news/poll-85---bridges-boots-ropes--roots?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1757980800000,
+      "title": "A Message about Real World Trading",
+      "url": "https://secure.runescape.com/m=news/a-message-about-real-world-trading?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1757894400000,
+      "title": "OUT NOW RuneScape: Leagues: CATALYST (RS3)",
+      "url": "https://secure.runescape.com/m=news/out-now-runescape-leagues-catalyst-rs3?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1757462400000,
+      "title": "Pet Insurance Rework & More",
+      "url": "https://secure.runescape.com/m=news/pet-insurance-rework--more?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1756857600000,
+      "title": "Doom Combat Achievements",
+      "url": "https://secure.runescape.com/m=news/doom-combat-achievements?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1756771200000,
+      "title": "Grid Master Announcement - October 15th",
+      "url": "https://secure.runescape.com/m=news/grid-master-announcement---october-15th?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1756425600000,
+      "title": "Last Chance for Youtooz Nieve and King Black Dragon Figures",
+      "url": "https://secure.runescape.com/m=news/last-chance-for-youtooz-nieve-and-king-black-dragon-figures?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1756252800000,
+      "title": "Summer Sweep Up Slayer & More",
+      "url": "https://secure.runescape.com/m=news/summer-sweep-up-slayer--more?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1755648000000,
+      "title": "More Doom Tweaks, Poll 84, & Summer Sweep Up Changes",
+      "url": "https://secure.runescape.com/m=news/more-doom-tweaks-poll-84--summer-sweep-up-changes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1755561600000,
+      "title": "HD & Plugin API Progress Update",
+      "url": "https://secure.runescape.com/m=news/hd--plugin-api-progress-update?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1755216000000,
+      "title": "Interface Uplift - UI QoL Coming Soon!",
+      "url": "https://secure.runescape.com/m=news/interface-uplift---ui-qol-coming-soon?oldschool=1",
+      "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1755043200000,
+      "title": "A PoH Recode & More Fixes",
+      "url": "https://secure.runescape.com/m=news/a-poh-recode--more-fixes?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1755043200000,
+      "title": "Player Support Roadmap: Latest Updates",
+      "url": "https://secure.runescape.com/m=news/player-support-roadmap-latest-updates?oldschool=1",
       "category": "Community"
     }
   ]
