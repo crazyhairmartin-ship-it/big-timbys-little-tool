@@ -1239,6 +1239,24 @@ dialog#chart-modal::backdrop {
 .chart-tooltip .tt-row .val.high { color: #f59e0b; }
 .chart-tooltip .tt-row .val.low  { color: #60a5fa; }
 .chart-tooltip .tt-row .val.gold { color: var(--gold); }
+/* News-marker tooltip variant. Content is a title + category line instead
+   of label/value pairs, so we override white-space (wrap long titles) and
+   cap the width for readability. */
+.chart-tooltip .tt-news-title {
+  color: var(--text-0);
+  font-weight: 600;
+  font-size: 12.5px;
+  line-height: 1.35;
+  white-space: normal;   /* override base .chart-tooltip nowrap */
+  max-width: 280px;
+  margin: 2px 0 6px;
+}
+.chart-tooltip .tt-news-meta {
+  color: var(--text-2);
+  font-size: 10.5px;
+  white-space: normal;
+  max-width: 280px;
+}
 
 .modal-detail {
   width: 100%;
