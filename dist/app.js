@@ -434,6 +434,34 @@ const FREE_SLOT_ITEM_IDS = new Set([
   30848,   // Crushed infernal shale — bulk raw material for Oathplate crafting
 ]);
 
+// Auto-derived: a filler RECIPE's output item ID also gets the fast-fill
+// treatment. Example: godsword-blade recipe is flagged freeSlotFiller, so
+// item id 11798 (godsword blade) is a fast-fill component of Armadyl
+// godsword / Bandos godsword / etc. Keeps the popover-visible filler
+// classification in sync with the item-level exemption applied inside
+// parent crafts — otherwise you'd have to hand-mirror every filler recipe
+// with its output id in FREE_SLOT_ITEM_IDS.
+const _fillerRecipeByOutputId = new Map();
+for (const r of RECIPES) {
+  if (r.freeSlotFiller === true) _fillerRecipeByOutputId.set(r.id, r);
+}
+// Effective test: "is this item's purchase a fast-fill (skip slot) event?"
+// Combines explicit FREE_SLOT_ITEM_IDS + filler recipe outputs, respecting
+// user overrides. Called in the allocator when computing slotsPerUnit and
+// in the popover when rendering the item row's checkbox state.
+function isFastFillComponent(id) {
+  // User manually removed from fast-fill pool
+  if (state.excludedFreeSlotItems.has(String(id))) return false;
+  // Explicit item-level membership
+  if (FREE_SLOT_ITEM_IDS.has(id)) return true;
+  // Auto-membership via a filler recipe whose output is this item id — but
+  // only if the recipe itself hasn't been excluded (unchecking the recipe
+  // in the popover cascades to remove its item's fast-fill treatment too).
+  const filler = _fillerRecipeByOutputId.get(id);
+  if (filler && !state.excludedRecipes.has(filler.key)) return true;
+  return false;
+}
+
 // LEGACY wider classifier — kept for reference and any future use case that
 // wants "any intermediate feeding a non-skilling combine". No longer drives
 // the free-slot toggle (too broad — see freeSlotFillerRecipes above).
@@ -1084,11 +1112,9 @@ function setFreeSlotItemExcluded(id, excluded) {
   else state.excludedFreeSlotItems.delete(key);
   saveExcludedFreeSlotItems();
 }
-// True if the item is still an active member of the fast-fill pool — i.e.
-// hand-marked in FREE_SLOT_ITEM_IDS AND the user hasn't unchecked it.
-function isFreeSlotItemActive(id) {
-  return FREE_SLOT_ITEM_IDS.has(id) && !state.excludedFreeSlotItems.has(String(id));
-}
+// (Legacy helper isFreeSlotItemActive removed — the allocator now uses
+// isFastFillComponent, which unifies explicit FREE_SLOT_ITEM_IDS + filler
+// recipe outputs and handles user overrides via excludedFreeSlotItems.)
 
 /* ---------------- News markers ----------------
  * OSRS news posts drawn as circles on chart modals (both the recipe/item
@@ -2472,6 +2498,13 @@ function allocateRecipes(opts) {
     // Persists in localStorage. Filters at the top so nothing downstream has
     // to know about it.
     if (state.excludedRecipes.has(r.key)) continue;
+    // Filler recipes are ONLY meaningful as component-slot exemptions inside
+    // parent crafts (e.g. godsword blade → Armadyl godsword). They should
+    // NOT appear as their own allocation cards — that would double-count
+    // capital that's meant to help other crafts. Their output ID is still
+    // treated as a fast-fill component via isFastFillComponent() so the
+    // parent-craft slot reduction still works.
+    if (freeComponentCombines && isFreeSlotFiller(r)) continue;
     // Stale filter — if any leg (product or component) has a price older than
     // the STALE_MS threshold, the calc.margin is a fossil. Skip.
     if (hideStale) {
@@ -2555,15 +2588,18 @@ function allocateRecipes(opts) {
     const isComponentCombine = isFreeSlotFiller(r) && freeComponentCombines;
     const freeSlot = isSkillingSupply || isComponentCombine;
     // slotsPerUnit = distinct GE buy orders per single craft = components +
-    // supplies. When freeComponentCombines is on, subtract components/supplies
-    // whose id is in the ACTIVE fast-fill set (FREE_SLOT_ITEM_IDS minus any
-    // items the user has unchecked in the popover). Recipes with 0 effective
-    // buys fall back to 1 so they don't sort as infinite profit-per-slot.
+    // supplies. When freeComponentCombines is on, subtract any component or
+    // supply that's a fast-fill item — either explicitly listed in
+    // FREE_SLOT_ITEM_IDS (e.g. crushed infernal shale) or auto-derived from
+    // a filler recipe's output id (e.g. godsword blade item, because the
+    // godsword-blade recipe is flagged freeSlotFiller). Recipes with 0
+    // effective buys fall back to 1 so they don't sort as infinite
+    // profit-per-slot.
     const compFree = freeComponentCombines
-      ? (r.components || []).filter(c => isFreeSlotItemActive(c.id)).length
+      ? (r.components || []).filter(c => isFastFillComponent(c.id)).length
       : 0;
     const suppFree = freeComponentCombines
-      ? (r.supplies || []).filter(s => isFreeSlotItemActive(s.id)).length
+      ? (r.supplies || []).filter(s => isFastFillComponent(s.id)).length
       : 0;
     const slotsPerUnit = Math.max(1,
       (r.components?.length || 0) + (r.supplies?.length || 0) - compFree - suppFree);
