@@ -225,15 +225,19 @@
     <div class="filter-group allocate-sidebar-block">
       <label for="allocate-horizon">Time horizon</label>
       <select id="allocate-horizon">
-        <option value="1d" selected>One day (6 × 4h windows)</option>
-        <option value="4h">One 4h buy window</option>
+        <option value="1h">1 hour</option>
+        <option value="2h">2 hours</option>
+        <option value="4h">4 hours (one buy window)</option>
+        <option value="8h">8 hours</option>
+        <option value="12h">12 hours</option>
+        <option value="1d" selected>1 day (6 × 4h windows)</option>
       </select>
-      <div class="allocate-hint">Multiplies each recipe's 4h buy-limit capacity.</div>
+      <div class="allocate-hint">Sets both the trading window and the number of 4h buy-limit resets. Total buy orders allowed = slots × ceil(horizon ÷ 4h).</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
-      <label>GE slots to fill</label>
+      <label>GE slots (concurrent)</label>
       <input type="number" id="allocate-slots" min="1" max="8" value="8" />
-      <div class="allocate-hint">Concurrent flip slots. Each recipe uses 1 by default. Free-slot toggles below skip specific classes.</div>
+      <div class="allocate-hint">Concurrent flip slots. Each recipe's total slot cost = crafts × distinct component/supply buys. Free-slot toggles below let supplies and component combines skip the count.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
       <label>Min profit per recipe (% of budget)</label>
@@ -247,7 +251,7 @@
     </div>
     <div class="filter-group allocate-sidebar-block">
       <label class="toggle"><input type="checkbox" id="allocate-hide-stale" checked /> Hide stale items</label>
-      <label class="toggle"><input type="checkbox" id="allocate-require-conf" /> Require ≥ 60% Predictive confidence</label>
+      <label class="toggle" title="Filters to recipes whose product has an overnight predictive score of ≥ 60%. Components without predictions are allowed through — only the item you're selling is gated."><input type="checkbox" id="allocate-require-conf" /> Require ≥ 60% product confidence</label>
       <label class="toggle"><input type="checkbox" id="allocate-skip-skilling" /> Skip skilling recipes</label>
       <label class="toggle"><input type="checkbox" id="allocate-free-supplies" /> Skilling supplies don't consume slots</label>
       <label class="toggle"><input type="checkbox" id="allocate-free-components" /> Component combines (godsword blades etc.) don't consume slots</label>
@@ -389,12 +393,12 @@
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=19"></script>
-<script src="skilling-recipes.js?v=19"></script>
-<script src="market-indexes.js?v=19"></script>
-<script src="app.js?v=19"></script>
-<script src="overnight.js?v=19"></script>
-<script src="flips-core.js?v=19"></script>
-<script src="flips.js?v=19"></script>
+<script src="overnight-core.js?v=22"></script>
+<script src="skilling-recipes.js?v=22"></script>
+<script src="market-indexes.js?v=22"></script>
+<script src="app.js?v=22"></script>
+<script src="overnight.js?v=22"></script>
+<script src="flips-core.js?v=22"></script>
+<script src="flips.js?v=22"></script>
 </body>
 </html>
