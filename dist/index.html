@@ -231,9 +231,14 @@
       <div class="allocate-hint">Multiplies each recipe's 4h buy-limit capacity.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
-      <label>Max recipes to spread across</label>
-      <input type="number" id="allocate-max-recipes" min="1" max="200" value="50" />
-      <div class="allocate-hint">How many different recipes you're willing to juggle. Not a GE-slot cap.</div>
+      <label>GE slots to fill</label>
+      <input type="number" id="allocate-slots" min="1" max="8" value="8" />
+      <div class="allocate-hint">Concurrent flip slots. Each recipe uses 1 by default. Free-slot toggles below skip specific classes.</div>
+    </div>
+    <div class="filter-group allocate-sidebar-block">
+      <label>Min ROI %</label>
+      <input type="number" id="allocate-min-roi" min="0" max="100" step="0.5" value="3" />
+      <div class="allocate-hint">Cut off tail recommendations. 3 = don't suggest anything with < 3% return.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
       <label>Max % per recipe (diversification)</label>
@@ -241,8 +246,11 @@
       <div class="allocate-hint">100 = no cap. Set lower to prevent one recipe eating the budget.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
+      <label class="toggle"><input type="checkbox" id="allocate-hide-stale" checked /> Hide stale items</label>
       <label class="toggle"><input type="checkbox" id="allocate-require-conf" /> Require ≥ 60% Predictive confidence</label>
       <label class="toggle"><input type="checkbox" id="allocate-skip-skilling" /> Skip skilling recipes</label>
+      <label class="toggle"><input type="checkbox" id="allocate-free-supplies" /> Skilling supplies don't consume slots</label>
+      <label class="toggle"><input type="checkbox" id="allocate-free-components" /> Component combines (godsword blades etc.) don't consume slots</label>
     </div>
     <div class="filter-group allocate-sidebar-block">
       <button id="allocate-btn" class="btn-primary" style="width:100%">Calculate allocation</button>
@@ -381,12 +389,12 @@
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=15"></script>
-<script src="skilling-recipes.js?v=15"></script>
-<script src="market-indexes.js?v=15"></script>
-<script src="app.js?v=15"></script>
-<script src="overnight.js?v=15"></script>
-<script src="flips-core.js?v=15"></script>
-<script src="flips.js?v=15"></script>
+<script src="overnight-core.js?v=16"></script>
+<script src="skilling-recipes.js?v=16"></script>
+<script src="market-indexes.js?v=16"></script>
+<script src="app.js?v=16"></script>
+<script src="overnight.js?v=16"></script>
+<script src="flips-core.js?v=16"></script>
+<script src="flips.js?v=16"></script>
 </body>
 </html>
