@@ -374,9 +374,12 @@ const RECIPES = [
   { key:"merchants-paint", id:32110, name:"Merchant's paint", cat:"Sailing", components:[{id:32090,qty:1},{id:32093,qty:1},{id:32087,qty:1},{id:32099,qty:1},{id:32096,qty:1}] },
 
   // --- Oathplate armour: smithed from crushed infernal shale + oathplate shards ---
-  { key:"oathplate-helm", id:30750, name:"Oathplate helm", cat:"Oathplate", components:[{id:30848,qty:2520},{id:30765,qty:450}] },
-  { key:"oathplate-chest", id:30753, name:"Oathplate chest", cat:"Oathplate", components:[{id:30848,qty:2520},{id:30765,qty:450}] },
-  { key:"oathplate-legs", id:30756, name:"Oathplate legs", cat:"Oathplate", components:[{id:30848,qty:2520},{id:30765,qty:450}] },
+  // `takesTime: true` = active crafting required (~ a few minutes per piece),
+  // not a click-and-go GE-clerk combine. The allocator's "hide non-instant
+  // combines" filter drops these when the user only wants zero-time flips.
+  { key:"oathplate-helm", id:30750, name:"Oathplate helm", cat:"Oathplate", takesTime:true, components:[{id:30848,qty:2520},{id:30765,qty:450}] },
+  { key:"oathplate-chest", id:30753, name:"Oathplate chest", cat:"Oathplate", takesTime:true, components:[{id:30848,qty:2520},{id:30765,qty:450}] },
+  { key:"oathplate-legs", id:30756, name:"Oathplate legs", cat:"Oathplate", takesTime:true, components:[{id:30848,qty:2520},{id:30765,qty:450}] },
 
   // ====================================================================
   // Skilling recipes — optional schema fields:
@@ -392,18 +395,29 @@ if (typeof SKILLING_RECIPES !== "undefined" && Array.isArray(SKILLING_RECIPES)) 
 }
 
 // Component-recipe detection: a recipe's product IS a component in another
-// recipe iff its id appears in some other recipe's component list.
-// Examples: Godsword blade is a recipe (3 shards → 1 blade) whose product
-// then feeds every specific Godsword recipe (hilt + blade → godsword).
+// recipe iff its id appears in some NON-skilling recipe's component list.
+// Examples: Godsword blade (3 shards → blade) is a component combine — its
+// product feeds the specific godsword recipes (hilt + blade → godsword).
+// Adamantite bar is NOT — its only consumers are skilling recipes (which
+// belong under the "Skilling supplies" toggle, not this one).
 // The allocator uses this to optionally exclude these intermediates from
-// the GE-slot count (they're really sub-crafts running in parallel to real
+// the GE-slot budget (they're sub-crafts running in parallel to real
 // flips, not full slot consumers in the same sense).
 const _componentItemIds = new Set();
 for (const r of RECIPES) {
+  if (r.skill) continue;   // skilling recipes drive their OWN toggle, not this one
   for (const c of r.components || []) _componentItemIds.add(c.id);
 }
 function isComponentProducingRecipe(recipe) {
   return _componentItemIds.has(recipe.id);
+}
+// Convenience for the popover UI — the deduped, sorted list of recipes
+// currently classified as component combines. Same rule as above.
+function componentCombineRecipes() {
+  return RECIPES
+    .filter(r => _componentItemIds.has(r.id))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /* ---------------- Skill requirements ----------------
@@ -719,6 +733,12 @@ const state = {
   // markers filter to the visible date range at draw time. null = not loaded,
   // [] = load failed (don't retry).
   news: null,
+  // Recipe-key exclusion set for the allocator. Any recipe whose key is in
+  // here gets skipped during allocation. Populated from the "component
+  // combines" list popover (though the mechanism is general — could later
+  // apply to any recipe). Persisted to localStorage so a user's curation
+  // survives reloads.
+  excludedRecipes: new Set(JSON.parse(localStorage.getItem("osrs-combo-excluded-recipes") || "[]")),
   // Snapshot of previous margins so we can show a trend arrow on cards.
   // Keyed by recipe.key; cleared on full refresh after capture.
   lastMargin: {},
@@ -1002,6 +1022,17 @@ function fmtHitLimitRemaining(id) {
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/* ---------------- Excluded-recipes curation ---------------- */
+const EXCLUDED_RECIPES_KEY = "osrs-combo-excluded-recipes";
+function saveExcludedRecipes() {
+  try { localStorage.setItem(EXCLUDED_RECIPES_KEY, JSON.stringify(Array.from(state.excludedRecipes))); } catch {}
+}
+function setRecipeExcluded(key, excluded) {
+  if (excluded) state.excludedRecipes.add(key);
+  else state.excludedRecipes.delete(key);
+  saveExcludedRecipes();
 }
 
 /* ---------------- News markers ----------------
@@ -2342,7 +2373,7 @@ function buyWindowsForHorizon(h) { return Math.max(1, Math.ceil(hoursForHorizon(
 function allocateRecipes(opts) {
   const {
     budget, horizon, slots, maxPerRecipePct, minContribPct,
-    requireConf, skipSkilling, hideStale,
+    requireConf, skipSkilling, hideStale, onlyZeroTime,
     freeSkillingSupplies, freeComponentCombines,
   } = opts;
   if (!budget || budget <= 0) return { allocations: [], totalCost: 0, totalProfit: 0, note: "Enter a budget" };
@@ -2375,6 +2406,17 @@ function allocateRecipes(opts) {
   const pm = window.overnightData?.predMap || {};
   for (const r of RECIPES) {
     if (skipSkilling && r.skill) continue;
+    // Zero-time filter — skip any recipe that requires active crafting time
+    // (currently only Oathplate armour). Skilling recipes are inherently
+    // time-consuming; they're handled by `skipSkilling` above, so the
+    // zero-time filter here targets the small set of non-skilling combines
+    // that actually need bench time. Combines that finish instantly at the
+    // GE clerk (godsword blade + hilt → godsword) pass through by default.
+    if (onlyZeroTime && r.takesTime) continue;
+    // User-curated exclusion — set via the "component combines" list popover.
+    // Persists in localStorage. Filters at the top so nothing downstream has
+    // to know about it.
+    if (state.excludedRecipes.has(r.key)) continue;
     // Stale filter — if any leg (product or component) has a price older than
     // the STALE_MS threshold, the calc.margin is a fossil. Skip.
     if (hideStale) {
@@ -4662,11 +4704,12 @@ async function init() {
       const requireConf = document.getElementById("allocate-require-conf").checked;
       const skipSkilling = document.getElementById("allocate-skip-skilling").checked;
       const hideStale = document.getElementById("allocate-hide-stale").checked;
+      const onlyZeroTime = document.getElementById("allocate-only-zero-time").checked;
       const freeSkillingSupplies = document.getElementById("allocate-free-supplies").checked;
       const freeComponentCombines = document.getElementById("allocate-free-components").checked;
       state.allocation = allocateRecipes({
         budget, horizon, slots, minContribPct, maxPerRecipePct,
-        requireConf, skipSkilling, hideStale,
+        requireConf, skipSkilling, hideStale, onlyZeroTime,
         freeSkillingSupplies, freeComponentCombines,
       });
       // Persist inputs so they survive reload.
@@ -4676,6 +4719,7 @@ async function init() {
       localStorage.setItem("osrs-combo-allocate-min-contrib", String(minContribPct));
       localStorage.setItem("osrs-combo-allocate-max-pct", String(maxPerRecipePct));
       localStorage.setItem("osrs-combo-allocate-hide-stale", hideStale ? "1" : "0");
+      localStorage.setItem("osrs-combo-allocate-only-zero-time", onlyZeroTime ? "1" : "0");
       localStorage.setItem("osrs-combo-allocate-free-supplies", freeSkillingSupplies ? "1" : "0");
       localStorage.setItem("osrs-combo-allocate-free-components", freeComponentCombines ? "1" : "0");
       renderGrid();
@@ -4695,8 +4739,98 @@ async function init() {
     restore("allocate-min-contrib", "osrs-combo-allocate-min-contrib");
     restore("allocate-max-pct", "osrs-combo-allocate-max-pct");
     restore("allocate-hide-stale", "osrs-combo-allocate-hide-stale", true);
+    restore("allocate-only-zero-time", "osrs-combo-allocate-only-zero-time", true);
     restore("allocate-free-supplies", "osrs-combo-allocate-free-supplies", true);
     restore("allocate-free-components", "osrs-combo-allocate-free-components", true);
+  }
+
+  /* ---------------- Component-combines list popover ----------------
+   * A modal listing every recipe classified as a "component combine" (see
+   * isComponentProducingRecipe). Each row has a checkbox — unchecked =
+   * excluded from allocation entirely. Persisted via saveExcludedRecipes.
+   * A filter box narrows the list; "Include all" / "Exclude all" bulk edit.
+   */
+  const combinesModal = document.getElementById("combines-modal");
+  const combinesBtn   = document.getElementById("allocate-combines-list-btn");
+  const combinesCountBadge = document.getElementById("allocate-combines-count");
+  function updateExcludedBadge() {
+    if (!combinesCountBadge) return;
+    // Count how many of the CURRENT combine set are excluded (not stale
+    // exclusions for recipes that no longer classify).
+    const combines = componentCombineRecipes();
+    let n = 0;
+    for (const r of combines) if (state.excludedRecipes.has(r.key)) n++;
+    combinesCountBadge.textContent = n > 0 ? `${n} excluded` : "";
+    combinesCountBadge.style.display = n > 0 ? "" : "none";
+  }
+  updateExcludedBadge();
+
+  if (combinesBtn && combinesModal) {
+    const listEl   = document.getElementById("combines-modal-list");
+    const searchEl = document.getElementById("combines-modal-search");
+    const countEl  = document.getElementById("combines-modal-count");
+    const closeBtn = document.getElementById("combines-modal-close");
+    const includeAllBtn = document.getElementById("combines-include-all");
+    const excludeAllBtn = document.getElementById("combines-exclude-all");
+
+    function renderCombinesList() {
+      const q = (searchEl.value || "").trim().toLowerCase();
+      const all = componentCombineRecipes();
+      const filtered = q ? all.filter(r => r.name.toLowerCase().includes(q)) : all;
+      listEl.replaceChildren();
+      for (const r of filtered) {
+        const excluded = state.excludedRecipes.has(r.key);
+        const row = el("label", { class: "combines-row" + (excluded ? " excluded" : "") });
+        const cb = el("input", { attrs: { type: "checkbox" } });
+        cb.checked = !excluded;
+        cb.addEventListener("change", () => {
+          setRecipeExcluded(r.key, !cb.checked);
+          row.classList.toggle("excluded", !cb.checked);
+          updateExcludedBadge();
+          updateCountLine();
+        });
+        row.appendChild(cb);
+        row.appendChild(el("span", { class: "combines-row-name", text: r.name }));
+        if (r.cat) row.appendChild(el("span", { class: "combines-row-cat", text: r.cat }));
+        listEl.appendChild(row);
+      }
+      if (!filtered.length) {
+        listEl.appendChild(el("div", { class: "combines-empty",
+          text: q ? "No matches." : "No component combines classified — check the classifier logic." }));
+      }
+    }
+    function updateCountLine() {
+      const total = componentCombineRecipes().length;
+      let excluded = 0;
+      for (const r of componentCombineRecipes()) if (state.excludedRecipes.has(r.key)) excluded++;
+      countEl.textContent = `${total - excluded} included · ${excluded} excluded · ${total} total`;
+    }
+    combinesBtn.addEventListener("click", () => {
+      searchEl.value = "";
+      renderCombinesList();
+      updateCountLine();
+      if (typeof combinesModal.showModal === "function") combinesModal.showModal();
+      else combinesModal.setAttribute("open", "");
+    });
+    closeBtn.addEventListener("click", () => combinesModal.close());
+    combinesModal.addEventListener("click", (e) => {
+      if (e.target === combinesModal) combinesModal.close();
+    });
+    searchEl.addEventListener("input", renderCombinesList);
+    includeAllBtn.addEventListener("click", () => {
+      for (const r of componentCombineRecipes()) state.excludedRecipes.delete(r.key);
+      saveExcludedRecipes();
+      updateExcludedBadge();
+      renderCombinesList();
+      updateCountLine();
+    });
+    excludeAllBtn.addEventListener("click", () => {
+      for (const r of componentCombineRecipes()) state.excludedRecipes.add(r.key);
+      saveExcludedRecipes();
+      updateExcludedBadge();
+      renderCombinesList();
+      updateCountLine();
+    });
   }
 
   // Sidebar collapse toggle
