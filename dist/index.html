@@ -236,9 +236,9 @@
       <div class="allocate-hint">Concurrent flip slots. Each recipe uses 1 by default. Free-slot toggles below skip specific classes.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
-      <label>Min ROI %</label>
-      <input type="number" id="allocate-min-roi" min="0" max="100" step="0.5" value="3" />
-      <div class="allocate-hint">Cut off tail recommendations. 3 = don't suggest anything with < 3% return.</div>
+      <label>Min profit per recipe (% of budget)</label>
+      <input type="number" id="allocate-min-contrib" min="0" max="100" step="0.01" value="0.05" />
+      <div class="allocate-hint">Skip recipes that can't meaningfully move the needle. 0.05% of 300M budget = 150k min profit per recipe.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
       <label>Max % per recipe (diversification)</label>
@@ -389,12 +389,12 @@
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=16"></script>
-<script src="skilling-recipes.js?v=16"></script>
-<script src="market-indexes.js?v=16"></script>
-<script src="app.js?v=16"></script>
-<script src="overnight.js?v=16"></script>
-<script src="flips-core.js?v=16"></script>
-<script src="flips.js?v=16"></script>
+<script src="overnight-core.js?v=17"></script>
+<script src="skilling-recipes.js?v=17"></script>
+<script src="market-indexes.js?v=17"></script>
+<script src="app.js?v=17"></script>
+<script src="overnight.js?v=17"></script>
+<script src="flips-core.js?v=17"></script>
+<script src="flips.js?v=17"></script>
 </body>
 </html>
