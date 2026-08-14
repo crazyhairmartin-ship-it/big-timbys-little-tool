@@ -178,6 +178,14 @@ async function runOvernightAnalysis(onProgress) {
       buyHour: windows.buyHours[0] ?? null,
       sellHour: windows.sellHours[0] ?? null,
       trend,
+      // Phase 2.B — historical metrics consumed by the allocator's
+      // realistic-fill probability. See analyzeItem's historicalMetrics.
+      medianSpreadPct: a.medianSpreadPct,
+      buyHitRate:      a.buyHitRate,
+      sellHitRate:     a.sellHitRate,
+      marginMean:      a.marginMean,
+      marginCoeffVar:  a.marginCoeffVar,
+      daysEvaluated:   a.daysEvaluated,
     };
     analysed += 1;
   }

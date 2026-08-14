@@ -191,6 +191,10 @@ function analyzeItem(id, series, windows, taxFn, baselineDays = OC_BASELINE_DAYS
   const profit = predictedProfit(predBuy, predSell, taxFn);
   const profitPct = profit / predBuy;
   const c = confidenceOf(series, windows);
+  // Phase 2.B — derived metrics consumed by the allocator's realistic-
+  // fill score. All computed from the same series we already have; no
+  // extra fetches. See historicalMetrics() below for the math.
+  const hist = historicalMetrics(series, predBuy, predSell, taxFn);
   return {
     id,
     predBuy, predSell, profit, profitPct,
@@ -204,6 +208,65 @@ function analyzeItem(id, series, windows, taxFn, baselineDays = OC_BASELINE_DAYS
     confidenceRaw: c.raw,
     score: rankScore(profitPct, c.confidence),
     curve: hourlyProfile(series),
+    // Phase 2.B fields — flat on the analysis object so overnight.js can
+    // spread them straight into predMap without knowing the internals.
+    medianSpreadPct:  hist.medianSpreadPct,
+    buyHitRate:       hist.buyHitRate,
+    sellHitRate:      hist.sellHitRate,
+    marginMean:       hist.marginMean,
+    marginCoeffVar:   hist.marginCoeffVar,
+    daysEvaluated:    hist.days,
+  };
+}
+
+// Historical-derived metrics from a per-item timeseries. Feeds the
+// allocator's fill-probability score with signals that the live snapshot
+// can't provide: how stable margins have been day to day, how often the
+// predicted low/high was actually reached, how wide the spread typically
+// is. All returned in [0,1] units where possible so downstream weighting
+// stays dimensionally consistent.
+function historicalMetrics(series, predBuy, predSell, taxFn) {
+  // Group points by UTC day, tracking the day's low/high on each side
+  // of the spread.
+  const byDay = new Map();
+  const spreadPcts = [];
+  for (const p of series) {
+    const lo = p.avgLowPrice, hi = p.avgHighPrice;
+    if (hi != null && lo != null && hi > 0 && lo > 0) {
+      const mid = (hi + lo) / 2;
+      if (mid > 0) spreadPcts.push((hi - lo) / mid);
+    }
+    const dayKey = Math.floor(p.timestamp / 86400);
+    const day = byDay.get(dayKey) || { lows: [], highs: [] };
+    if (lo != null && lo > 0) day.lows.push(lo);
+    if (hi != null && hi > 0) day.highs.push(hi);
+    byDay.set(dayKey, day);
+  }
+  let buyHits = 0, sellHits = 0, days = 0;
+  const dayMargins = [];
+  for (const [, d] of byDay) {
+    if (!d.lows.length || !d.highs.length) continue;
+    days++;
+    const dayLo = Math.min(...d.lows);
+    const dayHi = Math.max(...d.highs);
+    if (dayLo <= predBuy) buyHits++;
+    if (dayHi >= predSell) sellHits++;
+    const tax = typeof taxFn === "function" ? taxFn(dayHi) : 0;
+    const dayMargin = dayHi - dayLo - tax;
+    if (dayMargin > 0) dayMargins.push(dayMargin);
+  }
+  const marginMean = dayMargins.length
+    ? dayMargins.reduce((a, b) => a + b, 0) / dayMargins.length : null;
+  let marginCoeffVar = null;
+  if (marginMean != null && marginMean > 0 && dayMargins.length >= 2) {
+    const variance = dayMargins.reduce((a, b) => a + (b - marginMean) ** 2, 0) / dayMargins.length;
+    marginCoeffVar = Math.sqrt(variance) / marginMean;
+  }
+  return {
+    medianSpreadPct: medianOf(spreadPcts),
+    buyHitRate:  days ? buyHits  / days : null,
+    sellHitRate: days ? sellHits / days : null,
+    marginMean, marginCoeffVar, days,
   };
 }
 
