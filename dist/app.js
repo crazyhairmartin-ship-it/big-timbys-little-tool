@@ -2986,24 +2986,44 @@ function improveByLocalSearch(allocations, candidates, opts) {
       }
     }
 
-    // Operator 2: SWAP — remove one allocated recipe entirely, add an
-    // unallocated candidate into (existing remaining capacity + freed
-    // capacity). Full-removal case; partial removal handled by SHIFT below.
+    // Operator 2: SWAP — remove one allocated recipe entirely and put the
+    // freed capacity into another candidate. The candidate can EITHER be
+    // unallocated (replace A with new B) OR already allocated (remove A
+    // and grow B). The grow-allocated case is critical for scenarios like
+    // "helm + DHL + rancour(3) → remove helm, grow DHL to 2" — a chain of
+    // such swaps consolidates onto the top density recipe when greedy
+    // over-diversified. Enforces per-recipe cap against TOTAL new count,
+    // not just the added portion.
     for (let i = 0; i < allocs.length; i++) {
       const a = allocs[i];
       const freedBudget = availBudget + a.cost;
       const freedSlots  = availSlots  + (a.freeSlot ? 0 : a.slotUseCount);
-      for (const cand of others) {
-        const count = feasibleCount(cand, freedBudget, freedSlots);
+      for (const cand of candidates) {
+        if (cand.recipe.key === a.recipe.key) continue;   // don't swap A for A
+        const existingB = allocs.find(x => x.recipe.key === cand.recipe.key && x !== a);
+        const bCurrent = existingB ? existingB.count : 0;
+        const bHeadroom = cand.maxUnits - bCurrent;
+        if (bHeadroom <= 0) continue;
+        const count = Math.min(bHeadroom,
+          Math.floor(freedBudget / cand.calc.totalCost),
+          Math.floor(perRecipeCap / cand.calc.totalCost) - bCurrent,
+          cand.freeSlot ? Infinity : Math.floor(freedSlots / cand.slotsPerUnit));
         if (count <= 0) continue;
-        const newProfit = count * cand.calc.margin;
-        if (newProfit < minProfitAbsolute) continue;
-        const delta = newProfit - a.profit;
+        const newTotalProfit = (bCurrent + count) * cand.calc.margin;
+        if (!existingB && newTotalProfit < minProfitAbsolute) continue;
+        // Delta = new B contribution - A's full profit. When B was already
+        // allocated, only the ADDITIONAL count contributes to delta (the
+        // existing bCurrent × margin_B is already in the running total).
+        const delta = count * cand.calc.margin - a.profit;
         if (delta > bestDelta) {
           bestDelta = delta;
           bestApply = () => {
             allocs.splice(i, 1);
-            allocs.push(materialise(cand, count));
+            if (existingB) {
+              const bIdx = allocs.indexOf(existingB);
+              if (bIdx >= 0) allocs.splice(bIdx, 1);
+            }
+            allocs.push(materialise(cand, bCurrent + count));
           };
         }
       }
