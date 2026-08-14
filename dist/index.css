@@ -1678,6 +1678,21 @@ footer {
 .allocate-buy-hint.allocate-sell-hint {
   color: rgba(245, 197, 24, 0.9);
 }
+/* Note shown when the "show recommended prices" toggle filters out
+   allocator picks whose margin flipped negative at recommended pricing.
+   Full-width across the allocate-grid, muted-red so it reads as a
+   "some picks were dropped" hint without shouting. */
+.allocate-hidden-note {
+  grid-column: 1 / -1;
+  padding: 10px 14px;
+  border: 1px dashed rgba(239, 68, 68, 0.45);
+  border-radius: 8px;
+  color: rgba(239, 68, 68, 0.9);
+  background: rgba(239, 68, 68, 0.06);
+  font-size: 12.5px;
+  line-height: 1.4;
+  cursor: help;
+}
 
 /* Per-card "hide this craft" button — footer of the allocation card. Muted
    by default; hover picks up the red accent used by the hit-limit chip. */
