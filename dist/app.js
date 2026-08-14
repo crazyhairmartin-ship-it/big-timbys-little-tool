@@ -1311,10 +1311,10 @@ function supplyPriceAt(p, strategy) {
 // state after — the mutation is scoped to this function call. Cheaper than
 // threading a strategy param through calcMargin's callers (many of them read
 // state.supplyStrategy indirectly).
-function calcMarginAt(recipe, strategy) {
+function calcMarginAt(recipe, strategy, horizonH = 24) {
   const prev = state.supplyStrategy;
   state.supplyStrategy = strategy;
-  try { return calcMargin(recipe); } finally { state.supplyStrategy = prev; }
+  try { return calcMargin(recipe, undefined, horizonH); } finally { state.supplyStrategy = prev; }
 }
 function supplyTime(p) {
   if (!p) return null;
@@ -1372,13 +1372,9 @@ function sideVolumeSlices(id, side) {
   };
 }
 // Effective daily-scale volume for one item on one side of the spread.
-// side: "high" (insta-buy fills / list-and-wait sells) or "low"
-// (insta-sell fills / slow-buy fills). Blends three slices — the 24h
-// aggregate as the historical base, the last hour × 24 as recent
-// velocity, and the last 5 minutes × 288 as the "current pulse" — then
-// takes the max so heating markets get the fresh signal without ever
-// falling below the historic base. Wilson-shrunk on the way out so
-// low-count tails don't project confident capacity.
+// Legacy "always daily" API kept for the Realtime tab. Blends three slices
+// via max() and Wilson-shrinks. See sideVolumeAtHorizon() for the newer
+// horizon-aware version used by the allocator.
 function sideVolume(id, side) {
   const s = sideVolumeSlices(id, side);
   if (s.v5m == null && s.v1h == null && s.v24h == null) return null;
@@ -1389,8 +1385,38 @@ function sideVolume(id, side) {
   const blended = Math.max(...candidates);
   return poissonLower95(blended);
 }
+// Horizon-aware side volume: returns the expected count for THIS specific
+// horizonH (in hours), picking the underlying signal whose native window
+// best matches. Short horizons trust the fresh 5m/1h data (a hot burst is
+// meaningful); long horizons trust the 24h aggregate (fresh bursts don't
+// hold for a full day). Each signal is scaled to horizonH before use so
+// comparisons are apples-to-apples.
+//
+//   horizon ≤ 30 min  →  5m signal   (v5m × horizonH × 12)
+//   30 min – 6h       →  1h signal   (v1h × horizonH)
+//   > 6h              →  24h signal  (v24h × horizonH / 24)
+//
+// Falls back to whichever slice is available if the primary is missing.
+// Wilson-shrunk at the end.
+function sideVolumeAtHorizon(id, side, horizonH) {
+  const s = sideVolumeSlices(id, side);
+  if (s.v5m == null && s.v1h == null && s.v24h == null) return null;
+  const p5  = s.v5m  != null ? s.v5m  * horizonH * 12 : null;
+  const p1  = s.v1h  != null ? s.v1h  * horizonH      : null;
+  const p24 = s.v24h != null ? s.v24h * horizonH / 24 : null;
+  let primary;
+  if (horizonH <= 0.5)     primary = p5  ?? p1 ?? p24;
+  else if (horizonH <= 6)  primary = p1  ?? p24 ?? p5;
+  else                     primary = p24 ?? p1 ?? p5;
+  return primary != null ? poissonLower95(primary) : null;
+}
 
-function calcMargin(recipe, predMap) {
+// horizonH (in hours) tells the volume path which slice to trust as the
+// primary signal (see sideVolumeAtHorizon). Defaults to 24 so calcMargin's
+// legacy callers (Realtime tab, sorts, table columns) keep getting a
+// daily-scale maxFlipsAdjusted. Allocator explicitly passes its horizon
+// so its estimates match the user's chosen trading window.
+function calcMargin(recipe, predMap, horizonH = 24) {
   const qty = recipe.resultQty || 1;
   const result = predMap ? null : state.prices[recipe.id];
   const sellPricePerUnit = predMap
@@ -1491,7 +1517,11 @@ function calcMargin(recipe, predMap) {
   // final number.
   let bottleneckId = null;
   let bottleneckSide = null;
-  const outputSideVol = sideVolume(recipe.id, sellSide);
+  // Horizon-aware volume estimates: sideVolumeAtHorizon picks the signal
+  // whose native window matches this horizon (5m for < 30 min, 1h for
+  // 30 min – 6h, 24h for > 6h) and returns the count scaled to horizonH.
+  // No more `× horizonH / 24` in the allocator — it's baked in here.
+  const outputSideVol = sideVolumeAtHorizon(recipe.id, sellSide, horizonH);
   const compSideVols = {};
   let maxFlipsAdjusted = null;
   let anySideVol = false;
@@ -1502,7 +1532,7 @@ function calcMargin(recipe, predMap) {
     anySideVol = true;
   }
   for (const c of recipe.components) {
-    const v = sideVolume(c.id, buySide);
+    const v = sideVolumeAtHorizon(c.id, buySide, horizonH);
     compSideVols[c.id] = v;
     if (v == null) continue;
     anySideVol = true;
@@ -1513,11 +1543,20 @@ function calcMargin(recipe, predMap) {
       bottleneckSide = buySide;
     }
   }
-  if (!anySideVol) maxFlipsAdjusted = maxFlips;   // fall back to aggregate
-  // Same GE-limit binding as before — buy limits don't care about side.
-  if (limitFlipsPerDay != null && maxFlipsAdjusted != null) {
-    if (maxFlipsAdjusted > limitFlipsPerDay) {
-      maxFlipsAdjusted = limitFlipsPerDay;
+  // Fall back to the aggregate (also horizon-scaled) if no side-split data
+  // is available on any leg.
+  if (!anySideVol && maxFlips != null) {
+    maxFlipsAdjusted = Math.floor(maxFlips * horizonH / 24);
+  }
+  // GE buy-limit cap at horizon-scale: ceil(horizonH / 4) covers as many
+  // buy-limit windows as the horizon spans. Matches the allocator's slot
+  // budget calc (slots × ceil(horizonH / 4)).
+  const limitFlipsAtHorizon = limitFlipsPer4h != null
+    ? limitFlipsPer4h * Math.max(1, Math.ceil(horizonH / 4))
+    : null;
+  if (limitFlipsAtHorizon != null && maxFlipsAdjusted != null) {
+    if (maxFlipsAdjusted > limitFlipsAtHorizon) {
+      maxFlipsAdjusted = limitFlipsAtHorizon;
       bottleneckId = null;     // "GE buy limit" — not any specific item's volume
       bottleneckSide = null;
     }
@@ -1534,7 +1573,11 @@ function calcMargin(recipe, predMap) {
     revenue, geTax: totalTax, geTaxPerUnit: taxPerUnit,
     componentCost, suppliesCost, repairCost: rc, totalCost,
     margin, roi, allPresent,
-    maxFlips, maxFlipsAdjusted,
+    // maxFlips = daily aggregate (unchanged, used by Realtime tab).
+    // maxFlipsAdjusted = HORIZON-scaled cap using the horizon-matched
+    // volume signal + horizon-scaled GE limit. When horizonH is left at
+    // the default (24), maxFlipsAdjusted is still a daily estimate.
+    maxFlips, maxFlipsAdjusted, horizonH, limitFlipsAtHorizon,
     resultVol, compVols, compSideVols, resultQty: qty,
     compLimits, limitFlipsPer4h, limitFlipsPerDay,
     bottleneckId, volumeBreakdown,
@@ -2653,8 +2696,11 @@ function allocateRecipes(opts) {
     //   3. Rare bid-ask crossover where .high < .low outright.
     // The card gets a badge when the chosen strategy differs from user's global
     // preference so the user knows they need to insta-buy for THAT recipe.
-    const calcSlow = calcMarginAt(r, "slow-buy");
-    const calcInsta = calcMarginAt(r, "insta-buy");
+    // Both variants use horizonH so their maxFlipsAdjusted is scaled to
+    // the user's chosen trading window (not the daily default). Picks the
+    // freshest signal appropriate to the horizon per sideVolumeAtHorizon.
+    const calcSlow = calcMarginAt(r, "slow-buy", horizonH);
+    const calcInsta = calcMarginAt(r, "insta-buy", horizonH);
     const slowViable = calcSlow.allPresent && calcSlow.margin > 0 && calcSlow.totalCost > 0;
     const instaViable = calcInsta.allPresent && calcInsta.margin > 0 && calcInsta.totalCost > 0;
     if (!slowViable && !instaViable) continue;
@@ -2675,20 +2721,19 @@ function allocateRecipes(opts) {
     } else {
       calc = calcInsta; supplyStrategyUsed = "insta-buy";
     }
-    // maxUnits = the realistic flip count bounded by:
-    //   1. Output side-split trade volume (product's sell-side)  }
-    //   2. Every component's side-split volume (buy-side)          } via
-    //   3. Recent 1h velocity blend + Wilson lower-bound shrink    } calc.maxFlipsAdjusted
-    //   4. Daily GE buy limits                                     }
-    // Scaled by (horizonH / 24). Prefer the adjusted count; fall back to
-    // the aggregate maxFlips for items with no side-split data at all;
-    // then to raw buy-limit if no volume data at all.
-    const dailyCap = calc.maxFlipsAdjusted
-      ?? calc.maxFlips
-      ?? (calc.limitFlipsPer4h != null ? calc.limitFlipsPer4h * 6 : null);
-    if (dailyCap == null || dailyCap <= 0) continue;
-    const maxUnits = Math.floor(dailyCap * horizonH / 24);
-    if (maxUnits <= 0) continue;
+    // maxUnits = the realistic flip count for THIS horizon, bounded by:
+    //   1. Output side-split trade volume (product's sell-side)          }
+    //   2. Every component's side-split volume (buy-side)                } via
+    //   3. Horizon-matched signal (24h agg for >6h, 1h for 30min-6h,     } calc.maxFlipsAdjusted
+    //      5m for <30min) + Wilson lower-bound shrink                    }
+    //   4. GE buy limits (limitFlipsPer4h × ceil(horizonH / 4))          }
+    // Since calc.maxFlipsAdjusted is now already horizon-scaled (calcMargin
+    // received horizonH), no more `× horizonH / 24` here. Fall back to the
+    // daily aggregate scaled to horizon, then to raw buy-limit if no vol.
+    const maxUnits = calc.maxFlipsAdjusted
+      ?? (calc.maxFlips != null ? Math.floor(calc.maxFlips * horizonH / 24) : null)
+      ?? (calc.limitFlipsPer4h != null ? calc.limitFlipsPer4h * Math.max(1, Math.ceil(horizonH / 4)) : null);
+    if (maxUnits == null || maxUnits <= 0) continue;
     // Cheap early-out: if this recipe can't POSSIBLY contribute enough
     // profit to matter (even at full capacity), skip it before the
     // confidence lookup. Saves per-item work on the long tail.
@@ -3272,20 +3317,24 @@ function renderAllocationCard(a) {
   stats.appendChild(row("Margin / craft", fmtGp(Math.round(a.calc.margin))));
   stats.appendChild(row("ROI", ((a.calc.margin / a.calc.totalCost) * 100).toFixed(2) + "%"));
   // Volume cap breakdown — shows how the maxUnits ceiling was derived so
-  // the user can sanity-check. "adj" = the number that actually gates
-  // allocation (side-split + 5m/1h/24h velocity blend + Wilson shrink);
-  // "agg" = the naive 24h total for comparison.
+  // the user can sanity-check. `adj` is now HORIZON-scaled (calcMargin
+  // was called with the allocator's horizonH), so we label with the
+  // horizon length and compare against the 24h aggregate at the same
+  // horizon scale.
   if (a.calc.maxFlipsAdjusted != null || a.calc.maxFlips != null) {
-    const agg = a.calc.maxFlips;
+    const h = a.calc.horizonH ?? 24;
+    const horizonLbl = h === 24 ? "day" : `${h}h`;
     const adj = a.calc.maxFlipsAdjusted;
+    // Scale the aggregate to the same horizon for a fair side-by-side.
+    const aggScaled = a.calc.maxFlips != null ? Math.floor(a.calc.maxFlips * h / 24) : null;
     const disp = adj != null ? adj.toLocaleString() : "—";
-    const aggText = agg != null ? `${agg.toLocaleString()} agg` : "no vol";
-    const cell = row("Volume cap (adj/day)", `${disp}  ·  ${aggText}`);
-    cell.title = "Adjusted: side-split volume (buying components caps by sell-side liquidity; "
-      + "selling product caps by buy-side), blended across 5m / 1h / 24h slices (max is used, "
-      + "so heating markets get the fresh signal without ever dropping below the historic base), "
-      + "then shrunk via a Poisson 95% lower bound to guard against small-sample noise. "
-      + "Aggregate: the naive 24h total (both sides, no shrink) — shown for comparison.";
+    const aggText = aggScaled != null ? `${aggScaled.toLocaleString()} agg` : "no vol";
+    const cell = row(`Volume cap (adj/${horizonLbl})`, `${disp}  ·  ${aggText}`);
+    cell.title = "Adjusted: horizon-matched signal (24h aggregate for >6h horizons, "
+      + "1h velocity for 30 min – 6h, 5m pulse for < 30 min) — side-split so buying "
+      + "components caps by sell-side liquidity and selling product caps by buy-side. "
+      + "Poisson 95% lower bound applied to shrink noisy tails. "
+      + `Aggregate: the naive daily total (both sides, no shrink), scaled to the ${horizonLbl} horizon for comparison.`;
     stats.appendChild(cell);
     // Bottleneck line — shows which specific item's volume set the ceiling
     // plus the raw 5m/1h/24h slices we pulled from the wiki. Lets you see
@@ -3302,14 +3351,13 @@ function renderAllocationCard(a) {
       const cell = row("Bottleneck", `${itemName} · ${parts.join(" · ")}`);
       cell.title = `${itemName} (${sideLbl} volume) sets this recipe's ceiling. `
         + `Slice sizes: 5m = last 5 min, 1h = last hour, 24h = last day. `
-        + `The blend takes max(24h, 1h × 24, 5m × 288), then applies the Poisson shrink.`;
+        + `For a ${horizonLbl} horizon the ${h <= 0.5 ? "5m" : h <= 6 ? "1h" : "24h"} slice is the primary signal.`;
       stats.appendChild(cell);
-    } else if (adj != null && a.calc.limitFlipsPerDay != null && adj === a.calc.limitFlipsPerDay) {
+    } else if (adj != null && a.calc.limitFlipsAtHorizon != null && adj === a.calc.limitFlipsAtHorizon) {
       // GE buy limit is the ceiling — flag it explicitly instead of leaving
-      // the user wondering why the "adj" number is exactly limit × 6.
+      // the user wondering why the "adj" number is exactly limit × windows.
       const cell = row("Bottleneck", `GE buy limit · ${a.calc.limitFlipsPer4h.toLocaleString()} / 4h`);
-      cell.title = "The GE 4h buy limit is tighter than any component's volume — you'd hit "
-        + "the daily cap before market depth becomes an issue.";
+      cell.title = `The GE 4h buy limit (× ${Math.max(1, Math.ceil(h / 4))} windows for the ${horizonLbl} horizon) is tighter than any component's volume.`;
       stats.appendChild(cell);
     }
   }
