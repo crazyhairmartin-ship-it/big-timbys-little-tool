@@ -2910,20 +2910,40 @@ function improveByLocalSearch(allocations, candidates, opts) {
     let bestDelta = 0;
     let bestApply = null;
 
-    // Operator 1: ADD an unallocated candidate into remaining capacity.
-    for (const cand of others) {
-      const count = feasibleCount(cand, availBudget, availSlots);
-      if (count <= 0) continue;
-      const profit = count * cand.calc.margin;
-      if (profit < minProfitAbsolute) continue;
-      if (profit > bestDelta) {
-        bestDelta = profit;
-        bestApply = () => allocs.push(materialise(cand, count));
+    // Operator 1: ADD or GROW — put more units of any candidate (allocated
+    // or not) into remaining capacity. For already-allocated recipes, this
+    // is a GROW (headroom = maxUnits - current). For unallocated it's a
+    // standard ADD (must also clear the minProfitAbsolute floor).
+    for (const cand of candidates) {
+      const existing = allocs.find(x => x.recipe.key === cand.recipe.key);
+      const current = existing ? existing.count : 0;
+      const headroom = cand.maxUnits - current;
+      if (headroom <= 0) continue;
+      const additional = Math.min(headroom,
+        Math.floor(availBudget / cand.calc.totalCost),
+        Math.floor(perRecipeCap / cand.calc.totalCost) - current,   // per-recipe cap counts total, not incremental
+        cand.freeSlot ? Infinity : Math.floor(availSlots / cand.slotsPerUnit));
+      if (additional <= 0) continue;
+      const extraProfit = additional * cand.calc.margin;
+      // Fresh allocations still need to clear the min-profit floor at total
+      // count; growing existing ones doesn't (they already cleared it).
+      const totalProfit = (current + additional) * cand.calc.margin;
+      if (!existing && totalProfit < minProfitAbsolute) continue;
+      if (extraProfit > bestDelta) {
+        bestDelta = extraProfit;
+        bestApply = () => {
+          if (existing) {
+            const idx = allocs.indexOf(existing);
+            allocs.splice(idx, 1);
+          }
+          allocs.push(materialise(cand, current + additional));
+        };
       }
     }
 
-    // Operator 2: SWAP — remove one allocated recipe, add an unallocated
-    // candidate into (existing remaining capacity + freed capacity).
+    // Operator 2: SWAP — remove one allocated recipe entirely, add an
+    // unallocated candidate into (existing remaining capacity + freed
+    // capacity). Full-removal case; partial removal handled by SHIFT below.
     for (let i = 0; i < allocs.length; i++) {
       const a = allocs[i];
       const freedBudget = availBudget + a.cost;
@@ -2940,6 +2960,65 @@ function improveByLocalSearch(allocations, candidates, opts) {
             allocs.splice(i, 1);
             allocs.push(materialise(cand, count));
           };
+        }
+      }
+    }
+
+    // Operator 3: SHIFT — shrink allocation A by K units (1..count-1) and
+    // put the freed budget/slots into another candidate B (allocated or
+    // not). This is the key operator for the "diversification cap raises
+    // profit" case: greedy over-commits to the density-top pick, and the
+    // improvement is to reduce it by K and put freed capacity into other
+    // recipes. K iterated to find the best delta per pair. O(A × C × count)
+    // — small in practice since count is usually < 20.
+    for (let i = 0; i < allocs.length; i++) {
+      const a = allocs[i];
+      if (a.count <= 1) continue;   // K < count, so need count >= 2
+      const aCostPer  = a.cost / a.count;
+      const aSlotsPer = a.freeSlot ? 0 : a.slotUseCount / a.count;
+      for (const cand of candidates) {
+        if (cand.recipe.key === a.recipe.key) continue;
+        const existingB = allocs.find(x => x.recipe.key === cand.recipe.key);
+        const bCurrent = existingB ? existingB.count : 0;
+        const bHeadroom = cand.maxUnits - bCurrent;
+        if (bHeadroom <= 0) continue;
+        // Try each K. The optimal K is often at a boundary (K that just
+        // barely lets one more B unit fit), so we could shortcut but
+        // brute-force is fast enough.
+        for (let K = 1; K < a.count; K++) {
+          const freedBudget = K * aCostPer;
+          const freedSlots  = K * aSlotsPer;
+          const newAvailBudget = availBudget + freedBudget;
+          const newAvailSlots  = availSlots  + freedSlots;
+          const bAdd = Math.min(bHeadroom,
+            Math.floor(newAvailBudget / cand.calc.totalCost),
+            Math.floor(perRecipeCap / cand.calc.totalCost) - bCurrent,
+            cand.freeSlot ? Infinity : Math.floor(newAvailSlots / cand.slotsPerUnit));
+          if (bAdd <= 0) continue;
+          const newBTotal = (bCurrent + bAdd) * cand.calc.margin;
+          if (!existingB && newBTotal < minProfitAbsolute) continue;
+          const delta = bAdd * cand.calc.margin - K * a.calc.margin;
+          // A shrunk to (a.count - K) — check it still meets min-profit
+          const newACount = a.count - K;
+          const newAProfit = newACount * a.calc.margin;
+          if (newAProfit < minProfitAbsolute) continue;
+          if (delta > bestDelta) {
+            bestDelta = delta;
+            bestApply = () => {
+              // Shrink or replace A
+              allocs.splice(i, 1);
+              const aCand = candidates.find(c => c.recipe.key === a.recipe.key);
+              if (aCand && newACount > 0) allocs.push(materialise(aCand, newACount));
+              // Grow or add B
+              if (existingB) {
+                const bIdx = allocs.indexOf(existingB);
+                if (bIdx >= 0) allocs.splice(bIdx, 1);
+                allocs.push(materialise(cand, bCurrent + bAdd));
+              } else {
+                allocs.push(materialise(cand, bAdd));
+              }
+            };
+          }
         }
       }
     }
