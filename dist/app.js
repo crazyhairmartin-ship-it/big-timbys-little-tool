@@ -1354,22 +1354,39 @@ function poissonLower95(k) {
   if (!isFinite(k) || k <= 0) return 0;
   return Math.max(0, k - 1.96 * Math.sqrt(k));
 }
-// Effective daily volume for one item on one side of the spread.
-// side: "high" (insta-buy fills / list-and-wait sells) or "low"
-// (insta-sell fills / slow-buy fills). Returns a Wilson-adjusted
-// daily-scale count, or null if we have no data at all.
-function sideVolume(id, side) {
-  const p24 = state.avg24h?.[id];
+// Raw side-split volumes for one item across the three time slices the
+// wiki API gives us (5m, 1h, 24h). Returns the observed counts as-is
+// (no scaling, no shrinkage). Used both by sideVolume() below to build
+// the blended estimate AND by the card renderer to show the user which
+// slice is actually driving the number.
+function sideVolumeSlices(id, side) {
+  const key = side === "high" ? "highPriceVolume" : "lowPriceVolume";
+  const key24 = side === "high" ? "highVol" : "lowVol";
+  const p5  = state.avg5m?.[id];
   const p1  = state.avg1h?.[id];
-  const v24 = p24 ? (side === "high" ? p24.highVol : p24.lowVol) : null;
-  const v1h = p1  ? (side === "high" ? p1.highPriceVolume : p1.lowPriceVolume) : null;
-  if (v24 == null && v1h == null) return null;
-  // 1h × 24 gives a "recent velocity extrapolated to daily" estimate.
-  // max() with 24h means "trust whichever is higher" — heating markets
-  // get the fresh signal, cooling markets keep the historic base.
-  const recent24h = v1h != null ? v1h * 24 : null;
-  const base24h = v24 ?? 0;
-  const blended = recent24h != null ? Math.max(base24h, recent24h) : base24h;
+  const p24 = state.avg24h?.[id];
+  return {
+    v5m:  p5  ? (p5[key]   ?? 0) : null,
+    v1h:  p1  ? (p1[key]   ?? 0) : null,
+    v24h: p24 ? (p24[key24] ?? 0) : null,
+  };
+}
+// Effective daily-scale volume for one item on one side of the spread.
+// side: "high" (insta-buy fills / list-and-wait sells) or "low"
+// (insta-sell fills / slow-buy fills). Blends three slices — the 24h
+// aggregate as the historical base, the last hour × 24 as recent
+// velocity, and the last 5 minutes × 288 as the "current pulse" — then
+// takes the max so heating markets get the fresh signal without ever
+// falling below the historic base. Wilson-shrunk on the way out so
+// low-count tails don't project confident capacity.
+function sideVolume(id, side) {
+  const s = sideVolumeSlices(id, side);
+  if (s.v5m == null && s.v1h == null && s.v24h == null) return null;
+  const recent5m = s.v5m != null ? s.v5m * 288 : null;
+  const recent1h = s.v1h != null ? s.v1h * 24  : null;
+  const base24h  = s.v24h ?? 0;
+  const candidates = [base24h, recent1h, recent5m].filter(v => v != null);
+  const blended = Math.max(...candidates);
   return poissonLower95(blended);
 }
 
@@ -1468,23 +1485,49 @@ function calcMargin(recipe, predMap) {
   // data at all (some rarely-traded items).
   const buySide  = state.supplyStrategy === "slow-buy" ? "low"  : "high";
   const sellSide = state.productStrategy === "insta-sell" ? "low" : "high";
+  // Track which leg sets the ceiling so the card can name it. That's the
+  // most useful diagnostic — "you're capped by adamantite bar volume"
+  // tells the user WHICH price/volume to sanity-check, not just the
+  // final number.
+  let bottleneckId = null;
+  let bottleneckSide = null;
   const outputSideVol = sideVolume(recipe.id, sellSide);
   const compSideVols = {};
-  let maxFlipsAdjusted = outputSideVol != null ? Math.floor(outputSideVol / qty) : null;
-  let anySideVol = outputSideVol != null;
+  let maxFlipsAdjusted = null;
+  let anySideVol = false;
+  if (outputSideVol != null) {
+    maxFlipsAdjusted = Math.floor(outputSideVol / qty);
+    bottleneckId = recipe.id;
+    bottleneckSide = sellSide;
+    anySideVol = true;
+  }
   for (const c of recipe.components) {
     const v = sideVolume(c.id, buySide);
     compSideVols[c.id] = v;
     if (v == null) continue;
     anySideVol = true;
     const cap = Math.floor(v / c.qty);
-    maxFlipsAdjusted = maxFlipsAdjusted == null ? cap : Math.min(maxFlipsAdjusted, cap);
+    if (maxFlipsAdjusted == null || cap < maxFlipsAdjusted) {
+      maxFlipsAdjusted = cap;
+      bottleneckId = c.id;
+      bottleneckSide = buySide;
+    }
   }
   if (!anySideVol) maxFlipsAdjusted = maxFlips;   // fall back to aggregate
   // Same GE-limit binding as before — buy limits don't care about side.
   if (limitFlipsPerDay != null && maxFlipsAdjusted != null) {
-    maxFlipsAdjusted = Math.min(maxFlipsAdjusted, limitFlipsPerDay);
+    if (maxFlipsAdjusted > limitFlipsPerDay) {
+      maxFlipsAdjusted = limitFlipsPerDay;
+      bottleneckId = null;     // "GE buy limit" — not any specific item's volume
+      bottleneckSide = null;
+    }
   }
+  // 3-slice breakdown of the item that set the ceiling. Card renders this
+  // so the user can see "5m: 3 · 1h: 48 · 24h: 1,240 → 950 adj" and judge
+  // whether the estimate feels right for the recipe.
+  const volumeBreakdown = bottleneckId != null
+    ? { id: bottleneckId, side: bottleneckSide, ...sideVolumeSlices(bottleneckId, bottleneckSide) }
+    : null;
 
   return {
     sellPrice: sellPricePerUnit, sellTime, oldestTime,
@@ -1494,6 +1537,7 @@ function calcMargin(recipe, predMap) {
     maxFlips, maxFlipsAdjusted,
     resultVol, compVols, compSideVols, resultQty: qty,
     compLimits, limitFlipsPer4h, limitFlipsPerDay,
+    bottleneckId, volumeBreakdown,
   };
 }
 
@@ -3022,10 +3066,9 @@ function renderAllocationCard(a) {
   stats.appendChild(row("Margin / craft", fmtGp(Math.round(a.calc.margin))));
   stats.appendChild(row("ROI", ((a.calc.margin / a.calc.totalCost) * 100).toFixed(2) + "%"));
   // Volume cap breakdown — shows how the maxUnits ceiling was derived so
-  // the user can sanity-check. "Aggregate" = old naive path (both sides
-  // of the spread, no shrinkage). "Adjusted" = the new number that
-  // actually gates allocation: side-split + 1h velocity blend + Wilson
-  // lower-bound. Tooltip explains the math.
+  // the user can sanity-check. "adj" = the number that actually gates
+  // allocation (side-split + 5m/1h/24h velocity blend + Wilson shrink);
+  // "agg" = the naive 24h total for comparison.
   if (a.calc.maxFlipsAdjusted != null || a.calc.maxFlips != null) {
     const agg = a.calc.maxFlips;
     const adj = a.calc.maxFlipsAdjusted;
@@ -3033,10 +3076,36 @@ function renderAllocationCard(a) {
     const aggText = agg != null ? `${agg.toLocaleString()} agg` : "no vol";
     const cell = row("Volume cap (adj/day)", `${disp}  ·  ${aggText}`);
     cell.title = "Adjusted: side-split volume (buying components caps by sell-side liquidity; "
-      + "selling product caps by buy-side), blended with recent 1h velocity (max of the two), "
+      + "selling product caps by buy-side), blended across 5m / 1h / 24h slices (max is used, "
+      + "so heating markets get the fresh signal without ever dropping below the historic base), "
       + "then shrunk via a Poisson 95% lower bound to guard against small-sample noise. "
       + "Aggregate: the naive 24h total (both sides, no shrink) — shown for comparison.";
     stats.appendChild(cell);
+    // Bottleneck line — shows which specific item's volume set the ceiling
+    // plus the raw 5m/1h/24h slices we pulled from the wiki. Lets you see
+    // whether the estimate is grounded in a real trend or a single stale
+    // number.
+    const bd = a.calc.volumeBreakdown;
+    if (bd) {
+      const itemName = state.mapping?.[bd.id]?.name || `#${bd.id}`;
+      const sideLbl = bd.side === "high" ? "high-side" : "low-side";
+      const parts = [];
+      if (bd.v5m  != null) parts.push(`5m ${bd.v5m.toLocaleString()}`);
+      if (bd.v1h  != null) parts.push(`1h ${bd.v1h.toLocaleString()}`);
+      if (bd.v24h != null) parts.push(`24h ${bd.v24h.toLocaleString()}`);
+      const cell = row("Bottleneck", `${itemName} · ${parts.join(" · ")}`);
+      cell.title = `${itemName} (${sideLbl} volume) sets this recipe's ceiling. `
+        + `Slice sizes: 5m = last 5 min, 1h = last hour, 24h = last day. `
+        + `The blend takes max(24h, 1h × 24, 5m × 288), then applies the Poisson shrink.`;
+      stats.appendChild(cell);
+    } else if (adj != null && a.calc.limitFlipsPerDay != null && adj === a.calc.limitFlipsPerDay) {
+      // GE buy limit is the ceiling — flag it explicitly instead of leaving
+      // the user wondering why the "adj" number is exactly limit × 6.
+      const cell = row("Bottleneck", `GE buy limit · ${a.calc.limitFlipsPer4h.toLocaleString()} / 4h`);
+      cell.title = "The GE 4h buy limit is tighter than any component's volume — you'd hit "
+        + "the daily cap before market depth becomes an issue.";
+      stats.appendChild(cell);
+    }
   }
   card.appendChild(stats);
 
