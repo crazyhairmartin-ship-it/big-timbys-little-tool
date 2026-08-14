@@ -1606,6 +1606,29 @@ footer {
   font-weight: 600;
 }
 
+/* Column container for a buy/supply/sell row + optional predicted-offer
+   hint underneath. Keeps the row's horizontal flex layout intact while
+   letting the hint drop below as a subtitle. */
+.allocate-buy-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+/* Predicted-offer hint — sits below its row. Small, muted-green for buys,
+   accent yellow for sells so the sell side reads as revenue-facing. Wraps
+   on narrow layouts. */
+.allocate-buy-hint {
+  font-size: 10.5px;
+  color: rgba(74, 222, 128, 0.85);
+  padding-left: 2px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.allocate-buy-hint.allocate-sell-hint {
+  color: rgba(245, 197, 24, 0.9);
+}
+
 /* Per-card "hide this craft" button — footer of the allocation card. Muted
    by default; hover picks up the red accent used by the hit-limit chip. */
 .allocate-hide-btn {
