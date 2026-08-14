@@ -2753,7 +2753,7 @@ function allocateRecipes(opts) {
   // free-slot recipes) or budget is spent.
   let remainingBudget = budget;
   let slotsUsedTotal = 0;   // in slot-uses (buy orders), NOT recipes
-  const allocations = [];
+  let allocations = [];
   let hitSlotCap = false;
   for (const cand of candidates) {
     if (remainingBudget <= 0) break;
@@ -2805,15 +2805,44 @@ function allocateRecipes(opts) {
     remainingBudget -= cost;
     if (!cand.freeSlot) slotsUsedTotal += slotUseCount;
   }
+  // -------- Greedy pre-pass complete. Now run local-search improvement. --------
+  // The greedy above sorts by profit-per-slot-density × conf² — a fast local
+  // heuristic that's usually within a few percent of the true optimum but can
+  // miss redistribution wins (concentrating capital on a top pick that can't
+  // fully absorb it, blocking lower-density but capital-efficient candidates).
+  // Local search patches those cases with two operators applied iteratively:
+  //   ADD  — put an unallocated candidate into remaining budget/slot capacity
+  //   SWAP — replace one allocated recipe entirely with an unallocated candidate
+  // Both check delta > 0 before applying; loop until no operator produces a
+  // positive delta or hit iteration ceiling. O(A × C) per iteration where A
+  // is the current allocation count and C is the candidate pool — sub-ms in
+  // practice.
+  const preGreedyProfit = allocations.reduce((s, a) => s + a.profit, 0);
+  const searchResult = improveByLocalSearch(allocations, candidates, {
+    budget, slotBudget, perRecipeCap, minProfitAbsolute,
+  });
+  allocations = searchResult.allocations;
   const totalCost = allocations.reduce((s, a) => s + a.cost, 0);
   const totalProfit = allocations.reduce((s, a) => s + a.profit, 0);
+  const totalSlotsUsed = allocations.reduce((s, a) => s + (a.freeSlot ? 0 : a.slotUseCount), 0);
+  const remainingBudgetFinal = budget - totalCost;
+  const remainingSlotsFinal = slotBudget - totalSlotsUsed;
   const deployedPct = (totalCost / budget) * 100;
+  const improvementPct = preGreedyProfit > 0
+    ? ((totalProfit - preGreedyProfit) / preGreedyProfit) * 100 : 0;
+  // exhaustedReason has to be recomputed post-improvement: local search may
+  // have deployed more capital, so the greedy's "slot cap hit" verdict might
+  // no longer apply (or now applies for a different reason).
+  const reason =
+    remainingBudgetFinal <= 0 ? "budget fully deployed"
+    : remainingSlotsFinal <= 0 ? `slot budget (${slotBudget} = ${slots} slots × ${windows} × 4h windows) exhausted before budget — extend the horizon, raise the slot count, or enable free-slot toggles for supplies/component combines.`
+    : `no more candidates can contribute > ${minContribPct}% of budget (${fmtGp(Math.round(minProfitAbsolute))}) in profit — lower the min-contribution or relax the other filters`;
   return {
     allocations,
     totalCost,
     totalProfit,
-    remainingBudget,
-    slotsUsed: slotsUsedTotal,   // slot-uses (buy orders), not recipe count
+    remainingBudget: remainingBudgetFinal,
+    slotsUsed: totalSlotsUsed,   // slot-uses (buy orders), not recipe count
     slots,                       // concurrent slot cap (per window)
     slotBudget,                  // total buy orders allowed = slots × windows
     windows,                     // buy-limit windows the horizon covers
@@ -2821,14 +2850,104 @@ function allocateRecipes(opts) {
     horizonH,                    // horizon in hours (for display)
     candidatesConsidered: candidates.length,
     deployedPct,
-    // If we ran out of viable recipes before deploying the budget, tell the
-    // user why so they can adjust inputs (relax min ROI, enable free slots,
-    // extend horizon, etc.) rather than wondering why it stopped.
-    exhaustedReason:
-      remainingBudget <= 0 ? "budget fully deployed"
-      : hitSlotCap ? `slot budget (${slotBudget} = ${slots} slots × ${windows} × 4h windows) exhausted before budget — extend the horizon, raise the slot count, or enable free-slot toggles for supplies/component combines.`
-      : `no more candidates can contribute > ${minContribPct}% of budget (${fmtGp(Math.round(minProfitAbsolute))}) in profit — lower the min-contribution or relax the other filters`,
+    // Local-search diagnostics — surfaced in the summary so the user knows
+    // how much of the result came from the greedy pass vs the improvement.
+    preGreedyProfit,
+    improvementPct,
+    searchIterations: searchResult.iterations,
+    exhaustedReason: reason,
   };
+}
+
+/* ---------------- Local search improvement pass ----------------
+ * Called after the greedy fill. Iteratively applies improving ADD or SWAP
+ * operators to the current allocation until no positive-delta move exists
+ * or the iteration ceiling is hit. Preserves ALL constraints (capital,
+ * slot budget, per-recipe cap, min-profit contribution).
+ */
+function improveByLocalSearch(allocations, candidates, opts) {
+  const { budget, slotBudget, perRecipeCap, minProfitAbsolute } = opts;
+  const MAX_ITERATIONS = 20;
+  // Materialise a new allocation entry for `cand` given a specific count.
+  // Mirrors what the greedy did when pushing to allocations[], so downstream
+  // consumers (card render, summary math) see the same shape.
+  const materialise = (cand, count) => {
+    const cost = count * cand.calc.totalCost;
+    const slotUseCount = count * cand.slotsPerUnit;
+    const profit = count * cand.calc.margin;
+    let buyOrderCount = 0;
+    for (const c of cand.recipe.components) buyOrderCount += c.qty * count;
+    for (const s of (cand.recipe.supplies || [])) buyOrderCount += s.qty * count;
+    return {
+      recipe: cand.recipe, calc: cand.calc, count, cost, profit,
+      confidence: cand.conf, freeSlot: cand.freeSlot, roi: cand.roi,
+      buyOrderCount, slotUseCount,
+      supplyStrategyUsed: cand.supplyStrategyUsed,
+    };
+  };
+  // How many units of `cand` fit given available budget/slots after some
+  // hypothetical change (adding, or removing an existing entry).
+  const feasibleCount = (cand, availBudget, availSlots) => {
+    const budgetLim = Math.floor(availBudget / cand.calc.totalCost);
+    const perRecipeLim = Math.floor(perRecipeCap / cand.calc.totalCost);
+    const slotLim = cand.freeSlot ? Infinity : Math.floor(availSlots / cand.slotsPerUnit);
+    return Math.min(cand.maxUnits, budgetLim, perRecipeLim, slotLim);
+  };
+
+  let allocs = allocations.slice();
+  let iters = 0;
+  for (; iters < MAX_ITERATIONS; iters++) {
+    // Snapshot occupancy for this iteration
+    const totalCost   = allocs.reduce((s, a) => s + a.cost, 0);
+    const totalSlots  = allocs.reduce((s, a) => s + (a.freeSlot ? 0 : a.slotUseCount), 0);
+    const availBudget = budget    - totalCost;
+    const availSlots  = slotBudget - totalSlots;
+    const allocKeys = new Set(allocs.map(a => a.recipe.key));
+    // Cache the shape of candidates not currently in the allocation set.
+    // Filtered once per iteration; the set is small.
+    const others = candidates.filter(c => !allocKeys.has(c.recipe.key));
+
+    let bestDelta = 0;
+    let bestApply = null;
+
+    // Operator 1: ADD an unallocated candidate into remaining capacity.
+    for (const cand of others) {
+      const count = feasibleCount(cand, availBudget, availSlots);
+      if (count <= 0) continue;
+      const profit = count * cand.calc.margin;
+      if (profit < minProfitAbsolute) continue;
+      if (profit > bestDelta) {
+        bestDelta = profit;
+        bestApply = () => allocs.push(materialise(cand, count));
+      }
+    }
+
+    // Operator 2: SWAP — remove one allocated recipe, add an unallocated
+    // candidate into (existing remaining capacity + freed capacity).
+    for (let i = 0; i < allocs.length; i++) {
+      const a = allocs[i];
+      const freedBudget = availBudget + a.cost;
+      const freedSlots  = availSlots  + (a.freeSlot ? 0 : a.slotUseCount);
+      for (const cand of others) {
+        const count = feasibleCount(cand, freedBudget, freedSlots);
+        if (count <= 0) continue;
+        const newProfit = count * cand.calc.margin;
+        if (newProfit < minProfitAbsolute) continue;
+        const delta = newProfit - a.profit;
+        if (delta > bestDelta) {
+          bestDelta = delta;
+          bestApply = () => {
+            allocs.splice(i, 1);
+            allocs.push(materialise(cand, count));
+          };
+        }
+      }
+    }
+
+    if (!bestApply) break;   // Local optimum reached
+    bestApply();
+  }
+  return { allocations: allocs, iterations: iters };
 }
 
 // Banner listing every recipe the user has permanently hidden via the card
@@ -2928,6 +3047,14 @@ function renderAllocate() {
   row("Budget remaining", fmtGp(alloc.remainingBudget));
   row("Expected profit", fmtGp(Math.round(alloc.totalProfit)));
   row("Expected ROI", ((alloc.totalProfit / alloc.totalCost) * 100).toFixed(2) + "%");
+  // Local-search delta — surfaces when the post-greedy improvement pass
+  // actually found a better allocation. If zero, hide entirely (the greedy
+  // was already optimal for this input).
+  if (alloc.improvementPct && alloc.improvementPct > 0.1) {
+    const iters = alloc.searchIterations || 0;
+    row("Local-search gain",
+      `+${alloc.improvementPct.toFixed(1)}% profit  ·  ${iters} iteration${iters === 1 ? "" : "s"}`);
+  }
   row("Stopped because", alloc.exhaustedReason);
   grid.appendChild(summary);
 
