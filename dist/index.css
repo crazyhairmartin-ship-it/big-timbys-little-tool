@@ -1729,6 +1729,38 @@ footer {
   color: #60a5fa;
 }
 
+/* Realistic-fill probability chip — how likely the recipe actually
+   completes at the projected profit. Green (≥80%), amber (≥60%), red
+   below. Sits alongside the other card chips. */
+.fill-prob-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  cursor: help;
+}
+.fill-prob-high {
+  background: rgba(74, 222, 128, 0.14);
+  border-color: rgba(74, 222, 128, 0.5);
+  color: #4ade80;
+}
+.fill-prob-mid {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+}
+.fill-prob-low {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #f87171;
+}
+
 /* Per-item "hit buy limit" toggle — lives on each buy row. Neutral by
    default so it doesn't shout; marked state uses the amber/red band to
    read as "excluded" without being alarming. */

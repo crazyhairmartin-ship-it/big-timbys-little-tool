@@ -804,6 +804,19 @@ const state = {
   // remove specific items from the fast-fill treatment. Stored as strings
   // (JSON.parse rehydrates numeric ids as strings; treat both consistently).
   excludedFreeSlotItems: new Set(JSON.parse(localStorage.getItem("osrs-combo-excluded-freeslot-items") || "[]").map(String)),
+  // Allocator tuning settings that don't fit in the per-Calculate opts.
+  // marketShare = fraction of side-volume the user expects to capture
+  // (default 30% — conservative). Used by computeFillProbability.
+  allocationSettings: {
+    marketShare: (function() {
+      const v = parseFloat(localStorage.getItem("osrs-combo-allocate-market-share"));
+      return isFinite(v) && v > 0 && v <= 1 ? v : 0.30;
+    })(),
+  },
+  // Recommendation log — appended to on every Calculate. Used by Phase 3
+  // retrospective analysis (compare past predictions to current reality).
+  // Retention: 30 days rolling. See loadAllocationLog / saveAllocationLog.
+  allocationLog: loadAllocationLog(),
   // Snapshot of previous margins so we can show a trend arrow on cards.
   // Keyed by recipe.key; cleared on full refresh after capture.
   lastMargin: {},
@@ -1140,6 +1153,118 @@ function fmtHitLimitRemaining(id) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+/* ---------------- Allocation recommendation log (Phase 3) ----------------
+ * On every Calculate, we snapshot the recommendation so we can later
+ * ask "did the recipes we recommended actually hold up?" Compares the
+ * predicted margin at time-of-recommendation to the current-market
+ * margin now. Recipes whose margins consistently held → boost trust.
+ * Ones whose margins evaporated shortly after being recommended →
+ * penalise.
+ *
+ * Storage: localStorage, JSON-serialised. Retention = 30 days.
+ * Format:
+ *   [
+ *     { ts: <epoch-ms>, budget, horizon, allocations: [
+ *         { key, name, count, cost, profit, margin, unitCost, sellPrice, ... }
+ *       ]},
+ *     ...
+ *   ]
+ * Not yet consumed by the sort (that's a later step) — for now the
+ * logging alone establishes the dataset. Console-accessible via
+ * analyzeAllocationLog() for on-demand introspection.
+ */
+const ALLOC_LOG_KEY = "osrs-combo-allocation-log";
+const ALLOC_LOG_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+function loadAllocationLog() {
+  try {
+    const raw = localStorage.getItem(ALLOC_LOG_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Purge entries older than retention window on read
+    const cutoff = Date.now() - ALLOC_LOG_RETENTION_MS;
+    return parsed.filter(e => typeof e.ts === "number" && e.ts >= cutoff);
+  } catch { return []; }
+}
+function saveAllocationLog() {
+  try {
+    localStorage.setItem(ALLOC_LOG_KEY, JSON.stringify(state.allocationLog));
+  } catch (e) {
+    // Quota — evict older half of entries and retry once
+    console.warn("Alloc log quota hit, halving:", e);
+    state.allocationLog = state.allocationLog.slice(Math.floor(state.allocationLog.length / 2));
+    try { localStorage.setItem(ALLOC_LOG_KEY, JSON.stringify(state.allocationLog)); } catch (_) {}
+  }
+}
+function logAllocation(alloc, opts) {
+  if (!alloc || !alloc.allocations || !alloc.allocations.length) return;
+  const snap = {
+    ts: Date.now(),
+    budget: opts.budget,
+    horizon: opts.horizon,
+    slots: alloc.slots,
+    totalProfit: alloc.totalProfit,
+    totalCost: alloc.totalCost,
+    // Trim to just the fields we'd want for retrospective comparison.
+    allocations: alloc.allocations.map(a => ({
+      key: a.recipe.key,
+      name: a.recipe.name,
+      count: a.count,
+      cost: a.cost,
+      profit: a.profit,
+      margin: a.calc.margin,
+      unitCost: a.calc.totalCost,
+      sellPrice: a.calc.sellPrice,
+      fillProbability: a.fill?.probability,
+      supplyStrategyUsed: a.supplyStrategyUsed,
+    })),
+  };
+  state.allocationLog.push(snap);
+  // Cap the log at ~200 entries (30 days at ~7 runs/day = 210) even if
+  // retention window is longer. Keeps localStorage size bounded.
+  while (state.allocationLog.length > 200) state.allocationLog.shift();
+  saveAllocationLog();
+}
+// Retrospective analysis — walks the log and, for each past
+// recommendation, compares the expected margin then to the current
+// market margin now. Returns per-recipe reliability stats. Console-
+// accessible for MVP; UI surfacing comes later once we have a couple
+// weeks of data.
+function analyzeAllocationLog() {
+  const log = state.allocationLog;
+  if (!log.length) return { message: "No recommendations logged yet." };
+  const byRecipe = new Map();
+  for (const snap of log) {
+    for (const a of snap.allocations) {
+      const rec = RECIPES.find(r => r.key === a.key);
+      if (!rec) continue;
+      const nowCalc = calcMargin(rec);
+      if (!nowCalc.allPresent || nowCalc.margin == null) continue;
+      const then = a.margin;
+      const now = nowCalc.margin;
+      const drift = then > 0 ? (now - then) / then : 0;
+      const entry = byRecipe.get(a.key) || {
+        name: a.name, runs: 0, held: 0, avgDrift: 0, avgAgeH: 0,
+      };
+      entry.runs += 1;
+      // "Held" if current margin is at least 80% of what we projected
+      if (now >= then * 0.8) entry.held += 1;
+      entry.avgDrift = (entry.avgDrift * (entry.runs - 1) + drift) / entry.runs;
+      entry.avgAgeH = (entry.avgAgeH * (entry.runs - 1) + (Date.now() - snap.ts) / 3600_000) / entry.runs;
+      byRecipe.set(a.key, entry);
+    }
+  }
+  const rows = Array.from(byRecipe.entries())
+    .map(([key, v]) => ({
+      key, name: v.name, runs: v.runs,
+      holdRate: v.held / v.runs,
+      avgDriftPct: (v.avgDrift * 100).toFixed(1) + "%",
+      avgAgeH: v.avgAgeH.toFixed(1),
+    }))
+    .sort((a, b) => b.runs - a.runs);
+  return { totalSnapshots: log.length, uniqueRecipes: rows.length, rows };
+}
+
 /* ---------------- Excluded-recipes curation ---------------- */
 const EXCLUDED_RECIPES_KEY = "osrs-combo-excluded-recipes";
 function saveExcludedRecipes() {
@@ -1460,6 +1585,133 @@ function sideVolumeAtHorizon(id, side, horizonH) {
   else if (horizonH <= 6)  primary = p1  ?? p24 ?? p5;
   else                     primary = p24 ?? p1 ?? p5;
   return primary != null ? poissonLower95(primary) : null;
+}
+
+/* ---------------- Realistic-fill probability (Phase 1) ----------------
+ * "Will this craft actually complete and realise the projected profit?"
+ * A number in [0,1] combining several signals we already have:
+ *
+ *   1. Volume-share safety — assume WE only capture a fraction of the
+ *      market's side-volume. Others are competing for the same fills.
+ *      state.allocationSettings.marketShare (default 0.30) scales the
+ *      volume-derived cap. If required count > adjusted cap, prob drops.
+ *
+ *   2. Spread stability — narrow (.high - .low) / mid → easy fills at
+ *      the offered price. Wide spread means offers might drift or
+ *      require price movement to fill. Piecewise: <5% = 1.0, >15% = 0.5.
+ *
+ *   3. Signal coherence — if 5m×288, 1h×24, and 24h projections agree
+ *     (max/min ratio ≤ 2×), market is stable and volume forecast is
+ *     trustworthy. Big divergence → recent burst is a data point, not
+ *     a sustained rate. Piecewise: ≤1.5× = 1.0, ≥5× = 0.5.
+ *
+ *   4. Bottleneck-leg gating — a recipe is only as fillable as its
+ *      slowest leg. fillProbability = min across all legs, not average.
+ *
+ * Returns { probability, bottleneckId, bottleneckReason, byLeg }.
+ * bottleneckReason: "volume" | "spread" | "coherence" — for the card
+ * tooltip so the user can see WHY the score is low.
+ */
+const FILL_SPREAD_NARROW = 0.05;   // < 5% → full credit
+const FILL_SPREAD_WIDE   = 0.15;   // > 15% → floor
+const FILL_COHERENCE_TIGHT = 1.5;  // 5m/1h/24h agree within → full credit
+const FILL_COHERENCE_LOOSE = 5.0;  // > 5× ratio → floor
+const FILL_MIN_FLOOR     = 0.4;    // never drop below this — signal-only inputs shouldn't zero a pick
+const FILL_MARKET_SHARE_DEFAULT = 0.30;
+
+function scoreSpread(id, side) {
+  const p = state.prices[id];
+  if (!p || p.high == null || p.low == null || p.high <= 0) return 1;
+  const mid = (p.high + p.low) / 2;
+  const spread = (p.high - p.low) / (mid || 1);
+  if (spread <= FILL_SPREAD_NARROW) return 1;
+  if (spread >= FILL_SPREAD_WIDE) return FILL_MIN_FLOOR;
+  // Linear interpolate between the two thresholds
+  const t = (spread - FILL_SPREAD_NARROW) / (FILL_SPREAD_WIDE - FILL_SPREAD_NARROW);
+  return 1 - t * (1 - FILL_MIN_FLOOR);
+}
+function scoreCoherence(id, side) {
+  const s = sideVolumeSlices(id, side);
+  const scaled = [
+    s.v5m  != null ? s.v5m  * 288 : null,
+    s.v1h  != null ? s.v1h  * 24  : null,
+    s.v24h != null ? s.v24h        : null,
+  ].filter(v => v != null && v > 0);
+  if (scaled.length < 2) return 1;   // not enough signals to compare
+  const ratio = Math.max(...scaled) / Math.min(...scaled);
+  if (ratio <= FILL_COHERENCE_TIGHT) return 1;
+  if (ratio >= FILL_COHERENCE_LOOSE) return FILL_MIN_FLOOR;
+  const t = (ratio - FILL_COHERENCE_TIGHT) / (FILL_COHERENCE_LOOSE - FILL_COHERENCE_TIGHT);
+  return 1 - t * (1 - FILL_MIN_FLOOR);
+}
+function scoreVolumeShare(availableCap, requiredCount, marketShare) {
+  // What we can actually expect to capture given competition. availableCap
+  // is the horizon-scaled side volume from sideVolumeAtHorizon. If we
+  // assume we get `marketShare` of it, `capturableCap = availableCap ×
+  // marketShare`. If required ≤ capturable → 1.0. If required exceeds it
+  // → drop off proportionally (never to zero, hence the floor).
+  if (availableCap == null || availableCap <= 0) return FILL_MIN_FLOOR;
+  const capturable = availableCap * marketShare;
+  if (requiredCount <= capturable) return 1;
+  const ratio = capturable / requiredCount;
+  return Math.max(FILL_MIN_FLOOR, ratio);
+}
+// Historical stability score per leg — 1.0 for perfectly stable items,
+// dampened toward 0.7 for wildly variable ones. Reads Phase 2.B metrics
+// out of window.overnightData.predMap; returns 1 when the item hasn't
+// been analysed (no penalty for missing data).
+function scoreHistoricalStability(id) {
+  const p = window.overnightData?.predMap?.[id];
+  if (!p) return 1;
+  // marginCoeffVar of 0 → perfectly stable, 1 → std dev == mean, high var.
+  // Map coeffVar in [0..1] to score in [1..0.7]; anything above 1 floors.
+  if (p.marginCoeffVar == null) return 1;
+  const cv = Math.max(0, Math.min(1, p.marginCoeffVar));
+  return 1 - cv * 0.3;
+}
+function computeFillProbability(recipe, calc, requiredCount, horizonH) {
+  const marketShare = state.allocationSettings?.marketShare ?? FILL_MARKET_SHARE_DEFAULT;
+  const buySide  = state.supplyStrategy === "slow-buy" ? "low"  : "high";
+  const sellSide = state.productStrategy === "insta-sell" ? "low" : "high";
+  const byLeg = [];
+  let bottleneck = { prob: 1, id: null, reason: null };
+  const consider = (id, side, requiredForLeg) => {
+    const availableCap = sideVolumeAtHorizon(id, side, horizonH);
+    const spreadScore = scoreSpread(id, side);
+    const coherenceScore = scoreCoherence(id, side);
+    const volumeScore = scoreVolumeShare(availableCap, requiredForLeg, marketShare);
+    // Phase 2.B historical stability — multiplies the live score by an
+    // item's day-to-day margin variance. Only fires when overnight has
+    // analysed this item; otherwise 1.0 (no penalty).
+    const stabilityScore = scoreHistoricalStability(id);
+    const legProb = spreadScore * coherenceScore * volumeScore * stabilityScore;
+    const worst = Math.min(spreadScore, coherenceScore, volumeScore, stabilityScore);
+    let reason = null;
+    if (worst < 0.95) {
+      if (worst === volumeScore)          reason = "volume";
+      else if (worst === spreadScore)     reason = "spread";
+      else if (worst === coherenceScore)  reason = "coherence";
+      else                                reason = "history";
+    }
+    byLeg.push({ id, side, legProb, spreadScore, coherenceScore, volumeScore, stabilityScore });
+    if (legProb < bottleneck.prob) {
+      bottleneck = { prob: legProb, id, reason };
+    }
+  };
+  // Product leg (sell side)
+  const productQty = recipe.resultQty || 1;
+  consider(recipe.id, sellSide, requiredCount * productQty);
+  // Component legs (buy side)
+  for (const c of recipe.components || []) {
+    consider(c.id, buySide, requiredCount * c.qty);
+  }
+  return {
+    probability: bottleneck.prob,
+    bottleneckId: bottleneck.id,
+    bottleneckReason: bottleneck.reason,
+    marketShareUsed: marketShare,
+    byLeg,
+  };
 }
 
 // horizonH (in hours) tells the volume path which slice to trust as the
@@ -2830,17 +3082,22 @@ function allocateRecipes(opts) {
     const slotsPerUnit = Math.max(1,
       (r.components?.length || 0) + (r.supplies?.length || 0) - compFree - suppFree);
     const expectedProfit = calc.margin * maxUnits;
-    candidates.push({ recipe: r, calc, maxUnits, expectedProfit, conf, roi, freeSlot, slotsPerUnit, supplyStrategyUsed });
+    // Phase 1 realistic-fill score — weights the sort so recipes that
+    // actually complete beat recipes that just look good on paper.
+    // Computed at MAX capacity (worst-case count) so the score reflects
+    // "if I tried to take the full recommended amount, would it fill?"
+    // Score gets stored on the candidate for card display later.
+    const fill = computeFillProbability(r, calc, maxUnits, horizonH);
+    candidates.push({ recipe: r, calc, maxUnits, expectedProfit, conf, roi, freeSlot, slotsPerUnit, supplyStrategyUsed, fill });
   }
-  // Sort by profit-per-slot-use × conf². With slots as the binding constraint,
-  // greedy "most profit per scarce buy-slot" produces the highest total profit
-  // deployment. Sorting by absolute expected profit (the old key) would let
-  // one fat 5-component recipe eat the entire slot budget; profit-density
-  // keeps the mix balanced. Free-slot recipes still sort by density but don't
-  // decrement the budget when picked.
+  // Sort by profit-per-slot × conf² × fillProbability. Same greedy shape
+  // as before but each candidate's weight is dampened by how likely it
+  // is to actually fill — a 3M-profit recipe with 30% fill probability
+  // sorts equal to a 900k recipe with 100%, matching "expected realized
+  // profit" better than raw density.
   candidates.sort((a, b) => {
-    const aw = (a.expectedProfit / a.slotsPerUnit) * ((a.conf ?? 0.5) ** 2);
-    const bw = (b.expectedProfit / b.slotsPerUnit) * ((b.conf ?? 0.5) ** 2);
+    const aw = (a.expectedProfit / a.slotsPerUnit) * ((a.conf ?? 0.5) ** 2) * (a.fill?.probability ?? 1);
+    const bw = (b.expectedProfit / b.slotsPerUnit) * ((b.conf ?? 0.5) ** 2) * (b.fill?.probability ?? 1);
     return bw - aw;
   });
 
@@ -2897,6 +3154,12 @@ function allocateRecipes(opts) {
       buyOrderCount,
       slotUseCount,
       supplyStrategyUsed: cand.supplyStrategyUsed,
+      // Fill probability from Phase 1 — surfaced on the card as a chip.
+      // Note: computed at MAX capacity in the candidate; the actual count
+      // greedy chose might be smaller (budget/slot/cap limited) which
+      // gives a slightly PESSIMISTIC probability. That's OK — better to
+      // under-promise than over.
+      fill: cand.fill,
     });
     remainingBudget -= cost;
     if (!cand.freeSlot) slotsUsedTotal += slotUseCount;
@@ -2980,6 +3243,7 @@ function improveByLocalSearch(allocations, candidates, opts) {
       confidence: cand.conf, freeSlot: cand.freeSlot, roi: cand.roi,
       buyOrderCount, slotUseCount,
       supplyStrategyUsed: cand.supplyStrategyUsed,
+      fill: cand.fill,   // carry fill probability through swap/grow moves
     };
   };
   // How many units of `cand` fit given available budget/slots after some
@@ -3495,6 +3759,27 @@ function renderAllocationCard(a) {
   }
   if (a.confidence != null) {
     catRow.appendChild(el("span", { class: "skill-chip", text: Math.round(a.confidence * 100) + "% reliable" }));
+  }
+  // Realistic-fill probability chip — Phase 1 signal about how likely
+  // this craft actually completes at the projected profit given volume
+  // competition, spread, and market volatility. Color-coded: green for
+  // high probability (≥ 0.8), amber mid (≥ 0.6), red low.
+  if (a.fill && a.fill.probability != null) {
+    const pct = Math.round(a.fill.probability * 100);
+    const tier = a.fill.probability >= 0.8 ? "high"
+               : a.fill.probability >= 0.6 ? "mid" : "low";
+    const bottleneckName = a.fill.bottleneckId != null
+      ? (state.mapping?.[a.fill.bottleneckId]?.name || `#${a.fill.bottleneckId}`)
+      : null;
+    const reasonText = a.fill.bottleneckReason
+      ? ` · ${a.fill.bottleneckReason} on ${bottleneckName}` : "";
+    catRow.appendChild(el("span", {
+      class: `fill-prob-chip fill-prob-${tier}`,
+      text: `${pct}% likely to fill`,
+      attrs: { title: `Realistic-fill score: ${pct}%${reasonText}. `
+        + `Combines volume-share (assuming you capture ${Math.round((a.fill.marketShareUsed ?? 0.30) * 100)}% of side liquidity), `
+        + `spread stability, and 5m/1h/24h signal coherence. Bottleneck = the leg dragging the score down.` },
+    }));
   }
   if (a.freeSlot) {
     catRow.appendChild(el("span", { class: "skill-chip", text: "free slot",
@@ -5626,11 +5911,17 @@ async function init() {
       const onlyZeroTime = document.getElementById("allocate-only-zero-time").checked;
       const freeSkillingSupplies = document.getElementById("allocate-free-supplies").checked;
       const freeComponentCombines = document.getElementById("allocate-free-components").checked;
-      state.allocation = allocateRecipes({
+      const opts = {
         budget, horizon, slots, minContribPct, maxPerRecipePct,
         requireConf, skipSkilling, hideStale, onlyZeroTime,
         freeSkillingSupplies, freeComponentCombines,
-      });
+      };
+      state.allocation = allocateRecipes(opts);
+      // Log the recommendation snapshot for Phase 3 retrospective analysis.
+      // Silent to the user — the log is queryable via console
+      // (`analyzeAllocationLog()`) and will drive scoring once we have a
+      // few weeks of data.
+      logAllocation(state.allocation, opts);
       // Persist inputs so they survive reload.
       localStorage.setItem("osrs-combo-allocate-budget", document.getElementById("allocate-budget").value);
       localStorage.setItem("osrs-combo-allocate-horizon", horizon);
@@ -5661,6 +5952,24 @@ async function init() {
     restore("allocate-only-zero-time", "osrs-combo-allocate-only-zero-time", true);
     restore("allocate-free-supplies", "osrs-combo-allocate-free-supplies", true);
     restore("allocate-free-components", "osrs-combo-allocate-free-components", true);
+    // Market-share slider — restore + wire live updates. Persists via
+    // state.allocationSettings.marketShare so computeFillProbability
+    // reads the current value without needing the DOM.
+    const marketShareEl = document.getElementById("allocate-market-share");
+    const marketShareValueEl = document.getElementById("allocate-market-share-value");
+    if (marketShareEl) {
+      // Restore from persisted state
+      const savedPct = Math.round((state.allocationSettings.marketShare ?? 0.30) * 100);
+      marketShareEl.value = String(savedPct);
+      if (marketShareValueEl) marketShareValueEl.textContent = `${savedPct}%`;
+      marketShareEl.addEventListener("input", () => {
+        const pct = parseInt(marketShareEl.value, 10);
+        if (!isFinite(pct)) return;
+        state.allocationSettings.marketShare = pct / 100;
+        if (marketShareValueEl) marketShareValueEl.textContent = `${pct}%`;
+        localStorage.setItem("osrs-combo-allocate-market-share", String(pct / 100));
+      });
+    }
   }
 
   /* ---------------- Curator popover factory ----------------
