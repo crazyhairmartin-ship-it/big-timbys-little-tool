@@ -1617,7 +1617,67 @@ const FILL_SPREAD_WIDE   = 0.15;   // > 15% → floor
 const FILL_COHERENCE_TIGHT = 1.5;  // 5m/1h/24h agree within → full credit
 const FILL_COHERENCE_LOOSE = 5.0;  // > 5× ratio → floor
 const FILL_MIN_FLOOR     = 0.4;    // never drop below this — signal-only inputs shouldn't zero a pick
-const FILL_MARKET_SHARE_DEFAULT = 0.30;
+// Lowered from 0.30 → 0.20 based on backtest data (see
+// scripts/backtest-fill-probability.mjs). Actual observed market
+// participation across ~3.4k hours of real wiki data suggested 30% was
+// systematically over-optimistic. 20% brings predicted vs actual fill
+// rates back into rough agreement in the medium bucket.
+const FILL_MARKET_SHARE_DEFAULT = 0.20;
+
+/* ---------------- Calibration transform (from historical backtest) ----------------
+ * The RAW fill probability (product of spread × coherence × volume ×
+ * stability across bottleneck leg) is directionally correct — higher raw
+ * → higher actual fill rate (Spearman ρ up to 0.29 at h=4). But its
+ * absolute scale is off, and off DIFFERENTLY per horizon:
+ *
+ *   Short (1-2h): scores overpredict. Real fills happen more slowly than
+ *                 the score suggests. Multiply-compress.
+ *   Medium (~4h): near-correct in the 0.4-0.5 middle. Asymptotes around
+ *                 0.6 for high raw scores (real max fill rate cap).
+ *   Long  (8h+): scores UNDERpredict. Given time, most orders fill
+ *                 regardless of the raw signal. Compress upward.
+ *
+ * Knots derived empirically from backtest-fill-probability.mjs on ~3400
+ * hours of real /timeseries data across 15 representative items. Rerun
+ * that script to refresh calibration; update knots below to match.
+ */
+function _interpolateKnots(x, knots) {
+  if (x <= knots[0][0]) return knots[0][1];
+  if (x >= knots[knots.length - 1][0]) return knots[knots.length - 1][1];
+  for (let i = 1; i < knots.length; i++) {
+    if (x <= knots[i][0]) {
+      const [x0, y0] = knots[i - 1];
+      const [x1, y1] = knots[i];
+      const t = (x - x0) / (x1 - x0);
+      return y0 + t * (y1 - y0);
+    }
+  }
+  return x;
+}
+function calibrateFillProbability(raw, horizonH) {
+  const r = Math.max(0, Math.min(1, raw));
+  if (horizonH <= 2) {
+    // Short horizon — compress ~0.35× to reflect slow real fills.
+    return r * 0.35;
+  }
+  if (horizonH <= 6) {
+    // Medium horizon — near-identity below 0.5, asymptote toward ~0.60.
+    return _interpolateKnots(r, [
+      [0.00, 0.35], [0.30, 0.43], [0.50, 0.50],
+      [0.65, 0.54], [0.85, 0.58], [1.00, 0.60],
+    ]);
+  }
+  if (horizonH <= 12) {
+    // Long horizon — most orders fill. Boost the whole range up.
+    return _interpolateKnots(r, [
+      [0.00, 0.60], [0.30, 0.75], [0.50, 0.85], [0.70, 0.90], [1.00, 0.95],
+    ]);
+  }
+  // Very long (24h) — everything fills eventually.
+  return _interpolateKnots(r, [
+    [0.00, 0.75], [0.30, 0.90], [0.50, 0.95], [0.70, 0.98], [1.00, 0.99],
+  ]);
+}
 
 function scoreSpread(id, side) {
   const p = state.prices[id];
@@ -1705,11 +1765,20 @@ function computeFillProbability(recipe, calc, requiredCount, horizonH) {
   for (const c of recipe.components || []) {
     consider(c.id, buySide, requiredCount * c.qty);
   }
+  const rawProbability = bottleneck.prob;
+  const calibratedProbability = calibrateFillProbability(rawProbability, horizonH);
   return {
-    probability: bottleneck.prob,
+    // `probability` used to be the raw compound score; keeping the name
+    // stable but it now means the CALIBRATED probability from historical
+    // backtest — what the UI displays. rawProbability is preserved for
+    // the sort key (ordinal ranking is untouched by calibration) and
+    // for anyone who wants to see the pre-calibration value.
+    probability: calibratedProbability,
+    rawProbability,
     bottleneckId: bottleneck.id,
     bottleneckReason: bottleneck.reason,
     marketShareUsed: marketShare,
+    horizonH,
     byLeg,
   };
 }
@@ -3096,8 +3165,12 @@ function allocateRecipes(opts) {
   // sorts equal to a 900k recipe with 100%, matching "expected realized
   // profit" better than raw density.
   candidates.sort((a, b) => {
-    const aw = (a.expectedProfit / a.slotsPerUnit) * ((a.conf ?? 0.5) ** 2) * (a.fill?.probability ?? 1);
-    const bw = (b.expectedProfit / b.slotsPerUnit) * ((b.conf ?? 0.5) ** 2) * (b.fill?.probability ?? 1);
+    // Sort key uses RAW fill probability so ordinal ranking preserves
+    // the greedy's original intent. Calibrated probability is for
+    // display only — squishing scores toward realistic percentages
+    // would compress the sort into a narrow band.
+    const aw = (a.expectedProfit / a.slotsPerUnit) * ((a.conf ?? 0.5) ** 2) * (a.fill?.rawProbability ?? a.fill?.probability ?? 1);
+    const bw = (b.expectedProfit / b.slotsPerUnit) * ((b.conf ?? 0.5) ** 2) * (b.fill?.rawProbability ?? b.fill?.probability ?? 1);
     return bw - aw;
   });
 
@@ -3760,25 +3833,33 @@ function renderAllocationCard(a) {
   if (a.confidence != null) {
     catRow.appendChild(el("span", { class: "skill-chip", text: Math.round(a.confidence * 100) + "% reliable" }));
   }
-  // Realistic-fill probability chip — Phase 1 signal about how likely
-  // this craft actually completes at the projected profit given volume
-  // competition, spread, and market volatility. Color-coded: green for
-  // high probability (≥ 0.8), amber mid (≥ 0.6), red low.
+  // Realistic-fill probability chip — CALIBRATED from historical
+  // backtest (see scripts/backtest-fill-probability.mjs). Displayed
+  // percentage IS the empirically-observed fill rate for scores at
+  // this level in the given horizon. Tier thresholds reflect that
+  // real fill rates cap lower than 100% even for "perfect" scores.
   if (a.fill && a.fill.probability != null) {
     const pct = Math.round(a.fill.probability * 100);
-    const tier = a.fill.probability >= 0.8 ? "high"
-               : a.fill.probability >= 0.6 ? "mid" : "low";
+    // Retuned tiers: green ≥ 70% means "usually fills"; amber ≥ 45%
+    // means "coin-flip-plus"; red is unlikely. Short-horizon runs
+    // naturally show more red (real fills are hard in 1h). Long-
+    // horizon runs show more green (given time, most orders fill).
+    const tier = a.fill.probability >= 0.70 ? "high"
+               : a.fill.probability >= 0.45 ? "mid" : "low";
     const bottleneckName = a.fill.bottleneckId != null
       ? (state.mapping?.[a.fill.bottleneckId]?.name || `#${a.fill.bottleneckId}`)
       : null;
     const reasonText = a.fill.bottleneckReason
       ? ` · ${a.fill.bottleneckReason} on ${bottleneckName}` : "";
+    const rawPct = a.fill.rawProbability != null ? Math.round(a.fill.rawProbability * 100) : null;
     catRow.appendChild(el("span", {
       class: `fill-prob-chip fill-prob-${tier}`,
       text: `${pct}% likely to fill`,
-      attrs: { title: `Realistic-fill score: ${pct}%${reasonText}. `
-        + `Combines volume-share (assuming you capture ${Math.round((a.fill.marketShareUsed ?? 0.30) * 100)}% of side liquidity), `
-        + `spread stability, and 5m/1h/24h signal coherence. Bottleneck = the leg dragging the score down.` },
+      attrs: { title: `Calibrated fill probability: ${pct}%${reasonText}. `
+        + `Combines volume-share (assuming you capture ${Math.round((a.fill.marketShareUsed ?? 0.20) * 100)}% of side liquidity), `
+        + `spread stability, 5m/1h/24h signal coherence, and historical margin volatility. `
+        + (rawPct != null ? `Raw score: ${rawPct}%. ` : "")
+        + `Calibration derived from ~3,400 hours of historical fill data — see scripts/backtest-fill-probability.mjs.` },
     }));
   }
   if (a.freeSlot) {
