@@ -1262,11 +1262,17 @@ async function fetchAvg24h() {
   // Rolling 24-hour average — the "recent history" baseline for the
   // Recommended sort. Normalised to {high, low} so the margin calculator
   // (supplyPrice / productSell) can price a recipe straight off it, exactly
-  // like the live /latest snapshot.
+  // like the live /latest snapshot. Also preserves side-split volumes so
+  // the allocator's precise-volume path (see sideVolume/maxFlipsAdjusted)
+  // can distinguish buy-side vs sell-side liquidity — the aggregate
+  // /volumes endpoint collapses both.
   const data = await api("/24h");
   const out = {};
   for (const [id, p] of Object.entries(data.data)) {
-    out[id] = { high: p.avgHighPrice ?? null, low: p.avgLowPrice ?? null };
+    out[id] = {
+      high: p.avgHighPrice ?? null, low: p.avgLowPrice ?? null,
+      highVol: p.highPriceVolume ?? 0, lowVol: p.lowPriceVolume ?? 0,
+    };
   }
   return out;
 }
@@ -1321,6 +1327,50 @@ function productSell(p) {
 function productSellTime(p) {
   if (!p) return null;
   return state.productStrategy === "insta-sell" ? (p.lowTime ?? null) : (p.highTime ?? null);
+}
+
+/* ---------------- Volume helpers (allocator precision layer) ----------------
+ * The default calc.maxFlips uses the aggregate /volumes endpoint (both
+ * sides collapsed, 24h total). The allocator's maxFlipsAdjusted path
+ * refines it three ways:
+ *   1. Side-split — when buying, only sell-side liquidity matters (the
+ *      volume that fills BUY orders is what sellers post). Same the other
+ *      direction. Reduces false confidence on items where one side is
+ *      thin (e.g. an item with 500 total volume where 495 was insta-buys
+ *      and only 5 was insta-sells → thin for slow-buy).
+ *   2. Recent-1h velocity blend — max(24h daily, 1h × 24). If the market
+ *      is heating up, the 1h velocity is a better forward estimate than
+ *      the 24h aggregate that includes stale data. If cooling down, we
+ *      still fall back to the 24h estimate (safest against over-shrink).
+ *   3. Wilson lower bound (Poisson approx) — a k=5 trade count doesn't
+ *      confidently support k=5 units of allocation. Shrinks small counts
+ *      hard, large counts barely.
+ */
+function poissonLower95(k) {
+  // Poisson 95% one-sided lower bound approximation. Exact form uses
+  // chi-squared quantiles; k - z*sqrt(k) is accurate to a few percent
+  // for k > ~10 and errs on the safe (smaller) side for k < 10 — exactly
+  // the direction we want when shrinking noisy volume estimates.
+  if (!isFinite(k) || k <= 0) return 0;
+  return Math.max(0, k - 1.96 * Math.sqrt(k));
+}
+// Effective daily volume for one item on one side of the spread.
+// side: "high" (insta-buy fills / list-and-wait sells) or "low"
+// (insta-sell fills / slow-buy fills). Returns a Wilson-adjusted
+// daily-scale count, or null if we have no data at all.
+function sideVolume(id, side) {
+  const p24 = state.avg24h?.[id];
+  const p1  = state.avg1h?.[id];
+  const v24 = p24 ? (side === "high" ? p24.highVol : p24.lowVol) : null;
+  const v1h = p1  ? (side === "high" ? p1.highPriceVolume : p1.lowPriceVolume) : null;
+  if (v24 == null && v1h == null) return null;
+  // 1h × 24 gives a "recent velocity extrapolated to daily" estimate.
+  // max() with 24h means "trust whichever is higher" — heating markets
+  // get the fresh signal, cooling markets keep the historic base.
+  const recent24h = v1h != null ? v1h * 24 : null;
+  const base24h = v24 ?? 0;
+  const blended = recent24h != null ? Math.max(base24h, recent24h) : base24h;
+  return poissonLower95(blended);
 }
 
 function calcMargin(recipe, predMap) {
@@ -1403,12 +1453,46 @@ function calcMargin(recipe, predMap) {
     maxFlips = (maxFlips == null) ? limitFlipsPerDay : Math.min(maxFlips, limitFlipsPerDay);
   }
 
+  /* ---- maxFlipsAdjusted: side-split + velocity + Wilson ---- */
+  // The allocator uses this instead of the aggregate maxFlips above. It's a
+  // Wilson-shrunk daily count that considers ONLY the side of the spread
+  // relevant to the user's strategy for that leg (buying vs selling).
+  // - Buying components: we consume the side offering the price we accept.
+  //   supplyStrategy=insta-buy → we pay `high` → we consume seller-side
+  //   liquidity, which shows up as highPriceVolume (fills that hit an
+  //   existing sell order at the high price).
+  //   supplyStrategy=slow-buy → we list at `low` → sellers hit our order
+  //   at the low price → consumes lowPriceVolume.
+  // - Selling output: opposite mapping via productStrategy.
+  // Falls back to the aggregate `maxFlips` above if we have no side-split
+  // data at all (some rarely-traded items).
+  const buySide  = state.supplyStrategy === "slow-buy" ? "low"  : "high";
+  const sellSide = state.productStrategy === "insta-sell" ? "low" : "high";
+  const outputSideVol = sideVolume(recipe.id, sellSide);
+  const compSideVols = {};
+  let maxFlipsAdjusted = outputSideVol != null ? Math.floor(outputSideVol / qty) : null;
+  let anySideVol = outputSideVol != null;
+  for (const c of recipe.components) {
+    const v = sideVolume(c.id, buySide);
+    compSideVols[c.id] = v;
+    if (v == null) continue;
+    anySideVol = true;
+    const cap = Math.floor(v / c.qty);
+    maxFlipsAdjusted = maxFlipsAdjusted == null ? cap : Math.min(maxFlipsAdjusted, cap);
+  }
+  if (!anySideVol) maxFlipsAdjusted = maxFlips;   // fall back to aggregate
+  // Same GE-limit binding as before — buy limits don't care about side.
+  if (limitFlipsPerDay != null && maxFlipsAdjusted != null) {
+    maxFlipsAdjusted = Math.min(maxFlipsAdjusted, limitFlipsPerDay);
+  }
+
   return {
     sellPrice: sellPricePerUnit, sellTime, oldestTime,
     revenue, geTax: totalTax, geTaxPerUnit: taxPerUnit,
     componentCost, suppliesCost, repairCost: rc, totalCost,
     margin, roi, allPresent,
-    maxFlips, resultVol, compVols, resultQty: qty,
+    maxFlips, maxFlipsAdjusted,
+    resultVol, compVols, compSideVols, resultQty: qty,
     compLimits, limitFlipsPer4h, limitFlipsPerDay,
   };
 }
@@ -2548,14 +2632,16 @@ function allocateRecipes(opts) {
       calc = calcInsta; supplyStrategyUsed = "insta-buy";
     }
     // maxUnits = the realistic flip count bounded by:
-    //   1. Output 24h trade volume  }
-    //   2. Every component's 24h vol } — via calc.maxFlips (daily)
-    //   3. Daily GE buy limits       }
-    // Scaled by (horizonH / 24). Linear-in-time is the best simple model
-    // given we only have daily rollups; it's slightly conservative for buy-
-    // limit-dominated recipes at short horizons (the buy-limit window may
-    // still allow more), which is the direction we want to err in.
-    const dailyCap = calc.maxFlips ?? (calc.limitFlipsPer4h != null ? calc.limitFlipsPer4h * 6 : null);
+    //   1. Output side-split trade volume (product's sell-side)  }
+    //   2. Every component's side-split volume (buy-side)          } via
+    //   3. Recent 1h velocity blend + Wilson lower-bound shrink    } calc.maxFlipsAdjusted
+    //   4. Daily GE buy limits                                     }
+    // Scaled by (horizonH / 24). Prefer the adjusted count; fall back to
+    // the aggregate maxFlips for items with no side-split data at all;
+    // then to raw buy-limit if no volume data at all.
+    const dailyCap = calc.maxFlipsAdjusted
+      ?? calc.maxFlips
+      ?? (calc.limitFlipsPer4h != null ? calc.limitFlipsPer4h * 6 : null);
     if (dailyCap == null || dailyCap <= 0) continue;
     const maxUnits = Math.floor(dailyCap * horizonH / 24);
     if (maxUnits <= 0) continue;
@@ -2901,6 +2987,23 @@ function renderAllocationCard(a) {
   stats.appendChild(row("Expected profit", fmtGp(Math.round(a.profit)), "v-good"));
   stats.appendChild(row("Margin / craft", fmtGp(Math.round(a.calc.margin))));
   stats.appendChild(row("ROI", ((a.calc.margin / a.calc.totalCost) * 100).toFixed(2) + "%"));
+  // Volume cap breakdown — shows how the maxUnits ceiling was derived so
+  // the user can sanity-check. "Aggregate" = old naive path (both sides
+  // of the spread, no shrinkage). "Adjusted" = the new number that
+  // actually gates allocation: side-split + 1h velocity blend + Wilson
+  // lower-bound. Tooltip explains the math.
+  if (a.calc.maxFlipsAdjusted != null || a.calc.maxFlips != null) {
+    const agg = a.calc.maxFlips;
+    const adj = a.calc.maxFlipsAdjusted;
+    const disp = adj != null ? adj.toLocaleString() : "—";
+    const aggText = agg != null ? `${agg.toLocaleString()} agg` : "no vol";
+    const cell = row("Volume cap (adj/day)", `${disp}  ·  ${aggText}`);
+    cell.title = "Adjusted: side-split volume (buying components caps by sell-side liquidity; "
+      + "selling product caps by buy-side), blended with recent 1h velocity (max of the two), "
+      + "then shrunk via a Poisson 95% lower bound to guard against small-sample noise. "
+      + "Aggregate: the naive 24h total (both sides, no shrink) — shown for comparison.";
+    stats.appendChild(cell);
+  }
   card.appendChild(stats);
 
   // Card-level "hide from allocation" button. Adds recipe.key to
