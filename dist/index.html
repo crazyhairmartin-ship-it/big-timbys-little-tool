@@ -223,7 +223,7 @@
       <input type="text" id="allocate-budget" inputmode="numeric" placeholder="e.g. 200000000" />
     </div>
     <div class="filter-group allocate-sidebar-block">
-      <label for="allocate-horizon">Time horizon</label>
+      <label for="allocate-horizon">Time horizon <span class="hint-info" title="Sets both the trading window and the number of 4h buy-limit resets. Total buy orders allowed = slots × ceil(horizon ÷ 4h).">ⓘ</span></label>
       <select id="allocate-horizon">
         <option value="1h">1 hour</option>
         <option value="2h">2 hours</option>
@@ -232,22 +232,18 @@
         <option value="12h">12 hours</option>
         <option value="1d" selected>1 day (6 × 4h windows)</option>
       </select>
-      <div class="allocate-hint">Sets both the trading window and the number of 4h buy-limit resets. Total buy orders allowed = slots × ceil(horizon ÷ 4h).</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
-      <label>GE slots (concurrent)</label>
+      <label>GE slots (concurrent) <span class="hint-info" title="Concurrent flip slots. Each recipe's total slot cost = crafts × distinct component/supply buys. Free-slot toggles below let supplies and component combines skip the count.">ⓘ</span></label>
       <input type="number" id="allocate-slots" min="1" max="8" value="8" />
-      <div class="allocate-hint">Concurrent flip slots. Each recipe's total slot cost = crafts × distinct component/supply buys. Free-slot toggles below let supplies and component combines skip the count.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
-      <label>Min profit per recipe (% of budget)</label>
+      <label>Min profit per recipe (% of budget) <span class="hint-info" title="Skip recipes that can't meaningfully move the needle. 0.05% of 300M budget = 150k min profit per recipe.">ⓘ</span></label>
       <input type="number" id="allocate-min-contrib" min="0" max="100" step="0.01" value="0.05" />
-      <div class="allocate-hint">Skip recipes that can't meaningfully move the needle. 0.05% of 300M budget = 150k min profit per recipe.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
-      <label>Max % per recipe (diversification)</label>
+      <label>Max % per recipe (diversification) <span class="hint-info" title="100 = no cap. Set lower to prevent one recipe eating the budget.">ⓘ</span></label>
       <input type="number" id="allocate-max-pct" min="1" max="100" value="100" />
-      <div class="allocate-hint">100 = no cap. Set lower to prevent one recipe eating the budget.</div>
     </div>
     <div class="filter-group allocate-sidebar-block">
       <label class="toggle"><input type="checkbox" id="allocate-hide-stale" checked /> Hide stale items</label>
@@ -455,12 +451,12 @@
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=41"></script>
-<script src="skilling-recipes.js?v=41"></script>
-<script src="market-indexes.js?v=41"></script>
-<script src="app.js?v=41"></script>
-<script src="overnight.js?v=41"></script>
-<script src="flips-core.js?v=41"></script>
-<script src="flips.js?v=41"></script>
+<script src="overnight-core.js?v=42"></script>
+<script src="skilling-recipes.js?v=42"></script>
+<script src="market-indexes.js?v=42"></script>
+<script src="app.js?v=42"></script>
+<script src="overnight.js?v=42"></script>
+<script src="flips-core.js?v=42"></script>
+<script src="flips.js?v=42"></script>
 </body>
 </html>
