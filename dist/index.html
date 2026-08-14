@@ -266,6 +266,11 @@
     <div class="filter-group allocate-sidebar-block">
       <button id="allocate-btn" class="btn-primary" style="width:100%">Calculate allocation</button>
     </div>
+    <!-- Sidebar host for the "excluded / hidden" banners. Populated by
+         renderHitLimitBanner + renderHiddenRecipesBanner in the Allocate
+         render pipeline. Empty container so we can insert/replace without
+         disturbing sibling filter groups above. -->
+    <div id="allocate-sidebar-banners"></div>
     <div class="filter-group history-sidebar-block">
       <label for="history-range">Time range</label>
       <select id="history-range">
@@ -450,12 +455,12 @@
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=39"></script>
-<script src="skilling-recipes.js?v=39"></script>
-<script src="market-indexes.js?v=39"></script>
-<script src="app.js?v=39"></script>
-<script src="overnight.js?v=39"></script>
-<script src="flips-core.js?v=39"></script>
-<script src="flips.js?v=39"></script>
+<script src="overnight-core.js?v=40"></script>
+<script src="skilling-recipes.js?v=40"></script>
+<script src="market-indexes.js?v=40"></script>
+<script src="app.js?v=40"></script>
+<script src="overnight.js?v=40"></script>
+<script src="flips-core.js?v=40"></script>
+<script src="flips.js?v=40"></script>
 </body>
 </html>

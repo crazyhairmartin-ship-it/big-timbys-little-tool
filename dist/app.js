@@ -3222,12 +3222,42 @@ function predictiveStatus(alloc) {
   return `${withPrediction} of ${totalLegs} legs had predictions but none beat the confidence + delta thresholds — market is close to predicted targets`;
 }
 
+// Sidebar banner for items the user has marked as "hit buy limit". Same
+// structure as the hidden-recipes banner but time-scoped: each mark
+// auto-expires in 4h (fmtHitLimitRemaining tracks the countdown). Chip
+// click removes the mark and re-runs the allocator so the item can
+// re-enter the candidate pool immediately.
+function renderHitLimitBanner(host) {
+  const marked = Object.keys(state.hitLimits);
+  if (!marked.length) return;
+  const banner = el("div", { class: "hit-limit-banner" });
+  banner.appendChild(el("div", { class: "hit-limit-banner-title",
+    text: `${marked.length} item${marked.length === 1 ? "" : "s"} excluded (buy limit hit)` }));
+  const chips = el("div", { class: "hit-limit-chip-row" });
+  for (const id of marked) {
+    const name = state.mapping?.[id]?.name || `#${id}`;
+    const chip = el("button", { class: "hit-limit-chip",
+      attrs: { title: `Click to unmark. Auto-expires in ${fmtHitLimitRemaining(id)}.` } });
+    chip.appendChild(el("span", { class: "hit-limit-chip-name", text: name }));
+    chip.appendChild(el("span", { class: "hit-limit-chip-timer", text: fmtHitLimitRemaining(id) }));
+    chip.appendChild(el("span", { class: "hit-limit-chip-x", text: "×" }));
+    chip.onclick = (e) => {
+      e.stopPropagation();
+      unmarkHitLimit(id);
+      document.getElementById("allocate-btn").click();
+    };
+    chips.appendChild(chip);
+  }
+  banner.appendChild(chips);
+  host.appendChild(banner);
+}
+
 // Banner listing every recipe the user has permanently hidden via the card
 // "🚫 hide this craft" button (state.excludedRecipes). Each chip has a ×
 // to unhide directly, so the user doesn't have to hunt through the curator
 // popovers to bring a recipe back. Renders unconditionally so it stays
 // visible even when the allocation grid is empty.
-function renderHiddenRecipesBanner(grid) {
+function renderHiddenRecipesBanner(host) {
   if (!state.excludedRecipes.size) return;
   // Resolve keys → recipe objects. Filter out any stale keys that no
   // longer match a live recipe (e.g. after a rename in the data).
@@ -3254,7 +3284,7 @@ function renderHiddenRecipesBanner(grid) {
     chips.appendChild(chip);
   }
   banner.appendChild(chips);
-  grid.appendChild(banner);
+  host.appendChild(banner);
 }
 
 function renderAllocate() {
@@ -3264,12 +3294,17 @@ function renderAllocate() {
   grid.hidden = false;
   grid.replaceChildren();
 
-  // Render the "hidden recipes" banner FIRST — before any early-return
-  // paths — so the user can always unhide crafts even when the current
-  // allocation is empty or the calculator hasn't been run yet. Otherwise
-  // hiding your last viable craft would leave you with an empty grid and
-  // no way to bring it back without opening a curator popover.
-  renderHiddenRecipesBanner(grid);
+  // Sidebar banners: hit-limit + hidden-crafts. These used to live at the
+  // top of the grid, but the user's Allocate flow keeps referencing them
+  // to unhide things — putting them in the sidebar keeps the main content
+  // focused on allocation cards and makes the banners always-visible
+  // regardless of scroll position.
+  const bannerHost = document.getElementById("allocate-sidebar-banners");
+  if (bannerHost) {
+    bannerHost.replaceChildren();
+    renderHitLimitBanner(bannerHost);
+    renderHiddenRecipesBanner(bannerHost);
+  }
 
   const alloc = state.allocation;
   if (!alloc) {
@@ -3287,10 +3322,26 @@ function renderAllocate() {
     return;
   }
 
-  // Header summary
-  const summary = el("div", { class: "allocate-summary" });
+  // Header summary — collapsed by default so the allocation grid is the
+  // first thing visible. Uses <details> for native disclosure semantics
+  // (keyboard-accessible, no custom JS). Persist the open/closed state
+  // to localStorage so power users who prefer it expanded aren't fighting
+  // the default every session.
+  const summaryOpen = localStorage.getItem("osrs-combo-allocate-summary-open") === "1";
+  const summary = el("details", { class: "allocate-summary" });
+  if (summaryOpen) summary.setAttribute("open", "");
+  const rowsWrap = el("div", { class: "allocate-summary-grid" });
+  // Compact one-line preview in the <summary> tag so the collapsed state
+  // still shows the critical numbers (profit + deploy%). Populated below
+  // after we compute totals.
+  const preview = el("summary", { class: "allocate-summary-preview" });
+  summary.appendChild(preview);
+  summary.appendChild(rowsWrap);
+  summary.addEventListener("toggle", () => {
+    localStorage.setItem("osrs-combo-allocate-summary-open", summary.open ? "1" : "0");
+  });
   const row = (label, val) => {
-    summary.appendChild(el("div", { class: "allocate-summary-cell" },
+    rowsWrap.appendChild(el("div", { class: "allocate-summary-cell" },
       el("div", { class: "allocate-summary-label", text: label }),
       el("div", { class: "allocate-summary-value", text: val })));
   };
@@ -3339,37 +3390,22 @@ function renderAllocate() {
   }
   if (predStatus) row("Predictive analysis", predStatus);
   row("Stopped because", alloc.exhaustedReason);
+  // Populate the compact preview shown when the panel is collapsed:
+  // profit + deploy% + recipe count + a hint that it's expandable.
+  preview.replaceChildren();
+  preview.appendChild(el("span", { class: "allocate-summary-preview-main",
+    text: `${fmtGp(Math.round(alloc.totalProfit))} expected` }));
+  preview.appendChild(el("span", { class: "allocate-summary-preview-sep", text: " · " }));
+  preview.appendChild(el("span", { class: "allocate-summary-preview-sub",
+    text: `${alloc.deployedPct.toFixed(1)}% deployed · ${alloc.allocations.length} recipe${alloc.allocations.length === 1 ? "" : "s"}` }));
+  preview.appendChild(el("span", { class: "allocate-summary-preview-chevron",
+    text: summaryOpen ? "▾" : "▸" }));
+  // Keep chevron in sync with open state on toggle
+  summary.addEventListener("toggle", () => {
+    const chev = preview.querySelector(".allocate-summary-preview-chevron");
+    if (chev) chev.textContent = summary.open ? "▾" : "▸";
+  });
   grid.appendChild(summary);
-
-  // Hit-limit banner — items the user has marked as "buy limit hit". These
-  // are EXCLUDED from the allocation above, so the user needs a visible
-  // reminder + a per-item unmark button so they can free items back up as
-  // buy-limit windows expire (or if they marked one by mistake). Times shown
-  // are the remaining wait before the mark auto-expires.
-  const marked = Object.keys(state.hitLimits);
-  if (marked.length) {
-    const banner = el("div", { class: "hit-limit-banner" });
-    banner.appendChild(el("div", { class: "hit-limit-banner-title",
-      text: `${marked.length} item${marked.length === 1 ? "" : "s"} excluded (buy limit hit)` }));
-    const chips = el("div", { class: "hit-limit-chip-row" });
-    for (const id of marked) {
-      const name = state.mapping?.[id]?.name || `#${id}`;
-      const chip = el("button", { class: "hit-limit-chip",
-        attrs: { title: `Click to unmark. Auto-expires in ${fmtHitLimitRemaining(id)}.` } });
-      chip.appendChild(el("span", { class: "hit-limit-chip-name", text: name }));
-      chip.appendChild(el("span", { class: "hit-limit-chip-timer", text: fmtHitLimitRemaining(id) }));
-      chip.appendChild(el("span", { class: "hit-limit-chip-x", text: "×" }));
-      chip.onclick = (e) => {
-        e.stopPropagation();
-        unmarkHitLimit(id);
-        // Re-run allocator so the just-freed item can enter the mix again.
-        document.getElementById("allocate-btn").click();
-      };
-      chips.appendChild(chip);
-    }
-    banner.appendChild(chips);
-    grid.appendChild(banner);
-  }
 
   const frag = document.createDocumentFragment();
   for (const a of alloc.allocations) frag.appendChild(renderAllocationCard(a));
