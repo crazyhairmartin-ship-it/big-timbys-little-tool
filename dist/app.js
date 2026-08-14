@@ -3182,6 +3182,46 @@ function computePredictedUpside(alloc) {
   return { total, hitCount };
 }
 
+// Human-readable status string for the predictive-integration health on
+// the current allocation. Returns null when the feature is silently
+// working (predMap loaded AND at least one leg has a hint firing — user
+// can see the hints directly). Returns a diagnostic string otherwise so
+// "why aren't I seeing any hints" is answerable at a glance.
+function predictiveStatus(alloc) {
+  const predMap = window.overnightData?.predMap;
+  if (!predMap || !Object.keys(predMap).length) {
+    return "not loaded — visit the Predictive tab to generate target prices";
+  }
+  if (!alloc || !alloc.allocations || !alloc.allocations.length) return null;
+  // Count total buy/supply/product legs vs how many have any predMap entry
+  // vs how many actually passed the confidence + delta guardrails.
+  let totalLegs = 0, withPrediction = 0, withHint = 0;
+  for (const a of alloc.allocations) {
+    const strat = a.supplyStrategyUsed || state.supplyStrategy;
+    const check = (id, isSell) => {
+      totalLegs++;
+      if (predMap[id]) withPrediction++;
+      const cur = isSell
+        ? productSell(state.prices[id])
+        : supplyPriceAt(state.prices[id], strat);
+      const offer = isSell ? predictedSellOffer(id, cur) : predictedBuyOffer(id, cur);
+      if (offer) withHint++;
+    };
+    for (const c of a.recipe.components) check(c.id, false);
+    for (const s of (a.recipe.supplies || [])) check(s.id, false);
+    check(a.recipe.id, true);
+  }
+  if (withHint > 0) {
+    // At least some hints are visible — no need for a status row (the
+    // upside line already conveys the useful info).
+    return null;
+  }
+  if (withPrediction === 0) {
+    return `no target prices for these ${totalLegs} legs — run overnight in the Predictive tab`;
+  }
+  return `${withPrediction} of ${totalLegs} legs had predictions but none beat the confidence + delta thresholds — market is close to predicted targets`;
+}
+
 // Banner listing every recipe the user has permanently hidden via the card
 // "🚫 hide this craft" button (state.excludedRecipes). Each chip has a ×
 // to unhide directly, so the user doesn't have to hunt through the curator
@@ -3287,16 +3327,17 @@ function renderAllocate() {
     row("Local-search gain",
       `+${alloc.improvementPct.toFixed(1)}% profit  ·  ${iters} iteration${iters === 1 ? "" : "s"}`);
   }
-  // Predicted-hour upside — if the user places offers at the predicted best
-  // hours (from the overnight analysis) instead of at current market, what's
-  // the total additional profit? Sums per-leg savings across every buy AND
-  // per-unit sell gain across every product. Only counts legs where the
-  // predicted-offer helpers actually returned a hint (their guardrails
-  // handle confidence and delta thresholds — see PRED_MIN_*).
+  // Predicted upside — total additional profit if every offer is placed at
+  // the predicted target price. Sums per-leg savings across buys + per-unit
+  // sell gain across products. Also shows a status row so the user can
+  // tell WHY they may not be seeing any hints (e.g. predMap not loaded,
+  // or nothing hit the confidence/delta thresholds).
   const upside = computePredictedUpside(alloc);
+  const predStatus = predictiveStatus(alloc);
   if (upside && upside.total > 0) {
-    row("Predicted-hour upside", `+${fmtGp(Math.round(upside.total))}  ·  ${upside.hitCount} leg${upside.hitCount === 1 ? "" : "s"} with prediction`);
+    row("Predicted upside", `+${fmtGp(Math.round(upside.total))}  ·  ${upside.hitCount} price target${upside.hitCount === 1 ? "" : "s"}`);
   }
+  if (predStatus) row("Predictive analysis", predStatus);
   row("Stopped because", alloc.exhaustedReason);
   grid.appendChild(summary);
 
@@ -3531,22 +3572,24 @@ function renderAllocationCard(a) {
   const strat = a.supplyStrategyUsed || state.supplyStrategy;
   // Small factory for the predicted-offer hint under a buy row. Returns
   // null if no useful prediction is available so the caller can skip.
+  // Shows target price only — no time-of-day advice per user preference.
+  // Place the buy at this price and let it sit; it'll fill when the
+  // market dips to that level.
   const makeBuyHint = (id, unitPrice) => {
     const offer = predictedBuyOffer(id, unitPrice);
     if (!offer) return null;
-    const hint = el("div", { class: "allocate-buy-hint",
-      text: `offer ${fmtGp(offer.price)} @ ${formatUtcHour(offer.hour)} · save ${offer.pct.toFixed(1)}% · ${Math.round(offer.confidence * 100)}% reliable`,
-      attrs: { title: `The predictive model expects this item's insta-sell to dip to ${fmtGp(offer.price)} around ${formatUtcHour(offer.hour)} — you could place a buy at that price and wait. Confidence is the Wilson-shrunk fraction of past days the pattern held.` },
+    return el("div", { class: "allocate-buy-hint",
+      text: `offer ${fmtGp(offer.price)} · save ${offer.pct.toFixed(1)}% · ${Math.round(offer.confidence * 100)}% reliable`,
+      attrs: { title: `Historical price patterns show this item typically dips to ${fmtGp(offer.price)}. Place a buy at that price and it'll fill on the next dip. Confidence is the Wilson-shrunk fraction of past days the pattern held.` },
     });
-    return hint;
   };
   // Same factory for the sell row.
   const makeSellHint = (id, currentPrice) => {
     const offer = predictedSellOffer(id, currentPrice);
     if (!offer) return null;
     return el("div", { class: "allocate-buy-hint allocate-sell-hint",
-      text: `list at ${fmtGp(offer.price)} @ ${formatUtcHour(offer.hour)} · +${offer.pct.toFixed(1)}% · ${Math.round(offer.confidence * 100)}% reliable`,
-      attrs: { title: `The predictive model expects this item's insta-buy to peak at ${fmtGp(offer.price)} around ${formatUtcHour(offer.hour)} — you could list at that price and wait. Confidence is the Wilson-shrunk fraction of past days the pattern held.` },
+      text: `list at ${fmtGp(offer.price)} · +${offer.pct.toFixed(1)}% · ${Math.round(offer.confidence * 100)}% reliable`,
+      attrs: { title: `Historical price patterns show this item typically peaks at ${fmtGp(offer.price)}. List a sell at that price and it'll fill on the next peak. Confidence is the Wilson-shrunk fraction of past days the pattern held.` },
     });
   };
   for (const c of a.recipe.components) {
