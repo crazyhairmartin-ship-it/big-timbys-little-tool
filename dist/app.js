@@ -3796,8 +3796,30 @@ function renderAllocate() {
   });
   grid.appendChild(summary);
 
+  // When "show recommended offer prices" is on, drop cards whose margin
+  // flips to a loss at the recommended-offer level. The allocator picked
+  // them based on market-price margin (still positive); the toggle asks
+  // a stricter question that they can't meet. Show a note with the count
+  // so the user knows why the list shrunk instead of assuming the
+  // allocator changed its mind.
+  const useRecFilter = !!state.allocationSettings?.showRecommendedPrices;
   const frag = document.createDocumentFragment();
-  for (const a of alloc.allocations) frag.appendChild(renderAllocationCard(a));
+  let hiddenCount = 0;
+  const kept = [];
+  for (const a of alloc.allocations) {
+    if (useRecFilter) {
+      const rec = recomputeAllocationAtRecommended(a);
+      if (rec && rec.marginPerCraft <= 0) { hiddenCount++; continue; }
+    }
+    kept.push(a);
+  }
+  if (hiddenCount > 0) {
+    frag.appendChild(el("div", { class: "allocate-hidden-note",
+      text: `${hiddenCount} craft${hiddenCount === 1 ? "" : "s"} hidden — unprofitable at recommended offer prices`,
+      attrs: { title: "These crafts were picked based on market-price profitability, but their margin flips negative when re-priced at the more realistic recommended offer levels. Toggle off 'Show recommended offer prices' to see them." },
+    }));
+  }
+  for (const a of kept) frag.appendChild(renderAllocationCard(a));
   grid.appendChild(frag);
 }
 
