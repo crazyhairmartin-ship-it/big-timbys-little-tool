@@ -1541,16 +1541,51 @@ footer {
   display: none;
 }
 
+/* Allocate summary now uses <details> — collapsed by default to keep the
+   allocation cards front-and-centre. The <summary> tag shows a compact
+   one-line preview; expanding reveals the full row grid.
+
+   Removes the default browser triangle marker; we render our own chevron
+   inside the preview so it can sit at the far right. */
 .allocate-summary {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
-  padding: 14px;
   margin-bottom: 12px;
   background: var(--bg-1);
   border: 1px solid var(--line);
   border-radius: 10px;
+}
+.allocate-summary summary { list-style: none; }
+.allocate-summary summary::-webkit-details-marker { display: none; }
+.allocate-summary-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+}
+.allocate-summary-preview:hover { background: rgba(255, 255, 255, 0.03); }
+.allocate-summary-preview-main {
+  font-weight: 600;
+  color: var(--green, #4ade80);
+  font-variant-numeric: tabular-nums;
+}
+.allocate-summary-preview-sep { color: var(--text-2); }
+.allocate-summary-preview-sub { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.allocate-summary-preview-chevron {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: 11px;
+}
+.allocate-summary[open] .allocate-summary-preview {
+  border-bottom: 1px solid var(--line);
+}
+.allocate-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 14px;
 }
 .allocate-summary-cell { display: flex; flex-direction: column; gap: 2px; }
 .allocate-summary-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -1796,6 +1831,28 @@ footer {
 }
 .hidden-recipes-chip-name { font-weight: 600; }
 .hidden-recipes-chip-x { color: rgba(203, 213, 225, 0.65); font-size: 13px; line-height: 1; margin-left: 2px; }
+
+/* Sidebar-hosted banners: hit-limit + hidden-recipes now live in the
+   sidebar (see #allocate-sidebar-banners host in index.html). Tighter
+   spacing than the old top-of-grid version and full width of the
+   sidebar block. */
+#allocate-sidebar-banners { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+#allocate-sidebar-banners:empty { display: none; }
+#allocate-sidebar-banners .hit-limit-banner,
+#allocate-sidebar-banners .hidden-recipes-banner {
+  margin-bottom: 0;
+  padding: 8px 10px 10px;
+}
+#allocate-sidebar-banners .hit-limit-banner-title,
+#allocate-sidebar-banners .hidden-recipes-banner-title {
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+#allocate-sidebar-banners .hit-limit-chip,
+#allocate-sidebar-banners .hidden-recipes-chip {
+  font-size: 10.5px;
+  padding: 2px 6px 2px 8px;
+}
 
 /* ---------------- Market mode ----------------
    Indexes are 10 hand-listed items — none of the realtime sidebar filters
