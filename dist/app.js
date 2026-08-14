@@ -3825,6 +3825,49 @@ function isInstaBuyOverrideSpurious(a) {
   return false;
 }
 
+// When the "show recommended prices" toggle is on, recompute the card's
+// per-craft cost / margin / total profit using computeRecommendedOffer
+// on every leg (product + components). Supplies + repair cost stay live.
+// Returns null if any leg lacks a usable mid (no high/low pair) or if
+// the toggle is off — caller falls back to a.calc / a.profit.
+function recomputeAllocationAtRecommended(a) {
+  if (!state.allocationSettings?.showRecommendedPrices) return null;
+  const recipe = a.recipe;
+  const qty = recipe.resultQty || 1;
+  const strat = a.supplyStrategyUsed || state.supplyStrategy;
+  const buySide = strat === "insta-buy" ? "high" : "low";
+  const sellSide = state.productStrategy === "insta-sell" ? "low" : "high";
+  const findLeg = (id, side) => (a.fill?.byLeg || []).find(l => l.id === id && l.side === side);
+  const sellLeg = findLeg(recipe.id, sellSide);
+  const sellPrice = computeRecommendedOffer(recipe.id, sellSide, sellLeg?.legProb ?? 0.5);
+  if (sellPrice == null) return null;
+  let componentCost = 0;
+  for (const c of recipe.components) {
+    const leg = findLeg(c.id, buySide);
+    const price = computeRecommendedOffer(c.id, buySide, leg?.legProb ?? 0.5);
+    if (price == null) return null;
+    componentCost += price * c.qty;
+  }
+  if (recipe.extraCost) componentCost += recipe.extraCost;
+  let suppliesCost = 0;
+  for (const s of recipe.supplies || []) {
+    const sp = supplyPrice(state.prices[s.id]);
+    if (!sp) return null;
+    suppliesCost += sp * s.qty;
+  }
+  const rc = repairCost(recipe.repairBase, state.smithing);
+  const totalCost = componentCost + suppliesCost + rc;
+  const revenue = sellPrice * qty;
+  const tax = geTax(sellPrice) * qty;
+  const marginPerCraft = revenue - tax - totalCost;
+  return {
+    totalCost,
+    totalCapital: totalCost * a.count,
+    marginPerCraft,
+    totalProfit: marginPerCraft * a.count,
+  };
+}
+
 function renderAllocationCard(a) {
   const card = el("article", { class: "card allocate-card profit" });
   card.onclick = () => openModal(a.recipe);
@@ -3924,11 +3967,31 @@ function renderAllocationCard(a) {
     r.appendChild(el("span", { class: "stat-value", text: val }));
     return r;
   };
-  stats.appendChild(row("Buy", `${a.count.toLocaleString()}× @ ${fmtGp(a.calc.totalCost)}`));
-  stats.appendChild(row("Capital", fmtGp(a.cost)));
-  stats.appendChild(row("Expected profit", fmtGp(Math.round(a.profit)), "v-good"));
-  stats.appendChild(row("Margin / craft", fmtGp(Math.round(a.calc.margin))));
-  stats.appendChild(row("ROI", ((a.calc.margin / a.calc.totalCost) * 100).toFixed(2) + "%"));
+  // When "show recommended prices" is on, swap the derived stats to a
+  // recompute over recommended-offer prices so the top of the card stays
+  // consistent with the per-row prices below. Falls back silently to the
+  // market-price calc if any leg lacks a mid.
+  const recCalc = recomputeAllocationAtRecommended(a);
+  const dispTotalCost = recCalc ? recCalc.totalCost   : a.calc.totalCost;
+  const dispCapital   = recCalc ? recCalc.totalCapital: a.cost;
+  const dispProfit    = recCalc ? recCalc.totalProfit : a.profit;
+  const dispMargin    = recCalc ? recCalc.marginPerCraft : a.calc.margin;
+  const baselineTip = recCalc
+    ? `At market: profit ${fmtGp(Math.round(a.profit))}, margin/craft ${fmtGp(Math.round(a.calc.margin))}, ROI ${((a.calc.margin / a.calc.totalCost) * 100).toFixed(2)}%. The values shown reflect the recommended offer prices from the fill-probability model.`
+    : null;
+  const buyRow = row("Buy", `${a.count.toLocaleString()}× @ ${fmtGp(dispTotalCost)}`);
+  const capRow = row("Capital", fmtGp(dispCapital));
+  const profitRow = row("Expected profit", fmtGp(Math.round(dispProfit)), "v-good");
+  const marginRow = row("Margin / craft", fmtGp(Math.round(dispMargin)));
+  const roiRow = row("ROI", ((dispMargin / dispTotalCost) * 100).toFixed(2) + "%");
+  if (baselineTip) {
+    [buyRow, capRow, profitRow, marginRow, roiRow].forEach(r => r.setAttribute("title", baselineTip));
+  }
+  stats.appendChild(buyRow);
+  stats.appendChild(capRow);
+  stats.appendChild(profitRow);
+  stats.appendChild(marginRow);
+  stats.appendChild(roiRow);
   // Volume cap breakdown — shows how the maxUnits ceiling was derived so
   // the user can sanity-check. `adj` is now HORIZON-scaled (calcMargin
   // was called with the allocator's horizonH), so we label with the
