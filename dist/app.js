@@ -812,6 +812,10 @@ const state = {
       const v = parseFloat(localStorage.getItem("osrs-combo-allocate-market-share"));
       return isFinite(v) && v > 0 && v <= 1 ? v : 0.30;
     })(),
+    // When on, allocator card rows display a live-computed recommended offer
+    // (biased toward the aggressive edge of the spread proportionally to
+    // per-leg fill probability) instead of the raw last-transaction price.
+    showRecommendedPrices: localStorage.getItem("osrs-combo-allocate-show-recommended") === "1",
   },
   // Recommendation log — appended to on every Calculate. Used by Phase 3
   // retrospective analysis (compare past predictions to current reality).
@@ -1482,6 +1486,19 @@ function supplyPrice(p) {
 function supplyPriceAt(p, strategy) {
   if (!p) return null;
   return strategy === "slow-buy" ? (p.low ?? null) : (p.high ?? null);
+}
+// Live recommended offer for a specific leg. Blends the current bid/ask
+// spread with the leg's fill probability: at fp=1 we lean fully to the
+// aggressive side (low for buys, high for sells — the price the market
+// has been paying and will likely fill again); at fp=0 we sit at mid to
+// prioritise actually clearing. Returns null if either side is missing.
+function computeRecommendedOffer(id, side, legProb) {
+  const p = state.prices[id];
+  if (!p || p.high == null || p.low == null || p.high <= 0 || p.low <= 0) return null;
+  const mid = (p.high + p.low) / 2;
+  const fp = Math.max(0, Math.min(1, legProb ?? 0.5));
+  if (side === "low") return Math.round(mid - (mid - p.low) * fp);
+  return Math.round(mid + (p.high - mid) * fp);
 }
 // Compute calcMargin under an arbitrary supply strategy. Restores the global
 // state after — the mutation is scoped to this function call. Cheaper than
@@ -4029,20 +4046,40 @@ function renderAllocationCard(a) {
       attrs: { title: `Historical price patterns show this item typically peaks at ${fmtGp(offer.price)}. List a sell at that price and it'll fill on the next peak. Confidence is the Wilson-shrunk fraction of past days the pattern held.` },
     });
   };
+  // When the "show recommended offer prices" toggle is on, we swap the
+  // primary displayed price for computeRecommendedOffer's output (which
+  // blends live spread + per-leg fill probability). The market price is
+  // then shown underneath as a smaller "at market: X" reference in place
+  // of the historical hint (the recommended-offer calc already folds in
+  // live conditions, so both would be redundant).
+  const useRecPrices = !!state.allocationSettings?.showRecommendedPrices;
+  const buySide = strat === "insta-buy" ? "high" : "low";
+  const sellSide = state.productStrategy === "insta-sell" ? "low" : "high";
+  const findLeg = (id, side) => (a.fill?.byLeg || []).find(l => l.id === id && l.side === side);
   for (const c of a.recipe.components) {
     const name = state.mapping?.[c.id]?.name || `#${c.id}`;
     const unitCount = c.qty * a.count;
-    const unitPrice = supplyPriceAt(state.prices[c.id], strat);
-    const priceText = unitPrice != null ? ` @ ${fmtGp(unitPrice)}` : "";
-    // Wrap row + hint in a column entry so the hint sits below the row.
+    const marketPrice = supplyPriceAt(state.prices[c.id], strat);
+    const leg = useRecPrices ? findLeg(c.id, buySide) : null;
+    const recPrice = useRecPrices ? computeRecommendedOffer(c.id, buySide, leg?.legProb ?? 0.5) : null;
+    const displayPrice = (useRecPrices && recPrice != null) ? recPrice : marketPrice;
+    const priceText = displayPrice != null ? ` @ ${fmtGp(displayPrice)}` : "";
     const entry = el("div", { class: "allocate-buy-entry" });
     const row = el("div", { class: "allocate-buy-row" });
     row.appendChild(el("span", { class: "allocate-buy-name", text: name }));
-    row.appendChild(el("span", { class: "allocate-buy-qty", text: `${unitCount.toLocaleString()}×${priceText}` }));
+    const qtySpan = el("span", { class: "allocate-buy-qty", text: `${unitCount.toLocaleString()}×${priceText}` });
+    if (useRecPrices && recPrice != null && marketPrice != null) {
+      qtySpan.setAttribute("title", `Recommended offer: ${fmtGp(recPrice)}. At market: ${fmtGp(marketPrice)}. Leg fill probability: ${Math.round((leg?.legProb ?? 0) * 100)}%.`);
+    }
+    row.appendChild(qtySpan);
     row.appendChild(makeHitBtn(c.id));
     entry.appendChild(row);
-    const hint = makeBuyHint(c.id, unitPrice);
-    if (hint) entry.appendChild(hint);
+    if (useRecPrices && recPrice != null && marketPrice != null) {
+      entry.appendChild(el("div", { class: "allocate-buy-hint", text: `at market ${fmtGp(marketPrice)}` }));
+    } else {
+      const hint = makeBuyHint(c.id, marketPrice);
+      if (hint) entry.appendChild(hint);
+    }
     buys.appendChild(entry);
   }
   // Supplies (runes, gems etc.) — always priced live, shown here too so the
@@ -4065,15 +4102,26 @@ function renderAllocationCard(a) {
   // Product line — different label style so it doesn't blend with buys.
   const productName = state.mapping?.[a.recipe.id]?.name || a.recipe.name;
   const productQty = (a.recipe.resultQty || 1) * a.count;
-  const productPrice = productSell(state.prices[a.recipe.id]);
-  const productPriceText = productPrice != null ? ` @ ${fmtGp(productPrice)}` : "";
+  const marketSellPrice = productSell(state.prices[a.recipe.id]);
+  const sellLeg = useRecPrices ? findLeg(a.recipe.id, sellSide) : null;
+  const recSellPrice = useRecPrices ? computeRecommendedOffer(a.recipe.id, sellSide, sellLeg?.legProb ?? 0.5) : null;
+  const displaySellPrice = (useRecPrices && recSellPrice != null) ? recSellPrice : marketSellPrice;
+  const productPriceText = displaySellPrice != null ? ` @ ${fmtGp(displaySellPrice)}` : "";
   const sellEntry = el("div", { class: "allocate-buy-entry" });
   const sellRow = el("div", { class: "allocate-buy-row allocate-sell-row" });
   sellRow.appendChild(el("span", { class: "allocate-buy-name", text: "Sell " + productName }));
-  sellRow.appendChild(el("span", { class: "allocate-buy-qty", text: `${productQty.toLocaleString()}×${productPriceText}` }));
+  const sellQtySpan = el("span", { class: "allocate-buy-qty", text: `${productQty.toLocaleString()}×${productPriceText}` });
+  if (useRecPrices && recSellPrice != null && marketSellPrice != null) {
+    sellQtySpan.setAttribute("title", `Recommended list: ${fmtGp(recSellPrice)}. At market: ${fmtGp(marketSellPrice)}. Leg fill probability: ${Math.round((sellLeg?.legProb ?? 0) * 100)}%.`);
+  }
+  sellRow.appendChild(sellQtySpan);
   sellEntry.appendChild(sellRow);
-  const sellHint = makeSellHint(a.recipe.id, productPrice);
-  if (sellHint) sellEntry.appendChild(sellHint);
+  if (useRecPrices && recSellPrice != null && marketSellPrice != null) {
+    sellEntry.appendChild(el("div", { class: "allocate-buy-hint allocate-sell-hint", text: `at market ${fmtGp(marketSellPrice)}` }));
+  } else {
+    const sellHint = makeSellHint(a.recipe.id, marketSellPrice);
+    if (sellHint) sellEntry.appendChild(sellHint);
+  }
   buys.appendChild(sellEntry);
 
   card.appendChild(buys);
@@ -6049,6 +6097,22 @@ async function init() {
         state.allocationSettings.marketShare = pct / 100;
         if (marketShareValueEl) marketShareValueEl.textContent = `${pct}%`;
         localStorage.setItem("osrs-combo-allocate-market-share", String(pct / 100));
+      });
+    }
+    // Show-recommended-prices toggle — persists to state + localStorage.
+    // Retriggers the Calculate button when there's an existing render so
+    // the swap is visible immediately; on a fresh session with no cards
+    // rendered yet the toggle just persists silently and the next
+    // Calculate reads it.
+    const showRecEl = document.getElementById("allocate-show-recommended");
+    if (showRecEl) {
+      showRecEl.checked = !!state.allocationSettings.showRecommendedPrices;
+      showRecEl.addEventListener("change", () => {
+        state.allocationSettings.showRecommendedPrices = showRecEl.checked;
+        localStorage.setItem("osrs-combo-allocate-show-recommended", showRecEl.checked ? "1" : "0");
+        const btn = document.getElementById("allocate-btn");
+        const cardsExist = document.querySelector(".allocate-card");
+        if (btn && cardsExist) btn.click();
       });
     }
   }

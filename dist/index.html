@@ -250,6 +250,7 @@
       <input type="range" id="allocate-market-share" min="5" max="80" step="5" value="30" />
     </div>
     <div class="filter-group allocate-sidebar-block">
+      <label class="toggle" title="Show a live recommended offer price on each buy/sell row instead of the current market price. The offer is computed from the current bid/ask spread biased by the leg's fill probability — high-probability legs offer aggressively (near the extreme), low-probability legs sit closer to mid to actually clear. Market price is shown underneath as a reference."><input type="checkbox" id="allocate-show-recommended" /> Show recommended offer prices</label>
       <label class="toggle"><input type="checkbox" id="allocate-hide-stale" checked /> Hide stale items</label>
       <label class="toggle" title="Filters to recipes whose product has an overnight predictive score of ≥ 60%. Components without predictions are allowed through — only the item you're selling is gated."><input type="checkbox" id="allocate-require-conf" /> Require ≥ 60% product confidence</label>
       <label class="toggle"><input type="checkbox" id="allocate-skip-skilling" /> Skip skilling recipes</label>
@@ -455,12 +456,12 @@
   <span>Data: <a href="https://prices.runescape.wiki" target="_blank" rel="noopener">OSRS Wiki real-time prices</a> · Icons: oldschool.runescape.wiki · GE tax: 2% (max 5M, exempt &lt;100 gp)</span>
 </footer>
 
-<script src="overnight-core.js?v=44"></script>
-<script src="skilling-recipes.js?v=44"></script>
-<script src="market-indexes.js?v=44"></script>
-<script src="app.js?v=44"></script>
-<script src="overnight.js?v=44"></script>
-<script src="flips-core.js?v=44"></script>
-<script src="flips.js?v=44"></script>
+<script src="overnight-core.js?v=45"></script>
+<script src="skilling-recipes.js?v=45"></script>
+<script src="market-indexes.js?v=45"></script>
+<script src="app.js?v=45"></script>
+<script src="overnight.js?v=45"></script>
+<script src="flips-core.js?v=45"></script>
+<script src="flips.js?v=45"></script>
 </body>
 </html>
