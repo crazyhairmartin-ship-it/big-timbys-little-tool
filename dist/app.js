@@ -2922,6 +2922,30 @@ function renderAllocate() {
   grid.appendChild(frag);
 }
 
+// True when the allocator's insta-buy strategy pick on this allocation is
+// likely a data-freshness artifact rather than a real "insta-buy is cheaper"
+// signal. Fires when ANY component has a fresh .low that is HIGHER than the
+// .high we're using — i.e. the last insta-SELL was more recent than the
+// last insta-BUY and at a higher price, so the market has moved up past
+// what the stale .high implies. In that case we still use the cheaper .high
+// as the recommended buy price (the last insta-buy did fill there), but the
+// "insta-buy supplies" chip is misleading — it's not a strategy call, it's
+// stale-data optimism. See card render for suppression call site.
+function isInstaBuyOverrideSpurious(a) {
+  if (a.supplyStrategyUsed !== "insta-buy") return false;
+  for (const c of a.recipe.components || []) {
+    const p = state.prices[c.id];
+    if (!p) continue;
+    const hi = p.high, lo = p.low;
+    const hiT = p.highTime ?? 0, loT = p.lowTime ?? 0;
+    // Inverted market (lo > hi) AND the fresh side is the low → the .low
+    // is the fresh number saying "market is here now", and .high is a
+    // stale-cheap trade that happened to fill before the move up.
+    if (hi != null && lo != null && lo > hi && loT > hiT) return true;
+  }
+  return false;
+}
+
 function renderAllocationCard(a) {
   const card = el("article", { class: "card allocate-card profit" });
   card.onclick = () => openModal(a.recipe);
@@ -2955,7 +2979,17 @@ function renderAllocationCard(a) {
   // BOTH insta-buy and slow-buy, and picked whichever gave higher margin.
   // Only shown when the winning strategy differs from the user's global
   // preference (i.e. this recipe needs you to switch behaviour for it).
-  if (a.supplyStrategyUsed && a.supplyStrategyUsed !== state.supplyStrategy) {
+  //
+  // Suppression rule for insta-buy overrides: if the "insta-buy wins"
+  // decision was driven by a stale .high being lower than a fresh .low
+  // (bid-ask crossover where the fresh price says the market has moved
+  // up beyond the old insta-buy), the override is a data-freshness
+  // artifact, not a real market signal. We still USE the cheaper .high
+  // as the buy price (the last insta-buy did fill at that price), but
+  // we drop the chip so the user isn't told to switch strategies for
+  // what's really a price-timing quirk.
+  if (a.supplyStrategyUsed && a.supplyStrategyUsed !== state.supplyStrategy
+      && !isInstaBuyOverrideSpurious(a)) {
     const label = a.supplyStrategyUsed === "insta-buy" ? "insta-buy supplies" : "slow-buy supplies";
     const tip = a.supplyStrategyUsed === "insta-buy"
       ? "Slow-buy was less profitable (or unavailable) for this recipe — pay the current insta-buy price on supplies to unlock this margin."
