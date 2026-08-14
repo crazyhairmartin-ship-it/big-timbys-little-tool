@@ -2951,6 +2951,7 @@ function allocateRecipes(opts) {
     preGreedyProfit,
     improvementPct,
     searchIterations: searchResult.iterations,
+    searchMoves: searchResult.moves,
     exhaustedReason: reason,
   };
 }
@@ -2992,6 +2993,7 @@ function improveByLocalSearch(allocations, candidates, opts) {
 
   let allocs = allocations.slice();
   let iters = 0;
+  const moves = [];   // one entry per applied iteration; surfaces in the UI
   for (; iters < MAX_ITERATIONS; iters++) {
     // Snapshot occupancy for this iteration
     const totalCost   = allocs.reduce((s, a) => s + a.cost, 0);
@@ -3005,6 +3007,7 @@ function improveByLocalSearch(allocations, candidates, opts) {
 
     let bestDelta = 0;
     let bestApply = null;
+    let bestMove = null;   // {op, ...} — populated alongside bestApply for UI diagnostics
 
     // Operator 1: ADD or GROW — put more units of any candidate (allocated
     // or not) into remaining capacity. For already-allocated recipes, this
@@ -3027,6 +3030,9 @@ function improveByLocalSearch(allocations, candidates, opts) {
       if (!existing && totalProfit < minProfitAbsolute) continue;
       if (extraProfit > bestDelta) {
         bestDelta = extraProfit;
+        bestMove = existing
+          ? { op: "GROW", target: cand.recipe.name, from: current, to: current + additional, delta: extraProfit }
+          : { op: "ADD",  target: cand.recipe.name, added: additional, delta: extraProfit };
         bestApply = () => {
           if (existing) {
             const idx = allocs.indexOf(existing);
@@ -3068,6 +3074,11 @@ function improveByLocalSearch(allocations, candidates, opts) {
         const delta = count * cand.calc.margin - a.profit;
         if (delta > bestDelta) {
           bestDelta = delta;
+          bestMove = existingB
+            ? { op: "SWAP+GROW", removed: a.recipe.name, removedCount: a.count,
+                target: cand.recipe.name, from: bCurrent, to: bCurrent + count, delta }
+            : { op: "SWAP", removed: a.recipe.name, removedCount: a.count,
+                target: cand.recipe.name, added: count, delta };
           bestApply = () => {
             allocs.splice(i, 1);
             if (existingB) {
@@ -3120,6 +3131,10 @@ function improveByLocalSearch(allocations, candidates, opts) {
           if (newAProfit < minProfitAbsolute) continue;
           if (delta > bestDelta) {
             bestDelta = delta;
+            bestMove = { op: "SHIFT",
+              shrunk: a.recipe.name, shrunkFrom: a.count, shrunkTo: newACount,
+              target: cand.recipe.name, targetFrom: bCurrent, targetTo: bCurrent + bAdd,
+              delta };
             bestApply = () => {
               // Shrink or replace A
               allocs.splice(i, 1);
@@ -3141,8 +3156,9 @@ function improveByLocalSearch(allocations, candidates, opts) {
 
     if (!bestApply) break;   // Local optimum reached
     bestApply();
+    if (bestMove) moves.push(bestMove);
   }
-  return { allocations: allocs, iterations: iters };
+  return { allocations: allocs, iterations: iters, moves };
 }
 
 // Total additional profit if the user places every offer at the predicted
@@ -3375,8 +3391,27 @@ function renderAllocate() {
   // was already optimal for this input).
   if (alloc.improvementPct && alloc.improvementPct > 0.1) {
     const iters = alloc.searchIterations || 0;
-    row("Local-search gain",
-      `+${alloc.improvementPct.toFixed(1)}% profit  ·  ${iters} iteration${iters === 1 ? "" : "s"}`);
+    // Build a human-readable move log so the tooltip explains WHICH
+    // recipes the search moved and by how much. Each line = one move.
+    const movesTip = (alloc.searchMoves || []).map((m, i) => {
+      const gp = fmtGp(Math.round(m.delta));
+      const n = i + 1;
+      switch (m.op) {
+        case "ADD":       return `${n}. ADD  · ${m.target} × ${m.added}  (+${gp})`;
+        case "GROW":      return `${n}. GROW · ${m.target}  ${m.from} → ${m.to}  (+${gp})`;
+        case "SWAP":      return `${n}. SWAP · dropped ${m.removed} × ${m.removedCount}, added ${m.target} × ${m.added}  (+${gp})`;
+        case "SWAP+GROW": return `${n}. SWAP+GROW · dropped ${m.removed} × ${m.removedCount}, grew ${m.target}  ${m.from} → ${m.to}  (+${gp})`;
+        case "SHIFT":     return `${n}. SHIFT · shrank ${m.shrunk}  ${m.shrunkFrom} → ${m.shrunkTo}, grew ${m.target}  ${m.targetFrom} → ${m.targetTo}  (+${gp})`;
+        default:          return `${n}. ${m.op || "move"}  (+${gp})`;
+      }
+    }).join("\n") || "(no moves logged)";
+    // row() only takes plain text; use a manual cell so we can attach a title
+    const cell = el("div", { class: "allocate-summary-cell",
+      attrs: { title: `Moves applied by the local-search improvement pass:\n\n${movesTip}` } });
+    cell.appendChild(el("div", { class: "allocate-summary-label", text: "Local-search gain" }));
+    cell.appendChild(el("div", { class: "allocate-summary-value",
+      text: `+${alloc.improvementPct.toFixed(1)}% profit  ·  ${iters} iteration${iters === 1 ? "" : "s"}` }));
+    rowsWrap.appendChild(cell);
   }
   // Predicted upside — total additional profit if every offer is placed at
   // the predicted target price. Sums per-leg savings across buys + per-unit
