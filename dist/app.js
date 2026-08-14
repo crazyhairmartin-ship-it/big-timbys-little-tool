@@ -938,6 +938,57 @@ function isItemStale(itemId) {
   return (Date.now() / 1000 - t) * 1000 > STALE_MS;
 }
 
+/* ---------------- Predicted-offer helpers (allocator card hints) ----------------
+ * Reads window.overnightData.predMap (populated by the Predictive tab's
+ * overnight analysis). Each entry has:
+ *   overnight   = predicted low (best BUY offer price)
+ *   daytime     = predicted high (best SELL price)
+ *   buyHour     = UTC hour that historically hits the overnight low
+ *   sellHour    = UTC hour that historically hits the daytime high
+ *   confidence  = Wilson-shrunk reliability, 0..1
+ *
+ * predictedBuyOffer / predictedSellOffer return null when:
+ *   - No overnight analysis has run yet (predMap empty)
+ *   - Confidence below PRED_MIN_CONFIDENCE (don't show noise)
+ *   - Delta from current price < PRED_MIN_DELTA_PCT (not worth waiting)
+ *   - Wrong direction (predicted buy price > current, or predicted sell < current)
+ */
+const PRED_MIN_CONFIDENCE = 0.5;
+const PRED_MIN_DELTA_PCT  = 1;
+
+function _predFor(id) {
+  return window.overnightData?.predMap?.[id] || null;
+}
+function predictedBuyOffer(id, currentPrice) {
+  const p = _predFor(id);
+  if (!p || !isFinite(p.confidence) || p.confidence < PRED_MIN_CONFIDENCE) return null;
+  const price = p.overnight;
+  if (price == null || currentPrice == null || currentPrice <= 0) return null;
+  const savings = currentPrice - price;
+  if (savings <= 0) return null;      // predicted price isn't cheaper
+  const pct = (savings / currentPrice) * 100;
+  if (pct < PRED_MIN_DELTA_PCT) return null;
+  return { price, hour: p.buyHour, confidence: p.confidence, savingsPerUnit: savings, pct };
+}
+function predictedSellOffer(id, currentPrice) {
+  const p = _predFor(id);
+  if (!p || !isFinite(p.confidence) || p.confidence < PRED_MIN_CONFIDENCE) return null;
+  const price = p.daytime;
+  if (price == null || currentPrice == null || currentPrice <= 0) return null;
+  const gain = price - currentPrice;
+  if (gain <= 0) return null;         // predicted price isn't higher
+  const pct = (gain / currentPrice) * 100;
+  if (pct < PRED_MIN_DELTA_PCT) return null;
+  return { price, hour: p.sellHour, confidence: p.confidence, gainPerUnit: gain, pct };
+}
+// Format a UTC hour (0-23) as "3am UTC" / "11pm UTC". Null → "any hour".
+function formatUtcHour(h) {
+  if (h == null) return "any hour";
+  const suffix = h < 12 ? "am" : "pm";
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}${suffix} UTC`;
+}
+
 // Small inline stale chip — sits in the same row as the trend chip when an
 // item hasn't traded in 6h+. Shows the age directly so you don't have to hover.
 function staleChip(lastTs) {
@@ -3094,6 +3145,43 @@ function improveByLocalSearch(allocations, candidates, opts) {
   return { allocations: allocs, iterations: iters };
 }
 
+// Total additional profit if the user places every offer at the predicted
+// best-hour price instead of at current market. Sums per-leg savings across
+// components + supplies, plus per-unit sell gains on products. Only counts
+// legs where the predictive helpers returned a hint (their guardrails
+// already filter for confidence and meaningful delta). Returns
+// { total, hitCount } — hitCount is the number of legs that contributed,
+// useful for the summary label ("N legs with prediction").
+function computePredictedUpside(alloc) {
+  if (!alloc || !alloc.allocations || !alloc.allocations.length) return null;
+  let total = 0;
+  let hitCount = 0;
+  for (const a of alloc.allocations) {
+    const strat = a.supplyStrategyUsed || state.supplyStrategy;
+    // Buy-side savings: each component + supply, priced at whichever
+    // strategy the allocator used. Total savings = per-unit × qty × count.
+    for (const c of a.recipe.components) {
+      const cur = supplyPriceAt(state.prices[c.id], strat);
+      const off = predictedBuyOffer(c.id, cur);
+      if (off) { total += off.savingsPerUnit * c.qty * a.count; hitCount++; }
+    }
+    for (const s of (a.recipe.supplies || [])) {
+      const cur = supplyPriceAt(state.prices[s.id], strat);
+      const off = predictedBuyOffer(s.id, cur);
+      if (off) { total += off.savingsPerUnit * s.qty * a.count; hitCount++; }
+    }
+    // Sell-side gain: product priced under user's productStrategy.
+    const cur = productSell(state.prices[a.recipe.id]);
+    const off = predictedSellOffer(a.recipe.id, cur);
+    if (off) {
+      const productQty = (a.recipe.resultQty || 1) * a.count;
+      total += off.gainPerUnit * productQty;
+      hitCount++;
+    }
+  }
+  return { total, hitCount };
+}
+
 // Banner listing every recipe the user has permanently hidden via the card
 // "🚫 hide this craft" button (state.excludedRecipes). Each chip has a ×
 // to unhide directly, so the user doesn't have to hunt through the curator
@@ -3198,6 +3286,16 @@ function renderAllocate() {
     const iters = alloc.searchIterations || 0;
     row("Local-search gain",
       `+${alloc.improvementPct.toFixed(1)}% profit  ·  ${iters} iteration${iters === 1 ? "" : "s"}`);
+  }
+  // Predicted-hour upside — if the user places offers at the predicted best
+  // hours (from the overnight analysis) instead of at current market, what's
+  // the total additional profit? Sums per-leg savings across every buy AND
+  // per-unit sell gain across every product. Only counts legs where the
+  // predicted-offer helpers actually returned a hint (their guardrails
+  // handle confidence and delta thresholds — see PRED_MIN_*).
+  const upside = computePredictedUpside(alloc);
+  if (upside && upside.total > 0) {
+    row("Predicted-hour upside", `+${fmtGp(Math.round(upside.total))}  ·  ${upside.hitCount} leg${upside.hitCount === 1 ? "" : "s"} with prediction`);
   }
   row("Stopped because", alloc.exhaustedReason);
   grid.appendChild(summary);
@@ -3431,16 +3529,41 @@ function renderAllocationCard(a) {
   // recipe shows slow-buy prices in its breakdown and the numbers don't add
   // up to the summary cost.
   const strat = a.supplyStrategyUsed || state.supplyStrategy;
+  // Small factory for the predicted-offer hint under a buy row. Returns
+  // null if no useful prediction is available so the caller can skip.
+  const makeBuyHint = (id, unitPrice) => {
+    const offer = predictedBuyOffer(id, unitPrice);
+    if (!offer) return null;
+    const hint = el("div", { class: "allocate-buy-hint",
+      text: `offer ${fmtGp(offer.price)} @ ${formatUtcHour(offer.hour)} · save ${offer.pct.toFixed(1)}% · ${Math.round(offer.confidence * 100)}% reliable`,
+      attrs: { title: `The predictive model expects this item's insta-sell to dip to ${fmtGp(offer.price)} around ${formatUtcHour(offer.hour)} — you could place a buy at that price and wait. Confidence is the Wilson-shrunk fraction of past days the pattern held.` },
+    });
+    return hint;
+  };
+  // Same factory for the sell row.
+  const makeSellHint = (id, currentPrice) => {
+    const offer = predictedSellOffer(id, currentPrice);
+    if (!offer) return null;
+    return el("div", { class: "allocate-buy-hint allocate-sell-hint",
+      text: `list at ${fmtGp(offer.price)} @ ${formatUtcHour(offer.hour)} · +${offer.pct.toFixed(1)}% · ${Math.round(offer.confidence * 100)}% reliable`,
+      attrs: { title: `The predictive model expects this item's insta-buy to peak at ${fmtGp(offer.price)} around ${formatUtcHour(offer.hour)} — you could list at that price and wait. Confidence is the Wilson-shrunk fraction of past days the pattern held.` },
+    });
+  };
   for (const c of a.recipe.components) {
     const name = state.mapping?.[c.id]?.name || `#${c.id}`;
     const unitCount = c.qty * a.count;
     const unitPrice = supplyPriceAt(state.prices[c.id], strat);
     const priceText = unitPrice != null ? ` @ ${fmtGp(unitPrice)}` : "";
+    // Wrap row + hint in a column entry so the hint sits below the row.
+    const entry = el("div", { class: "allocate-buy-entry" });
     const row = el("div", { class: "allocate-buy-row" });
     row.appendChild(el("span", { class: "allocate-buy-name", text: name }));
     row.appendChild(el("span", { class: "allocate-buy-qty", text: `${unitCount.toLocaleString()}×${priceText}` }));
     row.appendChild(makeHitBtn(c.id));
-    buys.appendChild(row);
+    entry.appendChild(row);
+    const hint = makeBuyHint(c.id, unitPrice);
+    if (hint) entry.appendChild(hint);
+    buys.appendChild(entry);
   }
   // Supplies (runes, gems etc.) — always priced live, shown here too so the
   // user knows they need those on hand.
@@ -3449,21 +3572,29 @@ function renderAllocationCard(a) {
     const unitCount = s.qty * a.count;
     const unitPrice = supplyPriceAt(state.prices[s.id], strat);
     const priceText = unitPrice != null ? ` @ ${fmtGp(unitPrice)}` : "";
+    const entry = el("div", { class: "allocate-buy-entry" });
     const row = el("div", { class: "allocate-buy-row" });
     row.appendChild(el("span", { class: "allocate-buy-name", text: name + " (supply)" }));
     row.appendChild(el("span", { class: "allocate-buy-qty", text: `${unitCount.toLocaleString()}×${priceText}` }));
     row.appendChild(makeHitBtn(s.id));
-    buys.appendChild(row);
+    entry.appendChild(row);
+    const hint = makeBuyHint(s.id, unitPrice);
+    if (hint) entry.appendChild(hint);
+    buys.appendChild(entry);
   }
   // Product line — different label style so it doesn't blend with buys.
   const productName = state.mapping?.[a.recipe.id]?.name || a.recipe.name;
   const productQty = (a.recipe.resultQty || 1) * a.count;
   const productPrice = productSell(state.prices[a.recipe.id]);
   const productPriceText = productPrice != null ? ` @ ${fmtGp(productPrice)}` : "";
+  const sellEntry = el("div", { class: "allocate-buy-entry" });
   const sellRow = el("div", { class: "allocate-buy-row allocate-sell-row" });
   sellRow.appendChild(el("span", { class: "allocate-buy-name", text: "Sell " + productName }));
   sellRow.appendChild(el("span", { class: "allocate-buy-qty", text: `${productQty.toLocaleString()}×${productPriceText}` }));
-  buys.appendChild(sellRow);
+  sellEntry.appendChild(sellRow);
+  const sellHint = makeSellHint(a.recipe.id, productPrice);
+  if (sellHint) sellEntry.appendChild(sellHint);
+  buys.appendChild(sellEntry);
 
   card.appendChild(buys);
   return card;
