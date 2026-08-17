@@ -4,6 +4,8 @@ OSRS combination item margin tracker. Live GE prices, GE tax included, trade-vol
 
 **Live site:** <https://big-timbys-little-tool.vercel.app/> — no install, works in any modern browser. Mobile-friendly; installable as a PWA from the address bar.
 
+> **Picking up work in a new Claude session, from another machine, or after a break?** Read [HANDOFF.md](HANDOFF.md) first — it captures current state, active workstreams, and where to look for details. Plugin work has its own deep-dive at [plugin/HANDOFF.md](plugin/HANDOFF.md).
+
 ---
 
 ## Install (prebuilt binaries)
