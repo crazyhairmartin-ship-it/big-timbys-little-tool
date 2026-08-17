@@ -1770,7 +1770,7 @@ function computeFillProbability(recipe, calc, requiredCount, horizonH) {
       else if (worst === coherenceScore)  reason = "coherence";
       else                                reason = "history";
     }
-    byLeg.push({ id, side, legProb, spreadScore, coherenceScore, volumeScore, stabilityScore });
+    byLeg.push({ id, side, legProb, spreadScore, coherenceScore, volumeScore, stabilityScore, requiredForLeg, availableCap });
     if (legProb < bottleneck.prob) {
       bottleneck = { prob: legProb, id, reason };
     }
@@ -3847,6 +3847,71 @@ function isInstaBuyOverrideSpurious(a) {
   return false;
 }
 
+// Cross-recipe pass — walks the picked allocations, sums per-(id, side)
+// leg demand, and if two or more picks contest the same capturable pool
+// beyond what marketShare says one user can grab, clips each contending
+// recipe's volumeScore proportionally to its share of the total demand.
+// Attaches contestedByLeg / contestedProbability etc. onto a.fill for
+// downstream display + heuristics to pick up. Leaves the original fields
+// intact so the tooltip can still show the "if alone" baseline.
+//
+// Model: proportional split of the capturable pool. If total demand = D
+// and capturable = C < D, every contending leg's effective volumeScore
+// becomes C/D (uniform clip). Non-contested legs and recipes are left
+// unchanged.
+function applyContestedVolumeAdjustment(alloc) {
+  if (!alloc || !alloc.allocations || !alloc.allocations.length) return;
+  const marketShare = state.allocationSettings?.marketShare ?? FILL_MARKET_SHARE_DEFAULT;
+  const demandByKey = new Map();
+  for (const a of alloc.allocations) {
+    if (!a.fill || !a.fill.byLeg) continue;
+    for (const leg of a.fill.byLeg) {
+      if (leg.availableCap == null || leg.availableCap <= 0) continue;
+      if (leg.requiredForLeg == null) continue;
+      const key = `${leg.id}:${leg.side}`;
+      let entry = demandByKey.get(key);
+      if (!entry) {
+        entry = { total: 0, capturable: leg.availableCap * marketShare, picks: 0 };
+        demandByKey.set(key, entry);
+      }
+      entry.total += leg.requiredForLeg * a.count;
+      entry.picks++;
+    }
+  }
+  for (const a of alloc.allocations) {
+    if (!a.fill || !a.fill.byLeg) continue;
+    const contestedByLeg = a.fill.byLeg.map(leg => ({ ...leg }));
+    let contestedCount = 0;
+    for (const leg of contestedByLeg) {
+      const key = `${leg.id}:${leg.side}`;
+      const entry = demandByKey.get(key);
+      if (!entry || entry.picks < 2) continue;
+      if (entry.total <= entry.capturable) continue;
+      const clipFraction = entry.capturable / entry.total;
+      leg.volumeScore = clipFraction;
+      leg.legProb = leg.spreadScore * leg.coherenceScore * clipFraction * leg.stabilityScore;
+      leg.contested = { totalDemand: entry.total, capturable: entry.capturable, clipFraction, sharedWithCount: entry.picks };
+      contestedCount++;
+    }
+    if (contestedCount === 0) continue;
+    let bottleneck = { prob: 1, id: null, reason: null };
+    for (const leg of contestedByLeg) {
+      if (leg.legProb < bottleneck.prob) {
+        const reason = leg.contested ? "contested" : (leg.volumeScore < 0.95 ? "volume"
+          : leg.spreadScore < 0.95 ? "spread"
+          : leg.coherenceScore < 0.95 ? "coherence" : "history");
+        bottleneck = { prob: leg.legProb, id: leg.id, reason };
+      }
+    }
+    a.fill.contestedByLeg = contestedByLeg;
+    a.fill.contestedRawProbability = bottleneck.prob;
+    a.fill.contestedProbability = calibrateFillProbability(bottleneck.prob, a.fill.horizonH ?? 24);
+    a.fill.contestedBottleneckId = bottleneck.id;
+    a.fill.contestedBottleneckReason = bottleneck.reason;
+    a.fill.contestedLegCount = contestedCount;
+  }
+}
+
 // When the recommended-price toggle is on, adjust the calibrated fill
 // probability up toward 1.0 based on how far the recommended offer sits
 // from the extreme (backtest baseline) toward mid (which fills easily).
@@ -3856,11 +3921,15 @@ function isInstaBuyOverrideSpurious(a) {
 // Meanwhile this at least gives a directionally-correct number that
 // tracks the offer, not just the market signal.
 function offerAdjustedFillProbability(fill) {
-  if (!fill || fill.probability == null) return null;
-  const base = Math.max(0, Math.min(1, fill.probability));
-  const raw = fill.rawProbability != null
-    ? Math.max(0, Math.min(1, fill.rawProbability))
-    : base;
+  if (!fill) return null;
+  // Prefer contested-volume-adjusted probability when it exists —
+  // that's the real baseline the offer should be judged against.
+  const baseValue = fill.contestedProbability != null ? fill.contestedProbability : fill.probability;
+  const rawValue  = fill.contestedRawProbability != null ? fill.contestedRawProbability
+                  : (fill.rawProbability != null ? fill.rawProbability : baseValue);
+  if (baseValue == null) return null;
+  const base = Math.max(0, Math.min(1, baseValue));
+  const raw = Math.max(0, Math.min(1, rawValue));
   // raw doubles as the aggressiveness knob in computeRecommendedOffer:
   // high raw → offer near extreme (matches backtest → no lift);
   // low raw → offer near mid (should almost always fill → big lift).
@@ -3880,7 +3949,7 @@ function recomputeAllocationAtRecommended(a) {
   const strat = a.supplyStrategyUsed || state.supplyStrategy;
   const buySide = strat === "insta-buy" ? "high" : "low";
   const sellSide = state.productStrategy === "insta-sell" ? "low" : "high";
-  const findLeg = (id, side) => (a.fill?.byLeg || []).find(l => l.id === id && l.side === side);
+  const findLeg = (id, side) => ((a.fill?.contestedByLeg || a.fill?.byLeg) || []).find(l => l.id === id && l.side === side);
   const sellLeg = findLeg(recipe.id, sellSide);
   const sellPrice = computeRecommendedOffer(recipe.id, sellSide, sellLeg?.legProb ?? 0.5);
   if (sellPrice == null) return null;
@@ -3942,13 +4011,18 @@ function renderAllocationCard(a) {
   // this level in the given horizon. Tier thresholds reflect that
   // real fill rates cap lower than 100% even for "perfect" scores.
   if (a.fill && a.fill.probability != null) {
-    // When the recommended-price toggle is on, adjust the displayed
-    // probability up toward 100% based on how mid-ward the recommended
-    // offer sits (heuristic — see offerAdjustedFillProbability). Base
-    // calibrated value is preserved in the tooltip for reference.
+    // Layering:
+    //   1) contestedProbability — cross-recipe volume-share reconciliation
+    //      (from applyContestedVolumeAdjustment). This is the "real" base
+    //      once shared inputs are accounted for.
+    //   2) offer-adjusted probability on top — lifts the base toward 100%
+    //      because the recommended offer sits mid-ward of the extreme.
+    // Precedence at display: use whichever pipeline is active.
     const useRecChip = !!state.allocationSettings?.showRecommendedPrices;
+    const contestedBase = a.fill.contestedProbability != null ? a.fill.contestedProbability : null;
     const adjusted = useRecChip ? offerAdjustedFillProbability(a.fill) : null;
-    const shownProb = adjusted != null ? adjusted : a.fill.probability;
+    const shownProb = adjusted != null ? adjusted
+                    : (contestedBase != null ? contestedBase : a.fill.probability);
     const pct = Math.round(shownProb * 100);
     // Retuned tiers: green ≥ 70% means "usually fills"; amber ≥ 45%
     // means "coin-flip-plus"; red is unlikely. Short-horizon runs
@@ -3956,16 +4030,25 @@ function renderAllocationCard(a) {
     // horizon runs show more green (given time, most orders fill).
     const tier = shownProb >= 0.70 ? "high"
                : shownProb >= 0.45 ? "mid" : "low";
-    const bottleneckName = a.fill.bottleneckId != null
-      ? (state.mapping?.[a.fill.bottleneckId]?.name || `#${a.fill.bottleneckId}`)
+    // Bottleneck naming — prefer the contested-adjusted bottleneck
+    // (it shifts when a contested leg becomes the tightest constraint).
+    const bnId = a.fill.contestedBottleneckId != null ? a.fill.contestedBottleneckId : a.fill.bottleneckId;
+    const bnReason = a.fill.contestedBottleneckReason != null ? a.fill.contestedBottleneckReason : a.fill.bottleneckReason;
+    const bottleneckName = bnId != null
+      ? (state.mapping?.[bnId]?.name || `#${bnId}`)
       : null;
-    const reasonText = a.fill.bottleneckReason
-      ? ` · ${a.fill.bottleneckReason} on ${bottleneckName}` : "";
+    const reasonText = bnReason ? ` · ${bnReason} on ${bottleneckName}` : "";
     const rawPct = a.fill.rawProbability != null ? Math.round(a.fill.rawProbability * 100) : null;
     const basePct = Math.round(a.fill.probability * 100);
+    const contestedPct = contestedBase != null ? Math.round(contestedBase * 100) : null;
+    const contestedNote = contestedPct != null
+      ? `Adjusted for shared inputs across allocator picks: ${contestedPct}% (from ${basePct}% in isolation). `
+      : "";
     const tipHead = adjusted != null
-      ? `Offer-adjusted fill probability: ${pct}%${reasonText}. Market-signal baseline: ${basePct}%. Heuristic — recommended offers sit between the extreme and the mid, so their real fill rate exceeds the backtest baseline. Not yet re-backtested at intermediate offer positions. `
-      : `Calibrated fill probability: ${pct}%${reasonText}. `;
+      ? `Offer-adjusted fill probability: ${pct}%${reasonText}. ${contestedNote}Market-signal baseline: ${basePct}%. Heuristic — recommended offers sit between the extreme and the mid, so their real fill rate exceeds the backtest baseline. Not yet re-backtested at intermediate offer positions. `
+      : (contestedPct != null
+        ? `Fill probability (shared-input adjusted): ${pct}%${reasonText}. In isolation this recipe would score ${basePct}%; other picked recipes contend for the same input pool. `
+        : `Calibrated fill probability: ${pct}%${reasonText}. `);
     catRow.appendChild(el("span", {
       class: `fill-prob-chip fill-prob-${tier}`,
       text: `${pct}% likely to fill`,
@@ -4172,7 +4255,7 @@ function renderAllocationCard(a) {
   const useRecPrices = !!state.allocationSettings?.showRecommendedPrices;
   const buySide = strat === "insta-buy" ? "high" : "low";
   const sellSide = state.productStrategy === "insta-sell" ? "low" : "high";
-  const findLeg = (id, side) => (a.fill?.byLeg || []).find(l => l.id === id && l.side === side);
+  const findLeg = (id, side) => ((a.fill?.contestedByLeg || a.fill?.byLeg) || []).find(l => l.id === id && l.side === side);
   for (const c of a.recipe.components) {
     const name = state.mapping?.[c.id]?.name || `#${c.id}`;
     const unitCount = c.qty * a.count;
@@ -6165,6 +6248,13 @@ async function init() {
         freeSkillingSupplies, freeComponentCombines,
       };
       state.allocation = allocateRecipes(opts);
+      // Cross-recipe volume-share reconciliation. If two or more picked
+      // recipes contend for the same item's capturable pool (e.g. two
+      // Masori-line crafts both buying Armadyl helmets), their in-isolation
+      // fill probabilities are optimistic. This walks the picks and marks
+      // each contested leg with its proportional share of the pool. Runs
+      // after allocation because it needs the final picked set.
+      applyContestedVolumeAdjustment(state.allocation);
       // Log the recommendation snapshot for Phase 3 retrospective analysis.
       // Silent to the user — the log is queryable via console
       // (`analyzeAllocationLog()`) and will drive scoring once we have a
