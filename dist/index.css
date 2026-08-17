@@ -1678,6 +1678,20 @@ footer {
 .allocate-buy-hint.allocate-sell-hint {
   color: rgba(245, 197, 24, 0.9);
 }
+/* Recommended-price qty span (buy or sell). Green so the primary price
+   reads as the actionable value; sell row already has its own green rule
+   but the class is applied on both sides for consistency. */
+.allocate-buy-qty.allocate-price-rec {
+  color: var(--green, #4ade80);
+  font-weight: 600;
+}
+/* "At market X" subtitle when the recommended-price toggle is on.
+   Dim grey — the reference value, not the recommendation. Overrides
+   both the muted-green .allocate-buy-hint default and the yellow
+   .allocate-sell-hint sibling. */
+.allocate-buy-hint.allocate-price-market {
+  color: rgba(125, 134, 176, 0.72);
+}
 /* Note shown when the "show recommended prices" toggle filters out
    allocator picks whose margin flipped negative at recommended pricing.
    Full-width across the allocate-grid, muted-red so it reads as a

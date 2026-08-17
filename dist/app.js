@@ -3847,6 +3847,27 @@ function isInstaBuyOverrideSpurious(a) {
   return false;
 }
 
+// When the recommended-price toggle is on, adjust the calibrated fill
+// probability up toward 1.0 based on how far the recommended offer sits
+// from the extreme (backtest baseline) toward mid (which fills easily).
+// Linear interpolation heuristic — NOT empirically validated yet, since
+// the backtest only measured fills at extreme (.low/.high) offers. TODO:
+// re-run backtest across a grid of offer positions to fit a real curve.
+// Meanwhile this at least gives a directionally-correct number that
+// tracks the offer, not just the market signal.
+function offerAdjustedFillProbability(fill) {
+  if (!fill || fill.probability == null) return null;
+  const base = Math.max(0, Math.min(1, fill.probability));
+  const raw = fill.rawProbability != null
+    ? Math.max(0, Math.min(1, fill.rawProbability))
+    : base;
+  // raw doubles as the aggressiveness knob in computeRecommendedOffer:
+  // high raw → offer near extreme (matches backtest → no lift);
+  // low raw → offer near mid (should almost always fill → big lift).
+  const positionTowardMid = 1 - raw;
+  return base + (1 - base) * positionTowardMid;
+}
+
 // When the "show recommended prices" toggle is on, recompute the card's
 // per-craft cost / margin / total profit using computeRecommendedOffer
 // on every leg (product + components). Supplies + repair cost stay live.
@@ -3921,23 +3942,34 @@ function renderAllocationCard(a) {
   // this level in the given horizon. Tier thresholds reflect that
   // real fill rates cap lower than 100% even for "perfect" scores.
   if (a.fill && a.fill.probability != null) {
-    const pct = Math.round(a.fill.probability * 100);
+    // When the recommended-price toggle is on, adjust the displayed
+    // probability up toward 100% based on how mid-ward the recommended
+    // offer sits (heuristic — see offerAdjustedFillProbability). Base
+    // calibrated value is preserved in the tooltip for reference.
+    const useRecChip = !!state.allocationSettings?.showRecommendedPrices;
+    const adjusted = useRecChip ? offerAdjustedFillProbability(a.fill) : null;
+    const shownProb = adjusted != null ? adjusted : a.fill.probability;
+    const pct = Math.round(shownProb * 100);
     // Retuned tiers: green ≥ 70% means "usually fills"; amber ≥ 45%
     // means "coin-flip-plus"; red is unlikely. Short-horizon runs
     // naturally show more red (real fills are hard in 1h). Long-
     // horizon runs show more green (given time, most orders fill).
-    const tier = a.fill.probability >= 0.70 ? "high"
-               : a.fill.probability >= 0.45 ? "mid" : "low";
+    const tier = shownProb >= 0.70 ? "high"
+               : shownProb >= 0.45 ? "mid" : "low";
     const bottleneckName = a.fill.bottleneckId != null
       ? (state.mapping?.[a.fill.bottleneckId]?.name || `#${a.fill.bottleneckId}`)
       : null;
     const reasonText = a.fill.bottleneckReason
       ? ` · ${a.fill.bottleneckReason} on ${bottleneckName}` : "";
     const rawPct = a.fill.rawProbability != null ? Math.round(a.fill.rawProbability * 100) : null;
+    const basePct = Math.round(a.fill.probability * 100);
+    const tipHead = adjusted != null
+      ? `Offer-adjusted fill probability: ${pct}%${reasonText}. Market-signal baseline: ${basePct}%. Heuristic — recommended offers sit between the extreme and the mid, so their real fill rate exceeds the backtest baseline. Not yet re-backtested at intermediate offer positions. `
+      : `Calibrated fill probability: ${pct}%${reasonText}. `;
     catRow.appendChild(el("span", {
       class: `fill-prob-chip fill-prob-${tier}`,
       text: `${pct}% likely to fill`,
-      attrs: { title: `Calibrated fill probability: ${pct}%${reasonText}. `
+      attrs: { title: tipHead
         + `Combines volume-share (assuming you capture ${Math.round((a.fill.marketShareUsed ?? 0.20) * 100)}% of side liquidity), `
         + `spread stability, 5m/1h/24h signal coherence, and historical margin volatility. `
         + (rawPct != null ? `Raw score: ${rawPct}%. ` : "")
@@ -4152,15 +4184,16 @@ function renderAllocationCard(a) {
     const entry = el("div", { class: "allocate-buy-entry" });
     const row = el("div", { class: "allocate-buy-row" });
     row.appendChild(el("span", { class: "allocate-buy-name", text: name }));
-    const qtySpan = el("span", { class: "allocate-buy-qty", text: `${unitCount.toLocaleString()}×${priceText}` });
-    if (useRecPrices && recPrice != null && marketPrice != null) {
+    const isRec = useRecPrices && recPrice != null;
+    const qtySpan = el("span", { class: `allocate-buy-qty${isRec ? " allocate-price-rec" : ""}`, text: `${unitCount.toLocaleString()}×${priceText}` });
+    if (isRec && marketPrice != null) {
       qtySpan.setAttribute("title", `Recommended offer: ${fmtGp(recPrice)}. At market: ${fmtGp(marketPrice)}. Leg fill probability: ${Math.round((leg?.legProb ?? 0) * 100)}%.`);
     }
     row.appendChild(qtySpan);
     row.appendChild(makeHitBtn(c.id));
     entry.appendChild(row);
-    if (useRecPrices && recPrice != null && marketPrice != null) {
-      entry.appendChild(el("div", { class: "allocate-buy-hint", text: `at market ${fmtGp(marketPrice)}` }));
+    if (isRec && marketPrice != null) {
+      entry.appendChild(el("div", { class: "allocate-buy-hint allocate-price-market", text: `at market ${fmtGp(marketPrice)}` }));
     } else {
       const hint = makeBuyHint(c.id, marketPrice);
       if (hint) entry.appendChild(hint);
@@ -4195,14 +4228,15 @@ function renderAllocationCard(a) {
   const sellEntry = el("div", { class: "allocate-buy-entry" });
   const sellRow = el("div", { class: "allocate-buy-row allocate-sell-row" });
   sellRow.appendChild(el("span", { class: "allocate-buy-name", text: "Sell " + productName }));
-  const sellQtySpan = el("span", { class: "allocate-buy-qty", text: `${productQty.toLocaleString()}×${productPriceText}` });
-  if (useRecPrices && recSellPrice != null && marketSellPrice != null) {
+  const isRecSell = useRecPrices && recSellPrice != null;
+  const sellQtySpan = el("span", { class: `allocate-buy-qty${isRecSell ? " allocate-price-rec" : ""}`, text: `${productQty.toLocaleString()}×${productPriceText}` });
+  if (isRecSell && marketSellPrice != null) {
     sellQtySpan.setAttribute("title", `Recommended list: ${fmtGp(recSellPrice)}. At market: ${fmtGp(marketSellPrice)}. Leg fill probability: ${Math.round((sellLeg?.legProb ?? 0) * 100)}%.`);
   }
   sellRow.appendChild(sellQtySpan);
   sellEntry.appendChild(sellRow);
-  if (useRecPrices && recSellPrice != null && marketSellPrice != null) {
-    sellEntry.appendChild(el("div", { class: "allocate-buy-hint allocate-sell-hint", text: `at market ${fmtGp(marketSellPrice)}` }));
+  if (isRecSell && marketSellPrice != null) {
+    sellEntry.appendChild(el("div", { class: "allocate-buy-hint allocate-price-market", text: `at market ${fmtGp(marketSellPrice)}` }));
   } else {
     const sellHint = makeSellHint(a.recipe.id, marketSellPrice);
     if (sellHint) sellEntry.appendChild(sellHint);
