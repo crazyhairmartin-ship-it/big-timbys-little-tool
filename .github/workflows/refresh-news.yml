@@ -1,0 +1,53 @@
+name: Refresh news.json
+
+# Regenerates dist/news.json from the OSRS RSS + wiki API and commits back
+# to main when the file actually changed. Landing on main triggers a Vercel
+# deploy, so the site picks up new posts (game updates, behind-the-scenes,
+# community) within a few minutes.
+#
+# Cadence: daily at 15:00 UTC — Jagex typically posts Wednesday game updates
+# ~12–14 UTC, and this window catches them the same day. Other days it's
+# usually a no-op (skipped commit) and costs nothing.
+#
+# Security note: no untrusted event input is used in any run: step — only
+# the committed scrape-news.mjs script, git, and standard runner utilities.
+
+on:
+  schedule:
+    - cron: "0 15 * * *"    # daily at 15:00 UTC
+  workflow_dispatch:         # allow manual runs
+
+permissions:
+  contents: write
+
+concurrency: refresh-news    # never let two runs overlap
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Regenerate dist/news.json
+        run: node scripts/scrape-news.mjs
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "news-refresher"
+          git config user.email "noreply@github.com"
+          if git diff --quiet -- dist/news.json; then
+            echo "news.json unchanged — nothing to commit"
+            exit 0
+          fi
+          git add dist/news.json
+          git commit -m "data(news): refresh news.json (auto — $(date -u +'%Y-%m-%d %H:%M UTC'))"
+          git push origin main
