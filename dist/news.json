@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-09-01T18:17:01.338Z",
+  "generatedAt": "2026-09-02T18:30:19.057Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 161,
+  "count": 162,
   "posts": [
+    {
+      "ts": 1788307200000,
+      "title": "Summer Sweep Up Miscellaneous",
+      "url": "https://secure.runescape.com/m=news/summer-sweep-up-miscellaneous?oldschool=1",
+      "category": "Game Updates"
+    },
     {
       "ts": 1788134400000,
       "title": "The Official OSRS Podcast Episode 20 With Mod Surma",
