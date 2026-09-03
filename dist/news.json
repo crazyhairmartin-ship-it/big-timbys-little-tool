@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T18:30:19.057Z",
+  "generatedAt": "2026-09-03T18:25:58.714Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 162,
   "posts": [
+    {
+      "ts": 1788393600000,
+      "title": "Menu Entry Swapper Overhaul - Live Now!",
+      "url": "https://secure.runescape.com/m=news/menu-entry-swapper-overhaul---live-now?oldschool=1",
+      "category": "Game Updates"
+    },
     {
       "ts": 1788307200000,
       "title": "Summer Sweep Up Miscellaneous",
@@ -971,12 +977,6 @@
       "ts": 1756771200000,
       "title": "Grid Master Announcement - October 15th",
       "url": "https://secure.runescape.com/m=news/grid-master-announcement---october-15th?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1756425600000,
-      "title": "Last Chance for Youtooz Nieve and King Black Dragon Figures",
-      "url": "https://secure.runescape.com/m=news/last-chance-for-youtooz-nieve-and-king-black-dragon-figures?oldschool=1",
       "category": "Community"
     }
   ]
