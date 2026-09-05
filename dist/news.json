@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-09-04T18:13:00.311Z",
+  "generatedAt": "2026-09-05T17:13:45.362Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 162,
+  "count": 163,
   "posts": [
+    {
+      "ts": 1788566400000,
+      "title": "Old School LANscape - Live now!",
+      "url": "https://secure.runescape.com/m=news/old-school-lanscape---live-now?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1788393600000,
       "title": "Menu Entry Swapper Overhaul - Live Now!",
