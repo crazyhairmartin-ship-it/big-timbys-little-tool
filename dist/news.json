@@ -1,23 +1,23 @@
 {
-  "generatedAt": "2026-09-06T17:34:11.081Z",
+  "generatedAt": "2026-09-07T19:03:21.124Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 163,
+  "count": 162,
   "posts": [
+    {
+      "ts": 1788739200000,
+      "title": "Menu Entry Swapper Overhaul - Live Now!",
+      "url": "https://secure.runescape.com/m=news/menu-entry-swapper-overhaul---live-now?oldschool=1",
+      "category": "Game Updates"
+    },
     {
       "ts": 1788566400000,
       "title": "Old School LANscape - Live now!",
       "url": "https://secure.runescape.com/m=news/old-school-lanscape---live-now?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1788393600000,
-      "title": "Menu Entry Swapper Overhaul - Live Now!",
-      "url": "https://secure.runescape.com/m=news/menu-entry-swapper-overhaul---live-now?oldschool=1",
-      "category": "Game Updates"
     },
     {
       "ts": 1788307200000,
@@ -978,12 +978,6 @@
       "title": "Doom Combat Achievements",
       "url": "https://secure.runescape.com/m=news/doom-combat-achievements?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1756771200000,
-      "title": "Grid Master Announcement - October 15th",
-      "url": "https://secure.runescape.com/m=news/grid-master-announcement---october-15th?oldschool=1",
-      "category": "Community"
     }
   ]
 }
