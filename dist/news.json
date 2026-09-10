@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T18:24:34.038Z",
+  "generatedAt": "2026-09-10T18:13:35.991Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -8,16 +8,16 @@
   "count": 162,
   "posts": [
     {
+      "ts": 1788998400000,
+      "title": "Game Status Information Centre",
+      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
+      "category": "Technical"
+    },
+    {
       "ts": 1788825600000,
       "title": "A Ruff Situation &amp; Crab Quest Out Today!",
       "url": "https://secure.runescape.com/m=news/a-ruff-situation--crab-quest-out-today?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1788825600000,
-      "title": "Game Status Information Centre",
-      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
-      "category": "Technical"
     },
     {
       "ts": 1788739200000,
