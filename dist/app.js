@@ -182,6 +182,33 @@ const RECIPES = [
   { key:"tormented-bracelet-craft", id:19544, name:"Tormented bracelet (full craft)", cat:"Zenyte", components:[{id:6573,qty:1},{id:19529,qty:1}], supplies:[{id:2357,qty:1},{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
   { key:"amulet-of-torture-craft", id:19553, name:"Amulet of torture (full craft)", cat:"Zenyte", components:[{id:6573,qty:1},{id:19529,qty:1}], supplies:[{id:2357,qty:1},{id:1759,qty:1},{id:564,qty:1},{id:566,qty:20},{id:565,qty:20}] },
 
+  // Elemental amulet family — added in the Sailing-era elemental content.
+  //
+  // Each individual amulet is crafted at its matching elemental altar with:
+  //   1× Amulet of magic (1727) + 1× element gem + 100× element rune.
+  // Element gems: Air diamond 34404 / Water sapphire 34410 / Earth emerald
+  //   34416 / Fire ruby 34422. Element runes: 556/555/557/554.
+  // The Amulet of magic + element gem are the valuable buy legs; 100 runes
+  // are cheap consumables under supplies.
+  //
+  // The combined Elemental amulet requires 1× each of the four amulets
+  // plus 500× each elemental rune at the Runic Altar (Runecraft 30).
+  { key:"amulet-of-air", id:34407, name:"Amulet of air", cat:"Elemental",
+    components:[{id:1727,qty:1},{id:34404,qty:1}],
+    supplies:[{id:556,qty:100}] },
+  { key:"amulet-of-water", id:34413, name:"Amulet of water", cat:"Elemental",
+    components:[{id:1727,qty:1},{id:34410,qty:1}],
+    supplies:[{id:555,qty:100}] },
+  { key:"amulet-of-earth", id:34419, name:"Amulet of earth", cat:"Elemental",
+    components:[{id:1727,qty:1},{id:34416,qty:1}],
+    supplies:[{id:557,qty:100}] },
+  { key:"amulet-of-fire", id:34425, name:"Amulet of fire", cat:"Elemental",
+    components:[{id:1727,qty:1},{id:34422,qty:1}],
+    supplies:[{id:554,qty:100}] },
+  { key:"elemental-amulet", id:34428, name:"Elemental amulet", cat:"Elemental",
+    components:[{id:34407,qty:1},{id:34413,qty:1},{id:34419,qty:1},{id:34425,qty:1}],
+    supplies:[{id:556,qty:500},{id:555,qty:500},{id:557,qty:500},{id:554,qty:500}] },
+
   // --- GE Item Sets (bundle ↔ pieces, exchangeable at the Grand Exchange clerk) ---
   // Each bundle is a single tradeable item; flipping is buy bundle + sell pieces
   // (or vice versa) when the GE spread favors one side.
