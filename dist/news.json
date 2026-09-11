@@ -1,12 +1,42 @@
 {
-  "generatedAt": "2026-09-01T14:20:19.554Z",
+  "generatedAt": "2026-09-11T19:00:00.606Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 161,
+  "count": 162,
   "posts": [
+    {
+      "ts": 1788998400000,
+      "title": "Game Status Information Centre",
+      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
+      "category": "Technical"
+    },
+    {
+      "ts": 1788825600000,
+      "title": "A Ruff Situation &amp; Crab Quest Out Today!",
+      "url": "https://secure.runescape.com/m=news/a-ruff-situation--crab-quest-out-today?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1788739200000,
+      "title": "Menu Entry Swapper Overhaul - Live Now!",
+      "url": "https://secure.runescape.com/m=news/menu-entry-swapper-overhaul---live-now?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1788566400000,
+      "title": "Old School LANscape - Live now!",
+      "url": "https://secure.runescape.com/m=news/old-school-lanscape---live-now?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1788307200000,
+      "title": "Summer Sweep Up Miscellaneous",
+      "url": "https://secure.runescape.com/m=news/summer-sweep-up-miscellaneous?oldschool=1",
+      "category": "Game Updates"
+    },
     {
       "ts": 1788134400000,
       "title": "The Official OSRS Podcast Episode 20 With Mod Surma",
@@ -75,13 +105,13 @@
     },
     {
       "ts": 1786492800000,
-      "title": "Summer Sweep Up - Agility &amp; Chambers of Xeric Changes",
+      "title": "Summer Sweep Up - Agility & Chambers of Xeric Changes",
       "url": "https://secure.runescape.com/m=news/summer-sweep-up---agility--chambers-of-xeric-changes?oldschool=1",
       "category": "Game Updates"
     },
     {
-      "ts": 1786492800000,
-      "title": "Bronzeman Mode &amp; A Ruff Situation",
+      "ts": 1786406400000,
+      "title": "Bronzeman Mode & A Ruff Situation",
       "url": "https://secure.runescape.com/m=news/bronzeman-mode--a-ruff-situation?oldschool=1",
       "category": "Community"
     },
@@ -420,12 +450,6 @@
       "title": "Demonic Pacts - Overview",
       "url": "https://secure.runescape.com/m=news/demonic-pacts---overview?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1775606400000,
-      "title": "Game Status Information Centre",
-      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
-      "category": "Website"
     },
     {
       "ts": 1775606400000,
@@ -954,24 +978,6 @@
       "title": "Pet Insurance Rework & More",
       "url": "https://secure.runescape.com/m=news/pet-insurance-rework--more?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1756857600000,
-      "title": "Doom Combat Achievements",
-      "url": "https://secure.runescape.com/m=news/doom-combat-achievements?oldschool=1",
-      "category": "Game Updates"
-    },
-    {
-      "ts": 1756771200000,
-      "title": "Grid Master Announcement - October 15th",
-      "url": "https://secure.runescape.com/m=news/grid-master-announcement---october-15th?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1756425600000,
-      "title": "Last Chance for Youtooz Nieve and King Black Dragon Figures",
-      "url": "https://secure.runescape.com/m=news/last-chance-for-youtooz-nieve-and-king-black-dragon-figures?oldschool=1",
-      "category": "Community"
     }
   ]
 }
