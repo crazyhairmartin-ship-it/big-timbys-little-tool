@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-14T19:46:44.229Z",
+  "generatedAt": "2026-09-15T18:48:57.984Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 165,
   "posts": [
+    {
+      "ts": 1789430400000,
+      "title": "RuneScape: Dragonwilds 1.0 OUT NOW!",
+      "url": "https://secure.runescape.com/m=news/runescape-dragonwilds-10-out-now?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1789344000000,
       "title": "The Graveyard - Rewards Blog",
@@ -93,14 +99,14 @@
     },
     {
       "ts": 1786924800000,
-      "title": "The Official OSRS Podcast Episode 18 With Mod Other",
-      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-18-with-mod-other?oldschool=1",
+      "title": "Introducing Old School LANscape",
+      "url": "https://secure.runescape.com/m=news/introducing-old-school-lanscape?oldschool=1",
       "category": "Community"
     },
     {
       "ts": 1786924800000,
-      "title": "Introducing Old School LANscape",
-      "url": "https://secure.runescape.com/m=news/introducing-old-school-lanscape?oldschool=1",
+      "title": "The Official OSRS Podcast Episode 18 With Mod Other",
+      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-18-with-mod-other?oldschool=1",
       "category": "Community"
     },
     {
@@ -990,12 +996,6 @@
       "title": "OUT NOW RuneScape: Leagues: CATALYST (RS3)",
       "url": "https://secure.runescape.com/m=news/out-now-runescape-leagues-catalyst-rs3?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1757462400000,
-      "title": "Pet Insurance Rework & More",
-      "url": "https://secure.runescape.com/m=news/pet-insurance-rework--more?oldschool=1",
-      "category": "Game Updates"
     }
   ]
 }
