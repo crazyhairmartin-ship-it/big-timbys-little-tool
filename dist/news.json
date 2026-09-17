@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-09-16T18:46:31.386Z",
+  "generatedAt": "2026-09-17T18:53:40.085Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 166,
+  "count": 167,
   "posts": [
+    {
+      "ts": 1789603200000,
+      "title": "Community Spotlight: Unpragmatic Covers",
+      "url": "https://secure.runescape.com/m=news/community-spotlight-unpragmatic-covers?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1789516800000,
       "title": "Summer Sweep-Up Pet Improvements &amp; More",
@@ -27,15 +33,15 @@
     },
     {
       "ts": 1789344000000,
-      "title": "Our Stance On Cryptocurrency And Market Manipulation",
-      "url": "https://secure.runescape.com/m=news/our-stance-on-cryptocurrency-and-market-manipulation?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1789344000000,
       "title": "Checking In: Jagex Launcher On Mac",
       "url": "https://secure.runescape.com/m=news/checking-in-jagex-launcher-on-mac?oldschool=1",
       "category": "Technical"
+    },
+    {
+      "ts": 1789344000000,
+      "title": "Our Stance On Cryptocurrency And Market Manipulation",
+      "url": "https://secure.runescape.com/m=news/our-stance-on-cryptocurrency-and-market-manipulation?oldschool=1",
+      "category": "Community"
     },
     {
       "ts": 1788998400000,
@@ -95,7 +101,7 @@
       "ts": 1787184000000,
       "title": "Spudworks: DMM All Stars Finale",
       "url": "https://secure.runescape.com/m=news/spudworks-dmm-all-stars-finale?oldschool=1",
-      "category": "Behind The Scenes"
+      "category": "Behind the Scenes"
     },
     {
       "ts": 1787097600000,
