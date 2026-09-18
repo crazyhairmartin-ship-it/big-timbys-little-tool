@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-17T18:53:40.085Z",
+  "generatedAt": "2026-09-18T18:12:57.289Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 167,
   "posts": [
+    {
+      "ts": 1789689600000,
+      "title": "The Graveyard - Rewards Blog",
+      "url": "https://secure.runescape.com/m=news/the-graveyard---rewards-blog?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1789603200000,
       "title": "Community Spotlight: Unpragmatic Covers",
@@ -23,12 +29,6 @@
       "ts": 1789430400000,
       "title": "RuneScape: Dragonwilds 1.0 OUT NOW!",
       "url": "https://secure.runescape.com/m=news/runescape-dragonwilds-10-out-now?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1789344000000,
-      "title": "The Graveyard - Rewards Blog",
-      "url": "https://secure.runescape.com/m=news/the-graveyard---rewards-blog?oldschool=1",
       "category": "Community"
     },
     {
