@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-09-19T17:52:19.013Z",
+  "generatedAt": "2026-09-20T18:08:43.613Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 167,
+  "count": 166,
   "posts": [
     {
       "ts": 1789689600000,
@@ -1001,12 +1001,6 @@
       "ts": 1757980800000,
       "title": "A Message about Real World Trading",
       "url": "https://secure.runescape.com/m=news/a-message-about-real-world-trading?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1757894400000,
-      "title": "OUT NOW RuneScape: Leagues: CATALYST (RS3)",
-      "url": "https://secure.runescape.com/m=news/out-now-runescape-leagues-catalyst-rs3?oldschool=1",
       "category": "Community"
     }
   ]
