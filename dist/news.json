@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-09-20T18:08:43.613Z",
+  "generatedAt": "2026-09-21T19:55:14.328Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 166,
+  "count": 165,
   "posts": [
     {
       "ts": 1789689600000,
@@ -996,12 +996,6 @@
       "title": "Poll 85 - Bridges, Boots, Ropes & Roots",
       "url": "https://secure.runescape.com/m=news/poll-85---bridges-boots-ropes--roots?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1757980800000,
-      "title": "A Message about Real World Trading",
-      "url": "https://secure.runescape.com/m=news/a-message-about-real-world-trading?oldschool=1",
-      "category": "Community"
     }
   ]
 }
