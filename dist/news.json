@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-09-21T19:55:14.328Z",
+  "generatedAt": "2026-09-22T18:39:28.502Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 165,
+  "count": 164,
   "posts": [
     {
       "ts": 1789689600000,
@@ -990,12 +990,6 @@
       "title": "Sailing Slayer Creatures, Unique Drops & More",
       "url": "https://secure.runescape.com/m=news/sailing-slayer-creatures-unique-drops--more?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1758067200000,
-      "title": "Poll 85 - Bridges, Boots, Ropes & Roots",
-      "url": "https://secure.runescape.com/m=news/poll-85---bridges-boots-ropes--roots?oldschool=1",
-      "category": "Game Updates"
     }
   ]
 }
