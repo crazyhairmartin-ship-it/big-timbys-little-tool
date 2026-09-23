@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-22T18:39:28.502Z",
+  "generatedAt": "2026-09-23T18:56:11.234Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 164,
   "posts": [
+    {
+      "ts": 1790121600000,
+      "title": "Further Gathering Efficiencies",
+      "url": "https://secure.runescape.com/m=news/further-gathering-efficiencies?oldschool=1",
+      "category": "Game Updates"
+    },
     {
       "ts": 1789689600000,
       "title": "The Graveyard - Rewards Blog",
@@ -984,12 +990,6 @@
       "title": "Player Support Roadmap - September Check In",
       "url": "https://secure.runescape.com/m=news/player-support-roadmap---september-check-in?oldschool=1",
       "category": "News"
-    },
-    {
-      "ts": 1758153600000,
-      "title": "Sailing Slayer Creatures, Unique Drops & More",
-      "url": "https://secure.runescape.com/m=news/sailing-slayer-creatures-unique-drops--more?oldschool=1",
-      "category": "Community"
     }
   ]
 }
