@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-09-23T18:56:11.234Z",
+  "generatedAt": "2026-09-24T18:55:36.190Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 164,
+  "count": 163,
   "posts": [
     {
       "ts": 1790121600000,
@@ -984,12 +984,6 @@
       "title": "Interface Uplift",
       "url": "https://secure.runescape.com/m=news/interface-uplift?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1758240000000,
-      "title": "Player Support Roadmap - September Check In",
-      "url": "https://secure.runescape.com/m=news/player-support-roadmap---september-check-in?oldschool=1",
-      "category": "News"
     }
   ]
 }
