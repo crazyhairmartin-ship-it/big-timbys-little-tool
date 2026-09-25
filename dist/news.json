@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-09-24T18:55:36.190Z",
+  "generatedAt": "2026-09-25T19:11:19.239Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 163,
+  "count": 164,
   "posts": [
+    {
+      "ts": 1790294400000,
+      "title": "Scape Ink Apparel: Preorder Now!",
+      "url": "https://secure.runescape.com/m=news/scape-ink-apparel-preorder-now?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1790121600000,
       "title": "Further Gathering Efficiencies",
