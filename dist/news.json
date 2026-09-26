@@ -1,16 +1,22 @@
 {
-  "generatedAt": "2026-09-25T19:11:19.239Z",
+  "generatedAt": "2026-09-26T18:26:46.839Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 164,
+  "count": 165,
   "posts": [
     {
       "ts": 1790294400000,
       "title": "Scape Ink Apparel: Preorder Now!",
       "url": "https://secure.runescape.com/m=news/scape-ink-apparel-preorder-now?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1790294400000,
+      "title": "Scape Ink Apparel: Preorder Now!",
+      "url": "https://secure.runescape.com/m=news/a=13/scape-ink-apparel-preorder-now?oldschool=1",
       "category": "Community"
     },
     {
