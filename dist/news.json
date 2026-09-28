@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-27T18:56:42.622Z",
+  "generatedAt": "2026-09-28T21:09:06.922Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 165,
   "posts": [
+    {
+      "ts": 1790553600000,
+      "title": "Game Status Information Centre",
+      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
+      "category": "Technical"
+    },
     {
       "ts": 1790294400000,
       "title": "Scape Ink Apparel: Preorder Now!",
@@ -60,12 +66,6 @@
       "title": "Our Stance On Cryptocurrency And Market Manipulation",
       "url": "https://secure.runescape.com/m=news/our-stance-on-cryptocurrency-and-market-manipulation?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1788998400000,
-      "title": "Game Status Information Centre",
-      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
-      "category": "Technical"
     },
     {
       "ts": 1788825600000,
