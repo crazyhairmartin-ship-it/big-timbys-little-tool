@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-28T21:09:06.922Z",
+  "generatedAt": "2026-09-29T19:53:24.720Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 165,
   "posts": [
+    {
+      "ts": 1790640000000,
+      "title": "Get Ready for RuneFest 2026",
+      "url": "https://secure.runescape.com/m=news/get-ready-for-runefest-2026?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1790553600000,
       "title": "Game Status Information Centre",
@@ -990,12 +996,6 @@
       "title": "Last Chance For Official Makeship Plushies!",
       "url": "https://secure.runescape.com/m=news/last-chance-for-official-makeship-plushies?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1758672000000,
-      "title": "Interface Uplift",
-      "url": "https://secure.runescape.com/m=news/interface-uplift?oldschool=1",
-      "category": "Game Updates"
     }
   ]
 }
