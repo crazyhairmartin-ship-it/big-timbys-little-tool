@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-29T19:53:24.720Z",
+  "generatedAt": "2026-09-30T19:54:02.673Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 165,
   "posts": [
+    {
+      "ts": 1790726400000,
+      "title": "GE Improvements: Beyond Max Cash",
+      "url": "https://secure.runescape.com/m=news/ge-improvements-beyond-max-cash?oldschool=1",
+      "category": "Game Updates"
+    },
     {
       "ts": 1790640000000,
       "title": "Get Ready for RuneFest 2026",
@@ -345,8 +351,8 @@
     },
     {
       "ts": 1781481600000,
-      "title": "GE Improvements: Beyond Max Cash",
-      "url": "https://secure.runescape.com/m=news/ge-improvements-beyond-max-cash?oldschool=1",
+      "title": "GE Improvements: Beyond Max Cash (June 2026)",
+      "url": "https://secure.runescape.com/m=news/ge-improvements-beyond-max-cash-1?oldschool=1",
       "category": "News"
     },
     {
@@ -990,12 +996,6 @@
       "title": "Interface Uplift Round 2",
       "url": "https://secure.runescape.com/m=news/interface-uplift-round-2?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1758758400000,
-      "title": "Last Chance For Official Makeship Plushies!",
-      "url": "https://secure.runescape.com/m=news/last-chance-for-official-makeship-plushies?oldschool=1",
-      "category": "Community"
     }
   ]
 }
