@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-04T18:34:33.642Z",
+  "generatedAt": "2026-10-05T21:54:58.769Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 167,
   "posts": [
+    {
+      "ts": 1791158400000,
+      "title": "Golden Gnomes 2026 Winners",
+      "url": "https://secure.runescape.com/m=news/golden-gnomes-2026-winners?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1790985600000,
       "title": "RuneFest 2026 Summit Overview",
@@ -96,12 +102,6 @@
       "title": "Menu Entry Swapper Overhaul - Live Now!",
       "url": "https://secure.runescape.com/m=news/menu-entry-swapper-overhaul---live-now?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1788566400000,
-      "title": "Old School LANscape - Live now!",
-      "url": "https://secure.runescape.com/m=news/old-school-lanscape---live-now?oldschool=1",
-      "category": "Community"
     },
     {
       "ts": 1788307200000,
