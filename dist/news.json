@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-05T21:54:58.769Z",
+  "generatedAt": "2026-10-06T20:06:20.296Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 167,
   "posts": [
+    {
+      "ts": 1791244800000,
+      "title": "The Fractured Archive - Everything You Need To Know",
+      "url": "https://secure.runescape.com/m=news/the-fractured-archive---everything-you-need-to-know?oldschool=1",
+      "category": "Future Updates"
+    },
     {
       "ts": 1791158400000,
       "title": "Golden Gnomes 2026 Winners",
@@ -98,7 +104,7 @@
       "category": "Game Updates"
     },
     {
-      "ts": 1788739200000,
+      "ts": 1788393600000,
       "title": "Menu Entry Swapper Overhaul - Live Now!",
       "url": "https://secure.runescape.com/m=news/menu-entry-swapper-overhaul---live-now?oldschool=1",
       "category": "Game Updates"
@@ -1002,12 +1008,6 @@
       "title": "Upcoming Updates - New Worlds & Downtime",
       "url": "https://secure.runescape.com/m=news/a=13/upcoming-updates---new-worlds--downtime?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1759276800000,
-      "title": "Interface Uplift Round 2",
-      "url": "https://secure.runescape.com/m=news/interface-uplift-round-2?oldschool=1",
-      "category": "Game Updates"
     }
   ]
 }
