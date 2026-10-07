@@ -1,12 +1,24 @@
 {
-  "generatedAt": "2026-10-06T20:06:20.296Z",
+  "generatedAt": "2026-10-07T20:30:47.684Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 167,
+  "count": 168,
   "posts": [
+    {
+      "ts": 1791331200000,
+      "title": "Pete Kayer&apos;s Challenges",
+      "url": "https://secure.runescape.com/m=news/pete-kayers-challenges?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1791331200000,
+      "title": "Game Status Information Centre",
+      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
+      "category": "Technical"
+    },
     {
       "ts": 1791244800000,
       "title": "The Fractured Archive - Everything You Need To Know",
@@ -99,7 +111,7 @@
     },
     {
       "ts": 1788825600000,
-      "title": "A Ruff Situation &amp; Crab Quest Out Today!",
+      "title": "A Ruff Situation & Crab Quest Out Today!",
       "url": "https://secure.runescape.com/m=news/a-ruff-situation--crab-quest-out-today?oldschool=1",
       "category": "Game Updates"
     },
@@ -528,12 +540,6 @@
       "title": "Demonic Pacts - Overview",
       "url": "https://secure.runescape.com/m=news/demonic-pacts---overview?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1775606400000,
-      "title": "Game Status Information Centre",
-      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
-      "category": "Website"
     },
     {
       "ts": 1775606400000,
