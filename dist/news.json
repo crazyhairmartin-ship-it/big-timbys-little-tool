@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-10-10T19:11:13.329Z",
+  "generatedAt": "2026-10-11T19:25:37.054Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 168,
+  "count": 167,
   "posts": [
     {
       "ts": 1791331200000,
@@ -1007,12 +1007,6 @@
       "ts": 1759881600000,
       "title": "2025 Annual Survey",
       "url": "https://secure.runescape.com/m=news/a=13/2025-annual-survey?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1759708800000,
-      "title": "Upcoming Updates - New Worlds & Downtime",
-      "url": "https://secure.runescape.com/m=news/a=13/upcoming-updates---new-worlds--downtime?oldschool=1",
       "category": "Community"
     }
   ]
