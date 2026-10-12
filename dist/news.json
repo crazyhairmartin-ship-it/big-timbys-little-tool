@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-10-11T19:25:37.054Z",
+  "generatedAt": "2026-10-12T22:26:36.200Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 167,
+  "count": 168,
   "posts": [
+    {
+      "ts": 1791763200000,
+      "title": "Godwars Replica Collection - Preorder Now!",
+      "url": "https://secure.runescape.com/m=news/godwars-replica-collection---preorder-now?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1791331200000,
       "title": "Pete Kayer&apos;s Challenges",
@@ -101,7 +107,7 @@
       "ts": 1789344000000,
       "title": "Checking In: Jagex Launcher On Mac",
       "url": "https://secure.runescape.com/m=news/checking-in-jagex-launcher-on-mac?oldschool=1",
-      "category": "Technical"
+      "category": "Website"
     },
     {
       "ts": 1789344000000,
