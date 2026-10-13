@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-12T22:26:36.200Z",
+  "generatedAt": "2026-10-13T20:33:57.774Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 168,
   "posts": [
+    {
+      "ts": 1791849600000,
+      "title": "Quest Month - Rewards Poll Blog",
+      "url": "https://secure.runescape.com/m=news/quest-month---rewards-poll-blog?oldschool=1",
+      "category": "Future Updates"
+    },
     {
       "ts": 1791763200000,
       "title": "Godwars Replica Collection - Preorder Now!",
@@ -1008,12 +1014,6 @@
       "title": "New Player Improvements - 2025 and Beyond",
       "url": "https://secure.runescape.com/m=news/new-player-improvements---2025-and-beyond?oldschool=1",
       "category": "Behind the Scenes"
-    },
-    {
-      "ts": 1759881600000,
-      "title": "2025 Annual Survey",
-      "url": "https://secure.runescape.com/m=news/a=13/2025-annual-survey?oldschool=1",
-      "category": "Community"
     }
   ]
 }
