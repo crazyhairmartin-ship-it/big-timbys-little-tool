@@ -1,14 +1,20 @@
 {
-  "generatedAt": "2026-10-13T20:33:57.774Z",
+  "generatedAt": "2026-10-14T19:14:52.868Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 168,
+  "count": 169,
   "posts": [
     {
-      "ts": 1791849600000,
+      "ts": 1791936000000,
+      "title": "More Gathering Efficiencies",
+      "url": "https://secure.runescape.com/m=news/more-gathering-efficiencies?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1791936000000,
       "title": "Quest Month - Rewards Poll Blog",
       "url": "https://secure.runescape.com/m=news/quest-month---rewards-poll-blog?oldschool=1",
       "category": "Future Updates"
@@ -99,7 +105,7 @@
     },
     {
       "ts": 1789516800000,
-      "title": "Summer Sweep-Up Pet Improvements &amp; More",
+      "title": "Summer Sweep-Up Pet Improvements & More",
       "url": "https://secure.runescape.com/m=news/summer-sweep-up-pet-improvements--more?oldschool=1",
       "category": "Game Updates"
     },
