@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T19:14:52.868Z",
+  "generatedAt": "2026-10-15T18:58:31.687Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 169,
   "posts": [
+    {
+      "ts": 1792022400000,
+      "title": "Community Spotlight: 10Boot",
+      "url": "https://secure.runescape.com/m=news/community-spotlight-10boot?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1791936000000,
       "title": "More Gathering Efficiencies",
@@ -1014,12 +1020,6 @@
       "title": "OSRS x Gielinor Games: Exclusive Collab",
       "url": "https://secure.runescape.com/m=news/a=13/osrs-x-gielinor-games-exclusive-collab?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1760054400000,
-      "title": "New Player Improvements - 2025 and Beyond",
-      "url": "https://secure.runescape.com/m=news/new-player-improvements---2025-and-beyond?oldschool=1",
-      "category": "Behind the Scenes"
     }
   ]
 }
