@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-15T18:58:31.687Z",
+  "generatedAt": "2026-10-16T18:42:19.631Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 169,
   "posts": [
+    {
+      "ts": 1792108800000,
+      "title": "Jagex Accounts: Migration Begins Nov 17",
+      "url": "https://secure.runescape.com/m=news/jagex-accounts-migration-begins-nov-17?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1792022400000,
       "title": "Community Spotlight: 10Boot",
@@ -98,12 +104,6 @@
       "category": "Game Updates"
     },
     {
-      "ts": 1789689600000,
-      "title": "The Graveyard - Rewards Blog",
-      "url": "https://secure.runescape.com/m=news/the-graveyard---rewards-blog?oldschool=1",
-      "category": "Community"
-    },
-    {
       "ts": 1789603200000,
       "title": "Community Spotlight: Unpragmatic Covers",
       "url": "https://secure.runescape.com/m=news/community-spotlight-unpragmatic-covers?oldschool=1",
@@ -126,6 +126,12 @@
       "title": "Checking In: Jagex Launcher On Mac",
       "url": "https://secure.runescape.com/m=news/checking-in-jagex-launcher-on-mac?oldschool=1",
       "category": "Website"
+    },
+    {
+      "ts": 1789344000000,
+      "title": "The Graveyard - Rewards Blog",
+      "url": "https://secure.runescape.com/m=news/the-graveyard---rewards-blog?oldschool=1",
+      "category": "Community"
     },
     {
       "ts": 1789344000000,
@@ -1013,12 +1019,6 @@
       "ts": 1760400000000,
       "title": "Introducing Poll System Improvements",
       "url": "https://secure.runescape.com/m=news/introducing-poll-system-improvements?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1760140800000,
-      "title": "OSRS x Gielinor Games: Exclusive Collab",
-      "url": "https://secure.runescape.com/m=news/a=13/osrs-x-gielinor-games-exclusive-collab?oldschool=1",
       "category": "Community"
     }
   ]
