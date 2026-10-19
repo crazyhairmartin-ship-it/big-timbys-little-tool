@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-10-18T17:55:50.734Z",
+  "generatedAt": "2026-10-19T20:28:10.335Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 169,
+  "count": 168,
   "posts": [
     {
       "ts": 1792108800000,
@@ -1014,12 +1014,6 @@
       "title": "Grid Master - Out Today!",
       "url": "https://secure.runescape.com/m=news/grid-master---out-today?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1760400000000,
-      "title": "Introducing Poll System Improvements",
-      "url": "https://secure.runescape.com/m=news/introducing-poll-system-improvements?oldschool=1",
-      "category": "Community"
     }
   ]
 }
