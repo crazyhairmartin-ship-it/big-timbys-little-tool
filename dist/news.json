@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-19T20:28:10.335Z",
+  "generatedAt": "2026-10-20T19:05:02.554Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 168,
   "posts": [
+    {
+      "ts": 1792454400000,
+      "title": "The Fractured Archive - Out Today",
+      "url": "https://secure.runescape.com/m=news/the-fractured-archive---out-today?oldschool=1",
+      "category": "Game Updates"
+    },
     {
       "ts": 1792108800000,
       "title": "Jagex Accounts: Migration Begins Nov 17",
@@ -1007,12 +1013,6 @@
       "ts": 1761091200000,
       "title": "Grid Master Rewards, Poll & New Player Improvements",
       "url": "https://secure.runescape.com/m=news/grid-master-rewards-poll--new-player-improvements?oldschool=1",
-      "category": "Game Updates"
-    },
-    {
-      "ts": 1760486400000,
-      "title": "Grid Master - Out Today!",
-      "url": "https://secure.runescape.com/m=news/grid-master---out-today?oldschool=1",
       "category": "Game Updates"
     }
   ]
