@@ -13,7 +13,9 @@ const API_BASE = "https://prices.runescape.wiki/api/v1/osrs";
 // arrow stack image), and the mapping API's `icon` field sometimes lags
 // behind the actual filename for newly-released items. Special:FilePath is
 // the canonical resolver: it 302-redirects to whatever the real filename is.
-const ICON_BASE = "https://oldschool.runescape.wiki/w/Special:FilePath";
+// Static /images path: one cacheable hop. Special:FilePath is a dynamic 302→301
+// redirect with max-age=0, so every grid re-render re-hit MediaWiki per icon.
+const ICON_BASE = "https://oldschool.runescape.wiki/images";
 
 const REFRESH_MS = 60_000;
 const HISTORY_SAMPLE_MS = 5 * 60_000;
@@ -3345,6 +3347,13 @@ function allocateRecipes(opts) {
 function improveByLocalSearch(allocations, candidates, opts) {
   const { budget, slotBudget, perRecipeCap, minProfitAbsolute } = opts;
   const MAX_ITERATIONS = 20;
+  // SHIFT tries K = 1..count-1 per (allocated, candidate) pair. Free-slot
+  // recipes can reach counts in the 100k+ range, so sample at most this many
+  // K values per pair, and give the whole search a wall-clock budget so it can
+  // never freeze the page (it just returns the best allocation found so far).
+  const SHIFT_MAX_K = 64;
+  const SEARCH_BUDGET_MS = 750;
+  const deadline = performance.now() + SEARCH_BUDGET_MS;
   // Materialise a new allocation entry for `cand` given a specific count.
   // Mirrors what the greedy did when pushing to allocations[], so downstream
   // consumers (card render, summary math) see the same shape.
@@ -3376,6 +3385,7 @@ function improveByLocalSearch(allocations, candidates, opts) {
   let iters = 0;
   const moves = [];   // one entry per applied iteration; surfaces in the UI
   for (; iters < MAX_ITERATIONS; iters++) {
+    if (performance.now() > deadline) break;
     // Snapshot occupancy for this iteration
     const totalCost   = allocs.reduce((s, a) => s + a.cost, 0);
     const totalSlots  = allocs.reduce((s, a) => s + (a.freeSlot ? 0 : a.slotUseCount), 0);
@@ -3477,14 +3487,16 @@ function improveByLocalSearch(allocations, candidates, opts) {
     // not). This is the key operator for the "diversification cap raises
     // profit" case: greedy over-commits to the density-top pick, and the
     // improvement is to reduce it by K and put freed capacity into other
-    // recipes. K iterated to find the best delta per pair. O(A × C × count)
-    // — small in practice since count is usually < 20.
+    // recipes. K iterated to find the best delta per pair. O(A × C × min(count,
+    // SHIFT_MAX_K)) — K is sampled when count is large (see SHIFT_MAX_K).
     for (let i = 0; i < allocs.length; i++) {
       const a = allocs[i];
       if (a.count <= 1) continue;   // K < count, so need count >= 2
       const aCostPer  = a.cost / a.count;
       const aSlotsPer = a.freeSlot ? 0 : a.slotUseCount / a.count;
+      const kStep = Math.max(1, Math.ceil((a.count - 1) / SHIFT_MAX_K));
       for (const cand of candidates) {
+        if (performance.now() > deadline) break;
         if (cand.recipe.key === a.recipe.key) continue;
         const existingB = allocs.find(x => x.recipe.key === cand.recipe.key);
         const bCurrent = existingB ? existingB.count : 0;
@@ -3493,7 +3505,7 @@ function improveByLocalSearch(allocations, candidates, opts) {
         // Try each K. The optimal K is often at a boundary (K that just
         // barely lets one more B unit fit), so we could shortcut but
         // brute-force is fast enough.
-        for (let K = 1; K < a.count; K++) {
+        for (let K = 1; K < a.count; K += kStep) {
           const freedBudget = K * aCostPer;
           const freedSlots  = K * aSlotsPer;
           const newAvailBudget = availBudget + freedBudget;
@@ -5656,7 +5668,12 @@ function checkPredictedHourAlerts() {
 }
 
 /* ---------------- Refresh loop ---------------- */
-async function refresh() {
+// Per-endpoint cache lifetimes. `latest` is the only feed that needs the full
+// 60s cadence; the averaged/volume feeds only change on 5m / hourly buckets.
+const SLOW_FEED_TTL_MS = { avg5m: 5 * 60_000, volumes: 15 * 60_000, avg1h: 15 * 60_000, avg24h: 15 * 60_000 };
+const feedFetchedAt = {};
+
+async function refresh(force = false) {
   const btn = document.getElementById("refresh-btn");
   const icon = document.getElementById("refresh-icon");
   btn.disabled = true;
@@ -5671,12 +5688,22 @@ async function refresh() {
     }
     state.lastMargin = snapshot;
 
+    // Slow feeds are refetched only once their TTL lapses (or on a manual /
+    // first-load refresh). A failed fetch keeps the old data and is retried
+    // next tick because feedFetchedAt isn't advanced.
+    const slowFeed = (key, label, fetcher) => {
+      const age = Date.now() - (feedFetchedAt[key] || 0);
+      if (!force && state[key] && age < SLOW_FEED_TTL_MS[key]) return Promise.resolve(state[key]);
+      return fetcher()
+        .then(v => { feedFetchedAt[key] = Date.now(); return v; })
+        .catch(e => { console.warn(`${label} failed:`, e); return state[key]; });
+    };
     const [prices, volumes, avg5m, avg1h, avg24h] = await Promise.all([
       fetchLatest(),
-      fetchVolumes().catch(e => { console.warn("Volumes failed:", e); return state.volumes; }),
-      fetchAvg5m().catch(e => { console.warn("5m avg failed:", e); return state.avg5m; }),
-      fetchAvg1h().catch(e => { console.warn("1h avg failed:", e); return state.avg1h; }),
-      fetchAvg24h().catch(e => { console.warn("24h avg failed:", e); return state.avg24h; }),
+      slowFeed("volumes", "Volumes", fetchVolumes),
+      slowFeed("avg5m", "5m avg", fetchAvg5m),
+      slowFeed("avg1h", "1h avg", fetchAvg1h),
+      slowFeed("avg24h", "24h avg", fetchAvg24h),
     ]);
     state.prices = prices;
     state.volumes = volumes;
@@ -5701,6 +5728,13 @@ async function refresh() {
 function tickCountdown() {
   state.countdown -= 1;
   if (state.countdown <= 0) {
+    if (document.hidden) {
+      // Hidden tab: skip the wiki calls. Predicted-hour alerts are purely
+      // clock-based, so they still need to be checked each minute.
+      try { checkPredictedHourAlerts(); } catch (e) { console.warn("Alert check failed:", e); }
+      state.countdown = REFRESH_MS / 1000;
+      return;
+    }
     refresh();
   } else {
     document.getElementById("refresh-countdown").textContent = `${state.countdown}s`;
@@ -6228,7 +6262,7 @@ async function init() {
     state.filters.profitableOnly = e.target.checked;
     renderGrid();
   });
-  document.getElementById("refresh-btn").addEventListener("click", refresh);
+  document.getElementById("refresh-btn").addEventListener("click", () => refresh(true));
   // Notifications button — click toggles alerts on/off. On first enable we
   // request Notification permission (needs a user gesture in most browsers).
   const notifyBtn = document.getElementById("notify-btn");
@@ -6287,16 +6321,19 @@ async function init() {
       // (`analyzeAllocationLog()`) and will drive scoring once we have a
       // few weeks of data.
       logAllocation(state.allocation, opts);
-      // Persist inputs so they survive reload.
-      localStorage.setItem("osrs-combo-allocate-budget", document.getElementById("allocate-budget").value);
-      localStorage.setItem("osrs-combo-allocate-horizon", horizon);
-      localStorage.setItem("osrs-combo-allocate-slots", String(slots));
-      localStorage.setItem("osrs-combo-allocate-min-contrib", String(minContribPct));
-      localStorage.setItem("osrs-combo-allocate-max-pct", String(maxPerRecipePct));
-      localStorage.setItem("osrs-combo-allocate-hide-stale", hideStale ? "1" : "0");
-      localStorage.setItem("osrs-combo-allocate-only-zero-time", onlyZeroTime ? "1" : "0");
-      localStorage.setItem("osrs-combo-allocate-free-supplies", freeSkillingSupplies ? "1" : "0");
-      localStorage.setItem("osrs-combo-allocate-free-components", freeComponentCombines ? "1" : "0");
+      // Persist inputs so they survive reload. Best-effort: a full or blocked
+      // localStorage must not stop the results from rendering.
+      try {
+        localStorage.setItem("osrs-combo-allocate-budget", document.getElementById("allocate-budget").value);
+        localStorage.setItem("osrs-combo-allocate-horizon", horizon);
+        localStorage.setItem("osrs-combo-allocate-slots", String(slots));
+        localStorage.setItem("osrs-combo-allocate-min-contrib", String(minContribPct));
+        localStorage.setItem("osrs-combo-allocate-max-pct", String(maxPerRecipePct));
+        localStorage.setItem("osrs-combo-allocate-hide-stale", hideStale ? "1" : "0");
+        localStorage.setItem("osrs-combo-allocate-only-zero-time", onlyZeroTime ? "1" : "0");
+        localStorage.setItem("osrs-combo-allocate-free-supplies", freeSkillingSupplies ? "1" : "0");
+        localStorage.setItem("osrs-combo-allocate-free-components", freeComponentCombines ? "1" : "0");
+      } catch (_) { /* storage unavailable */ }
       renderGrid();
     });
     // Restore persisted inputs on load
@@ -6592,9 +6629,13 @@ async function init() {
 
   try { state.mapping = await fetchMapping(); }
   catch (e) { console.error("Mapping fetch failed:", e); }
-  await refresh();
+  await refresh(true);
 
   state.countdownTimer = setInterval(tickCountdown, 1000);
+  // Catch up as soon as a backgrounded tab is shown again.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && Date.now() - state.lastFetched >= REFRESH_MS) refresh();
+  });
 }
 
 init();
