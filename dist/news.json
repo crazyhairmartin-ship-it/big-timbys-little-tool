@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T19:10:56.227Z",
+  "generatedAt": "2026-10-22T19:05:52.786Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 168,
   "posts": [
+    {
+      "ts": 1792627200000,
+      "title": "Hardcore Worlds Are Coming On November 4th",
+      "url": "https://secure.runescape.com/m=news/hardcore-worlds-are-coming-on-november-4th?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1792454400000,
       "title": "The Fractured Archive - Out Today",
@@ -89,12 +95,6 @@
       "ts": 1790640000000,
       "title": "Get Ready for RuneFest 2026",
       "url": "https://secure.runescape.com/m=news/get-ready-for-runefest-2026?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1790294400000,
-      "title": "Scape Ink Apparel: Preorder Now!",
-      "url": "https://secure.runescape.com/m=news/scape-ink-apparel-preorder-now?oldschool=1",
       "category": "Community"
     },
     {
