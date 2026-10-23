@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-10-22T19:05:52.786Z",
+  "generatedAt": "2026-10-23T18:58:36.773Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 168,
+  "count": 169,
   "posts": [
+    {
+      "ts": 1792713600000,
+      "title": "Merch Drop - TFA Pins and New Lines from RuneFest!",
+      "url": "https://secure.runescape.com/m=news/merch-drop---tfa-pins-and-new-lines-from-runefest?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1792627200000,
       "title": "Hardcore Worlds Are Coming On November 4th",
