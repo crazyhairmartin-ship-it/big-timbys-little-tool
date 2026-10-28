@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-27T19:57:34.529Z",
+  "generatedAt": "2026-10-28T20:09:36.718Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,18 @@
   "backfillDays": 370,
   "count": 168,
   "posts": [
+    {
+      "ts": 1793145600000,
+      "title": "Halloween Event 2026, TFA Tweaks &amp; More!",
+      "url": "https://secure.runescape.com/m=news/halloween-event-2026-tfa-tweaks--more?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1793059200000,
+      "title": "Old School Roadmap",
+      "url": "https://secure.runescape.com/m=news/old-school-roadmap?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1792713600000,
       "title": "Merch Drop - TFA Pins and New Lines from RuneFest!",
@@ -788,12 +800,6 @@
       "category": "Behind the Scenes"
     },
     {
-      "ts": 1769299200000,
-      "title": "Old School Roadmap (25 January 2026)",
-      "url": "https://secure.runescape.com/m=news/old-school-roadmap?oldschool=1",
-      "category": "Community"
-    },
-    {
       "ts": 1769126400000,
       "title": "Deadman: Annihilation - Everything You Need To Know",
       "url": "https://secure.runescape.com/m=news/deadman-annihilation---everything-you-need-to-know?oldschool=1",
@@ -1007,12 +1013,6 @@
       "ts": 1761264000000,
       "title": "Sailing Launches on November 19th!",
       "url": "https://secure.runescape.com/m=news/sailing-launches-on-november-19th?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1761177600000,
-      "title": "Grid Master - Competition Winners",
-      "url": "https://secure.runescape.com/m=news/grid-master---competition-winners?oldschool=1",
       "category": "Community"
     }
   ]
