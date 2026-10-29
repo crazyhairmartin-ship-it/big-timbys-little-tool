@@ -1,12 +1,24 @@
 {
-  "generatedAt": "2026-10-28T20:09:36.718Z",
+  "generatedAt": "2026-10-29T20:07:09.654Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 168,
+  "count": 169,
   "posts": [
+    {
+      "ts": 1793232000000,
+      "title": "Deep Sea Diving Expansion",
+      "url": "https://secure.runescape.com/m=news/deep-sea-diving-expansion?oldschool=1",
+      "category": "Future Updates"
+    },
+    {
+      "ts": 1793232000000,
+      "title": "Introducing Melvor Idle 2: A RuneScape Adventure",
+      "url": "https://secure.runescape.com/m=news/introducing-melvor-idle-2-a-runescape-adventure?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1793145600000,
       "title": "Halloween Event 2026, TFA Tweaks &amp; More!",
@@ -1008,12 +1020,6 @@
       "title": "An Update on New Renderer Beta and HD",
       "url": "https://secure.runescape.com/m=news/an-update-on-new-renderer-beta-and-hd?oldschool=1",
       "category": "Behind the Scenes"
-    },
-    {
-      "ts": 1761264000000,
-      "title": "Sailing Launches on November 19th!",
-      "url": "https://secure.runescape.com/m=news/sailing-launches-on-november-19th?oldschool=1",
-      "category": "Community"
     }
   ]
 }
