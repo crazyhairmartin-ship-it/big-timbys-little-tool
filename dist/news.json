@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-10-31T19:11:00.866Z",
+  "generatedAt": "2026-11-01T19:26:24.668Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 169,
+  "count": 168,
   "posts": [
     {
       "ts": 1793232000000,
@@ -1014,12 +1014,6 @@
       "title": "New Renderer Beta Pause",
       "url": "https://secure.runescape.com/m=news/new-renderer-beta-pause?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1761523200000,
-      "title": "An Update on New Renderer Beta and HD",
-      "url": "https://secure.runescape.com/m=news/an-update-on-new-renderer-beta-and-hd?oldschool=1",
-      "category": "Behind the Scenes"
     }
   ]
 }
