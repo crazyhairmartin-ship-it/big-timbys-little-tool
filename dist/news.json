@@ -1,12 +1,30 @@
 {
-  "generatedAt": "2026-11-02T23:02:07.690Z",
+  "generatedAt": "2026-11-03T20:51:17.098Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 168,
+  "count": 170,
   "posts": [
+    {
+      "ts": 1793664000000,
+      "title": "Quest Month Kick Off, TFA Tweaks &amp; More",
+      "url": "https://secure.runescape.com/m=news/quest-month-kick-off-tfa-tweaks--more?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1793664000000,
+      "title": "Name Release Begins Soon!",
+      "url": "https://secure.runescape.com/m=news/name-release-begins-soon?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1793664000000,
+      "title": "The Reaper&apos;s Raffle | Hardcore Worlds",
+      "url": "https://secure.runescape.com/m=news/the-reapers-raffle--hardcore-worlds?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1793232000000,
       "title": "Deep Sea Diving Expansion",
@@ -81,21 +99,15 @@
     },
     {
       "ts": 1791331200000,
-      "title": "Pete Kayer&apos;s Challenges",
+      "title": "Pete Kayer's Challenges",
       "url": "https://secure.runescape.com/m=news/pete-kayers-challenges?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1791331200000,
-      "title": "Game Status Information Centre",
-      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
-      "category": "Technical"
     },
     {
       "ts": 1791244800000,
       "title": "The Fractured Archive - Everything You Need To Know",
       "url": "https://secure.runescape.com/m=news/the-fractured-archive---everything-you-need-to-know?oldschool=1",
-      "category": "Future Updates"
+      "category": "Behind the Scenes"
     },
     {
       "ts": 1791158400000,
@@ -609,6 +621,12 @@
     },
     {
       "ts": 1775606400000,
+      "title": "Game Status Information Centre",
+      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
+      "category": "Website"
+    },
+    {
+      "ts": 1775606400000,
       "title": "Pirate Encounters Design & Rewards",
       "url": "https://secure.runescape.com/m=news/pirate-encounters-design--rewards-?oldschool=1",
       "category": "Community"
@@ -1008,12 +1026,6 @@
       "title": "Chess.com x Old School Runescape",
       "url": "https://secure.runescape.com/m=news/chesscom-x-old-school-runescape?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1761696000000,
-      "title": "New Renderer Beta Pause",
-      "url": "https://secure.runescape.com/m=news/new-renderer-beta-pause?oldschool=1",
-      "category": "Game Updates"
     }
   ]
 }
