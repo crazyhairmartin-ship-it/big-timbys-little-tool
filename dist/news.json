@@ -1,12 +1,24 @@
 {
-  "generatedAt": "2026-11-03T20:51:17.098Z",
+  "generatedAt": "2026-11-04T21:09:25.062Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 170,
+  "count": 171,
   "posts": [
+    {
+      "ts": 1793750400000,
+      "title": "Hardcore Worlds | OUT TODAY",
+      "url": "https://secure.runescape.com/m=news/hardcore-worlds--out-today?oldschool=1",
+      "category": "Game Updates"
+    },
+    {
+      "ts": 1793750400000,
+      "title": "Game Status Information Centre",
+      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
+      "category": "Technical"
+    },
     {
       "ts": 1793664000000,
       "title": "Quest Month Kick Off, TFA Tweaks &amp; More",
@@ -86,10 +98,10 @@
       "category": "Game Updates"
     },
     {
-      "ts": 1791936000000,
+      "ts": 1791849600000,
       "title": "Quest Month - Rewards Poll Blog",
       "url": "https://secure.runescape.com/m=news/quest-month---rewards-poll-blog?oldschool=1",
-      "category": "Future Updates"
+      "category": "Behind the Scenes"
     },
     {
       "ts": 1791763200000,
@@ -618,12 +630,6 @@
       "title": "Demonic Pacts - Overview",
       "url": "https://secure.runescape.com/m=news/demonic-pacts---overview?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1775606400000,
-      "title": "Game Status Information Centre",
-      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
-      "category": "Website"
     },
     {
       "ts": 1775606400000,
