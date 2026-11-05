@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-11-04T21:09:25.062Z",
+  "generatedAt": "2026-11-05T21:24:31.233Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 171,
+  "count": 172,
   "posts": [
+    {
+      "ts": 1793836800000,
+      "title": "Name Release Begins Today!",
+      "url": "https://secure.runescape.com/m=news/name-release-begins-today?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1793750400000,
       "title": "Hardcore Worlds | OUT TODAY",
