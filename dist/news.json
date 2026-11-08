@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-11-07T19:17:59.845Z",
+  "generatedAt": "2026-11-08T19:26:31.939Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 172,
+  "count": 171,
   "posts": [
     {
       "ts": 1793836800000,
@@ -1031,12 +1031,6 @@
       "ts": 1762214400000,
       "title": "The Official OSRS Podcast Season 1",
       "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-season-1?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1762128000000,
-      "title": "Chess.com x Old School Runescape",
-      "url": "https://secure.runescape.com/m=news/chesscom-x-old-school-runescape?oldschool=1",
       "category": "Community"
     }
   ]
