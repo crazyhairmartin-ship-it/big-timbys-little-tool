@@ -1,12 +1,24 @@
 {
-  "generatedAt": "2026-11-08T19:26:31.939Z",
+  "generatedAt": "2026-11-09T23:43:45.800Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 171,
+  "count": 169,
   "posts": [
+    {
+      "ts": 1794182400000,
+      "title": "Deep Sea Diving Expansion",
+      "url": "https://secure.runescape.com/m=news/deep-sea-diving-expansion?oldschool=1",
+      "category": "Future Updates"
+    },
+    {
+      "ts": 1794182400000,
+      "title": "Game Status Information Centre",
+      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
+      "category": "Technical"
+    },
     {
       "ts": 1793836800000,
       "title": "Name Release Begins Today!",
@@ -20,22 +32,10 @@
       "category": "Game Updates"
     },
     {
-      "ts": 1793750400000,
-      "title": "Game Status Information Centre",
-      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
-      "category": "Technical"
-    },
-    {
       "ts": 1793664000000,
       "title": "Quest Month Kick Off, TFA Tweaks &amp; More",
       "url": "https://secure.runescape.com/m=news/quest-month-kick-off-tfa-tweaks--more?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1793664000000,
-      "title": "Name Release Begins Soon!",
-      "url": "https://secure.runescape.com/m=news/name-release-begins-soon?oldschool=1",
-      "category": "Community"
     },
     {
       "ts": 1793664000000,
@@ -44,10 +44,10 @@
       "category": "Community"
     },
     {
-      "ts": 1793232000000,
-      "title": "Deep Sea Diving Expansion",
-      "url": "https://secure.runescape.com/m=news/deep-sea-diving-expansion?oldschool=1",
-      "category": "Future Updates"
+      "ts": 1793664000000,
+      "title": "Name Release Begins Soon!",
+      "url": "https://secure.runescape.com/m=news/name-release-begins-soon?oldschool=1",
+      "category": "Community"
     },
     {
       "ts": 1793232000000,
@@ -1020,18 +1020,6 @@
       "title": "Sailing Technical Pre-Release",
       "url": "https://secure.runescape.com/m=news/sailing-technical-pre-release?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1762214400000,
-      "title": "Prepare for Sailing - Launching November 19th!",
-      "url": "https://secure.runescape.com/m=news/prepare-for-sailing---launching-november-19th?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1762214400000,
-      "title": "The Official OSRS Podcast Season 1",
-      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-season-1?oldschool=1",
-      "category": "Community"
     }
   ]
 }
