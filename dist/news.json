@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-11-09T23:43:45.800Z",
+  "generatedAt": "2026-11-10T21:14:28.017Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 169,
+  "count": 168,
   "posts": [
     {
       "ts": 1794182400000,
@@ -1014,12 +1014,6 @@
       "title": "Behind The Scenes of Sailing: Dev Diary",
       "url": "https://secure.runescape.com/m=news/behind-the-scenes-of-sailing-dev-diary?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1762300800000,
-      "title": "Sailing Technical Pre-Release",
-      "url": "https://secure.runescape.com/m=news/sailing-technical-pre-release?oldschool=1",
-      "category": "Game Updates"
     }
   ]
 }
