@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-11-10T21:14:28.017Z",
+  "generatedAt": "2026-11-11T21:49:01.184Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 168,
+  "count": 169,
   "posts": [
+    {
+      "ts": 1794355200000,
+      "title": "Quest Month: Week Two &amp; TFA Changes",
+      "url": "https://secure.runescape.com/m=news/quest-month-week-two--tfa-changes?oldschool=1",
+      "category": "Game Updates"
+    },
     {
       "ts": 1794182400000,
       "title": "Deep Sea Diving Expansion",
