@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-11-12T21:47:17.043Z",
+  "generatedAt": "2026-11-13T21:19:03.530Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 169,
+  "count": 168,
   "posts": [
+    {
+      "ts": 1794528000000,
+      "title": "The Reaper&apos;s Raffle | Hardcore Worlds",
+      "url": "https://secure.runescape.com/m=news/the-reapers-raffle--hardcore-worlds?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1794355200000,
       "title": "Quest Month: Week Two &amp; TFA Changes",
@@ -42,12 +48,6 @@
       "title": "Quest Month Kick Off, TFA Tweaks &amp; More",
       "url": "https://secure.runescape.com/m=news/quest-month-kick-off-tfa-tweaks--more?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1793664000000,
-      "title": "The Reaper&apos;s Raffle | Hardcore Worlds",
-      "url": "https://secure.runescape.com/m=news/the-reapers-raffle--hardcore-worlds?oldschool=1",
-      "category": "Community"
     },
     {
       "ts": 1793664000000,
@@ -1013,12 +1013,6 @@
       "ts": 1762646400000,
       "title": "The Official OSRS Podcast Episode 1 With Mod Kieren",
       "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-1-with-mod-kieren?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1762560000000,
-      "title": "Behind The Scenes of Sailing: Dev Diary",
-      "url": "https://secure.runescape.com/m=news/behind-the-scenes-of-sailing-dev-diary?oldschool=1",
       "category": "Community"
     }
   ]
