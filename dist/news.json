@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-11-13T21:19:03.530Z",
+  "generatedAt": "2026-11-14T19:49:44.614Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 168,
+  "count": 167,
   "posts": [
+    {
+      "ts": 1794614400000,
+      "title": "Game Status Information Centre",
+      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
+      "category": "Technical"
+    },
     {
       "ts": 1794528000000,
       "title": "The Reaper&apos;s Raffle | Hardcore Worlds",
@@ -24,12 +30,6 @@
       "title": "Deep Sea Diving Expansion",
       "url": "https://secure.runescape.com/m=news/deep-sea-diving-expansion?oldschool=1",
       "category": "Future Updates"
-    },
-    {
-      "ts": 1794182400000,
-      "title": "Game Status Information Centre",
-      "url": "https://secure.runescape.com/m=news/game-status-information-centre?oldschool=1",
-      "category": "Technical"
     },
     {
       "ts": 1793836800000,
@@ -1008,12 +1008,6 @@
       "title": "Deadman: Annihilation Overview & Rewards Blog",
       "url": "https://secure.runescape.com/m=news/deadman-annihilation-overview--rewards-blog?oldschool=1",
       "category": "Behind the Scenes"
-    },
-    {
-      "ts": 1762646400000,
-      "title": "The Official OSRS Podcast Episode 1 With Mod Kieren",
-      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-1-with-mod-kieren?oldschool=1",
-      "category": "Community"
     }
   ]
 }
