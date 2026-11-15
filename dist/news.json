@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-11-14T19:49:44.614Z",
+  "generatedAt": "2026-11-15T20:15:04.171Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 167,
+  "count": 166,
   "posts": [
     {
       "ts": 1794614400000,
@@ -1002,12 +1002,6 @@
       "title": "Spudworks: DDoS Protection & Security",
       "url": "https://secure.runescape.com/m=news/spudworks-ddos-protection--security?oldschool=1",
       "category": "Website"
-    },
-    {
-      "ts": 1762732800000,
-      "title": "Deadman: Annihilation Overview & Rewards Blog",
-      "url": "https://secure.runescape.com/m=news/deadman-annihilation-overview--rewards-blog?oldschool=1",
-      "category": "Behind the Scenes"
     }
   ]
 }
