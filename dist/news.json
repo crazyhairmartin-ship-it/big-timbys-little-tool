@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-11-17T22:48:58.274Z",
+  "generatedAt": "2026-11-18T22:31:05.904Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 168,
+  "count": 169,
   "posts": [
+    {
+      "ts": 1794960000000,
+      "title": "Quest Month Week 3 &amp; TFA Practice Mode",
+      "url": "https://secure.runescape.com/m=news/quest-month-week-3--tfa-practice-mode?oldschool=1",
+      "category": "Game Updates"
+    },
     {
       "ts": 1794873600000,
       "title": "Jagex Accounts Now Required: Here&apos;s What To Do",
@@ -17,6 +23,12 @@
       "ts": 1794873600000,
       "title": "Melvor Idle 2: A RuneScape Adventure - Early Access Out Now!",
       "url": "https://secure.runescape.com/m=news/melvor-idle-2-a-runescape-adventure---early-access-out-now?oldschool=1",
+      "category": "Community"
+    },
+    {
+      "ts": 1794873600000,
+      "title": "Melvor Idle 2: A RuneScape Adventure - Early Access Out Now!",
+      "url": "https://secure.runescape.com/m=news/a=13/melvor-idle-2-a-runescape-adventure---early-access-out-now?oldschool=1",
       "category": "Community"
     },
     {
@@ -1008,12 +1020,6 @@
       "title": "OSRS x Alan Walker - Sailing (Official Music Video)",
       "url": "https://secure.runescape.com/m=news/osrs-x-alan-walker---sailing-official-music-video?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1762992000000,
-      "title": "Spudworks: DDoS Protection & Security",
-      "url": "https://secure.runescape.com/m=news/spudworks-ddos-protection--security?oldschool=1",
-      "category": "Website"
     }
   ]
 }
