@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T22:31:05.904Z",
+  "generatedAt": "2026-11-19T22:36:54.366Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,12 @@
   "backfillDays": 370,
   "count": 169,
   "posts": [
+    {
+      "ts": 1795046400000,
+      "title": "The Chosen Commander - Post-Quest Activities Poll Blog",
+      "url": "https://secure.runescape.com/m=news/the-chosen-commander---post-quest-activities-poll-blog?oldschool=1",
+      "category": "Future Updates"
+    },
     {
       "ts": 1794960000000,
       "title": "Quest Month Week 3 &amp; TFA Practice Mode",
@@ -1013,12 +1019,6 @@
       "ts": 1763251200000,
       "title": "The Official OSRS Podcast Episode 2 With Mod Elena",
       "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-2-with-mod-elena?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1763078400000,
-      "title": "OSRS x Alan Walker - Sailing (Official Music Video)",
-      "url": "https://secure.runescape.com/m=news/osrs-x-alan-walker---sailing-official-music-video?oldschool=1",
       "category": "Community"
     }
   ]
