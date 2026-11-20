@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-11-19T22:36:54.366Z",
+  "generatedAt": "2026-11-20T22:10:50.750Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 169,
+  "count": 170,
   "posts": [
+    {
+      "ts": 1795132800000,
+      "title": "Gielinor Gazette - November 2026",
+      "url": "https://secure.runescape.com/m=news/gielinor-gazette---november-2026?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1795046400000,
       "title": "The Chosen Commander - Post-Quest Activities Poll Blog",
@@ -96,12 +102,6 @@
       "title": "Halloween Event 2026, TFA Tweaks &amp; More!",
       "url": "https://secure.runescape.com/m=news/halloween-event-2026-tfa-tweaks--more?oldschool=1",
       "category": "Game Updates"
-    },
-    {
-      "ts": 1793059200000,
-      "title": "Old School Roadmap",
-      "url": "https://secure.runescape.com/m=news/old-school-roadmap?oldschool=1",
-      "category": "Community"
     },
     {
       "ts": 1792713600000,
@@ -876,6 +876,12 @@
       "title": "Winter Summit 2026 - Overview",
       "url": "https://secure.runescape.com/m=news/winter-summit-2026---overview?oldschool=1",
       "category": "Behind the Scenes"
+    },
+    {
+      "ts": 1769299200000,
+      "title": "Old School Roadmap (25 January 2026)",
+      "url": "https://secure.runescape.com/m=news/old-school-roadmap?oldschool=1",
+      "category": "Community"
     },
     {
       "ts": 1769126400000,
