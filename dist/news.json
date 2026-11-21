@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-11-20T22:10:50.750Z",
+  "generatedAt": "2026-11-21T20:50:43.959Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 170,
+  "count": 169,
   "posts": [
     {
       "ts": 1795132800000,
@@ -1019,12 +1019,6 @@
       "ts": 1763510400000,
       "title": "Sailing - Known Issues & Fixes",
       "url": "https://secure.runescape.com/m=news/sailing---known-issues--fixes-?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1763251200000,
-      "title": "The Official OSRS Podcast Episode 2 With Mod Elena",
-      "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-2-with-mod-elena?oldschool=1",
       "category": "Community"
     }
   ]
