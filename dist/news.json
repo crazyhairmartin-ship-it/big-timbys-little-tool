@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-11-22T20:57:49.625Z",
+  "generatedAt": "2026-11-24T02:03:51.897Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 169,
+  "count": 167,
   "posts": [
     {
       "ts": 1795132800000,
@@ -1007,18 +1007,6 @@
       "ts": 1763856000000,
       "title": "The Official OSRS Podcast Episode 3 With Alan Walker",
       "url": "https://secure.runescape.com/m=news/the-official-osrs-podcast-episode-3-with-alan-walker?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1763510400000,
-      "title": "Sailing is OUT TODAY!",
-      "url": "https://secure.runescape.com/m=news/sailing-is-out-today?oldschool=1",
-      "category": "Game Updates"
-    },
-    {
-      "ts": 1763510400000,
-      "title": "Sailing - Known Issues & Fixes",
-      "url": "https://secure.runescape.com/m=news/sailing---known-issues--fixes-?oldschool=1",
       "category": "Community"
     }
   ]
