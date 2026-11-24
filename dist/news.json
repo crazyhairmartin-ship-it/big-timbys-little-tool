@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-24T02:03:51.897Z",
+  "generatedAt": "2026-11-24T23:48:36.948Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -27,15 +27,15 @@
     },
     {
       "ts": 1794873600000,
-      "title": "Jagex Accounts Now Required: Here&apos;s What To Do",
-      "url": "https://secure.runescape.com/m=news/jagex-accounts-now-required-heres-what-to-do?oldschool=1",
-      "category": "Technical"
-    },
-    {
-      "ts": 1794873600000,
       "title": "Melvor Idle 2: A RuneScape Adventure - Early Access Out Now!",
       "url": "https://secure.runescape.com/m=news/melvor-idle-2-a-runescape-adventure---early-access-out-now?oldschool=1",
       "category": "Community"
+    },
+    {
+      "ts": 1794873600000,
+      "title": "Jagex Accounts Now Required: Here&apos;s What To Do",
+      "url": "https://secure.runescape.com/m=news/jagex-accounts-now-required-heres-what-to-do?oldschool=1",
+      "category": "Technical"
     },
     {
       "ts": 1794873600000,
