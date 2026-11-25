@@ -1,12 +1,18 @@
 {
-  "generatedAt": "2026-11-24T23:48:36.948Z",
+  "generatedAt": "2026-11-25T23:30:36.714Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
   ],
   "backfillDays": 370,
-  "count": 167,
+  "count": 168,
   "posts": [
+    {
+      "ts": 1795564800000,
+      "title": "The Graveyard | Quest Month Week IV",
+      "url": "https://secure.runescape.com/m=news/the-graveyard--quest-month-week-iv?oldschool=1",
+      "category": "Game Updates"
+    },
     {
       "ts": 1795132800000,
       "title": "Gielinor Gazette - November 2026",
@@ -99,7 +105,7 @@
     },
     {
       "ts": 1793145600000,
-      "title": "Halloween Event 2026, TFA Tweaks &amp; More!",
+      "title": "Halloween Event 2026, TFA Tweaks & More!",
       "url": "https://secure.runescape.com/m=news/halloween-event-2026-tfa-tweaks--more?oldschool=1",
       "category": "Game Updates"
     },
