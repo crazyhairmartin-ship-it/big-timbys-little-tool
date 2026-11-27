@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-26T23:37:20.329Z",
+  "generatedAt": "2026-11-27T23:18:22.447Z",
   "sources": [
     "https://secure.runescape.com/m=news/latest_news.rss?oldschool=1",
     "https://oldschool.runescape.wiki/api.php"
@@ -7,6 +7,18 @@
   "backfillDays": 370,
   "count": 168,
   "posts": [
+    {
+      "ts": 1795737600000,
+      "title": "The Chosen Commander - Post-Quest Activities Poll Blog",
+      "url": "https://secure.runescape.com/m=news/the-chosen-commander---post-quest-activities-poll-blog?oldschool=1",
+      "category": "Future Updates"
+    },
+    {
+      "ts": 1795737600000,
+      "title": "Community Spotlight: Chunk Accounts",
+      "url": "https://secure.runescape.com/m=news/community-spotlight-chunk-accounts?oldschool=1",
+      "category": "Community"
+    },
     {
       "ts": 1795564800000,
       "title": "The Graveyard | Quest Month Week IV",
@@ -18,12 +30,6 @@
       "title": "Gielinor Gazette - November 2026",
       "url": "https://secure.runescape.com/m=news/gielinor-gazette---november-2026?oldschool=1",
       "category": "Community"
-    },
-    {
-      "ts": 1795046400000,
-      "title": "The Chosen Commander - Post-Quest Activities Poll Blog",
-      "url": "https://secure.runescape.com/m=news/the-chosen-commander---post-quest-activities-poll-blog?oldschool=1",
-      "category": "Future Updates"
     },
     {
       "ts": 1794960000000,
@@ -95,12 +101,6 @@
       "ts": 1793664000000,
       "title": "Name Release Begins Soon!",
       "url": "https://secure.runescape.com/m=news/name-release-begins-soon?oldschool=1",
-      "category": "Community"
-    },
-    {
-      "ts": 1793232000000,
-      "title": "Introducing Melvor Idle 2: A RuneScape Adventure",
-      "url": "https://secure.runescape.com/m=news/introducing-melvor-idle-2-a-runescape-adventure?oldschool=1",
       "category": "Community"
     },
     {
